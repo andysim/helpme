@@ -79,7 +79,7 @@ if(Fortran_ENABLED)
     add_test(NAME FortranWrapper COMMAND RunFortranWrapper)
 endif()
 
-# Python example
-add_test(NAME PythonWrapper
-         COMMAND ${PYTHON_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/fullexample.py
-         WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/src)
+## Python example
+#add_test(NAME PythonWrapper
+#         COMMAND ${PYTHON_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/fullexample.py
+#         WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/src)
