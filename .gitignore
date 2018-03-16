@@ -1,0 +1,7 @@
+build*
+# Qt Creator files
+helPME.config
+helPME.creator
+helPME.creator.user
+helPME.files
+helPME.includes

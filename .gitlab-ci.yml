@@ -1,0 +1,67 @@
+stages:
+  - formatcheck
+  - inteltest
+  - clangtest
+  - gcctest
+
+formatcheck:
+  stage: formatcheck
+  script:
+    - export CLANG_FORMAT_DIR=/u/andysim/anaconda3/envs/clang/bin/
+    - ./tools/check_style.sh 
+
+inteltest:
+  stage: inteltest
+  script:
+  - mkdir -p build_intel
+  - cd build_intel
+  - rm -rf *
+  - export PYTHONPATH=`pwd`/src
+  - export PATH=/v/apps/cmake/3.7.1-centos7/bin:$PATH
+  - export PATH=/v/apps/intel/composer_xe_2017/compilers_and_libraries_2017.1.132/linux/bin/intel64:$PATH
+  - export LM_LICENSE_FILE=/v/apps/intel/licenses/2017_l_PK5BF7J3.lic
+  - export LD_LIBRARY_PATH=/v/apps/intel/composer_xe_2017/compilers_and_libraries_2017.1.132/linux/mkl/lib/intel64_lin:${LD_LIBRARY_PATH}
+  - export LD_LIBRARY_PATH=/v/apps/intel/composer_xe_2017/compilers_and_libraries_2017.1.132/linux/compiler/lib/intel64:${LD_LIBRARY_PATH}
+  - cmake -DPYTHON_EXECUTABLE=/v/apps/python/3.6.0-centos7/bin/python3 -DCMAKE_C_COMPILER=icc -DCMAKE_CXX_COMPILER=icpc -DCMAKE_Fortran_COMPILER=ifort -DCMAKE_PREFIX_PATH="/v/apps/fftw/3.3.5-centos7/avx;/v/apps/fftw/3.3.5-centos7/avx-dp" ..
+  - make -j2
+  - ctest -VV
+  - cd ..
+  - rm -rf build_intel
+
+##clangtest:
+##  stage: clangtest
+##  script:
+##  - mkdir -p build_clang
+##  - cd build_clang
+##  - rm -rf *
+##  - export PYTHONPATH=`pwd`/src
+##  - export PATH=/v/apps/cmake/3.7.1-centos7/bin:$PATH
+##  - export PATH=/v/apps/gcc/6.3.0-centos7/bin:$PATH
+##  - export PATH=/u/andysim/anaconda3/envs/clang/bin:$PATH
+##  - export LD_LIBRARY_PATH=/v/apps/gcc/6.3.0-centos7/lib64:$LD_LIBRARY_PATH
+##  - export LD_LIBRARY_PATH=/v/apps/lapack/3.7.0/lib64:${LD_LIBRARY_PATH}
+##  - export LD_LIBRARY_PATH=/u/andysim/anaconda3/envs/clang/lib:$PATH
+##  - cmake -DPYTHON_EXECUTABLE=/v/apps/python/3.6.0-centos7/bin/python3 -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_Fortran_COMPILER=gfortran -DCMAKE_PREFIX_PATH="/v/apps/fftw/3.3.5-centos7/avx;/v/apps/fftw/3.3.5-centos7/avx-dp" ..
+##  - make -j2
+##  - ctest -VV
+##  - cd ..
+##  - rm -rf build_clang
+##
+##gcctest:
+##  stage: gcctest
+##  script:
+##  - mkdir -p build_gcc
+##  - cd build_gcc
+##  - rm -rf *
+##  - export PYTHONPATH=`pwd`/src
+##  - export PATH=/v/apps/cmake/3.7.1-centos7/bin:$PATH
+##  - export PATH=/v/apps/gcc/6.3.0-centos7/bin:$PATH
+##  - export LD_LIBRARY_PATH=/v/apps/gcc/6.3.0-centos7/lib64:$LD_LIBRARY_PATH
+##  - export LD_LIBRARY_PATH=/v/apps/lapack/3.7.0/lib64:${LD_LIBRARY_PATH}
+##  - cmake -DPYTHON_EXECUTABLE=/v/apps/python/3.6.0-centos7/bin/python3 -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_Fortran_COMPILER=gfortran -DENABLE_CODE_COVERAGE=ON -DCMAKE_PREFIX_PATH="/v/apps/fftw/3.3.5-centos7/avx;/v/apps/fftw/3.3.5-centos7/avx-dp" ..
+##  - make -j2
+##  - ctest
+##  - cd src/CMakeFiles/libpmestatic.dir
+##  - ../../../../external/gcovr/scripts/gcovr . -r ../../../../src/
+##  - cd ../../../../
+##  - rm -rf build_gcc

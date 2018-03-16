@@ -1,0 +1,22 @@
+set(sources_list
+        helpme.cc
+        )
+
+include_directories(${FFTW_INCLUDES})
+add_library(helpmestatic STATIC ${sources_list})
+
+if(Fortran_ENABLED AND CMAKE_Fortran_COMPILER_ID MATCHES Intel)
+    #Enable call to for_rtl_init_() which is required if using the
+    #Intel fortran compiler
+    target_compile_definitions(helpmestatic PRIVATE -DINTEL_Fortran_ENABLED)
+
+endif()
+
+if(Python_ENABLED)
+    link_libraries(${BLAS_LIBRARIES} ${LAPACK_LIBRARIES} ${FFTW_LIBRARIES})
+    pybind11_add_module(helpmelib ${sources_list} pywrappers.cc)
+endif()
+set_target_properties(helpmestatic PROPERTIES PREFIX ""
+                                              OUTPUT_NAME helpme
+                                              EXPORT_NAME helpme
+                                              SUFFIX ".a")
