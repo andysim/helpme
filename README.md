@@ -1,6 +1,3 @@
-[![pipeline status](https://git.lobos.nih.gov/andysim/libpme/badges/master/pipeline.svg)](https://git.lobos.nih.gov/andysim/libPME/commits/master)
-[![coverage report](https://git.lobos.nih.gov/andysim/libpme/badges/master/coverage.svg)](https://git.lobos.nih.gov/andysim/libPME/commits/master)
-
 # About #
 
 helPME: an efficient library for particle mesh Ewald.  The name is a tip of the
