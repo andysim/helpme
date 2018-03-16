@@ -78,7 +78,7 @@ jobs:
         - CXX_COMPILER='g++-4.9'
         - C_COMPILER='gcc-4.9'
         - Fortran_COMPILER='gfortran-4.9'
-        - BUILD_TYPE='release'
+        - BUILD_TYPE='Release'
       install:
       - wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh;
       - bash miniconda.sh -b -p $HOME/miniconda
