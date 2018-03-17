@@ -18,6 +18,7 @@
 #include <cmath>
 #include <complex>
 #include <exception>
+#include <functional>
 #include <iostream>
 #include <memory>
 #include <string>

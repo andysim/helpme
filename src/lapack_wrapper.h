@@ -10,6 +10,7 @@
 #define _HELPME_LAPACK_WRAPPER_H_
 
 #include <exception>
+#include <functional>
 #include <complex>
 
 #if FC_SYMBOL == 2

@@ -56,7 +56,8 @@ endif()
 # Build options
 #
 include(optionsTools)
-option_with_flags(ENABLE_CODE_COVERAGE "Enables details on code coverage" OFF "")
+option_with_flags(ENABLE_CODE_COVERAGE "Enables details on code coverage" OFF
+                  "-ftest-coverage -fprofile-arcs -fPIC -O0 -g")
 option_with_flags(ENABLE_BOUNDS_CHECK "Enables bounds check in Fortran" OFF
                   "-ftrapuv -check all -fpstkchk" "-fcheck=all" "-fbounds-check -fcheck-array-temporaries")
 option_with_flags(ENABLE_ASAN "Enables address sanitizer" OFF
@@ -72,11 +73,6 @@ option_with_default(FC_SYMBOL "The type of Fortran name mangling" 2)
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0")
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -O0")
 set(CMAKE_Fortran_FLAGS_DEBUG "${CMAKE_Fortran_FLAGS_DEBUG} -O0")
-
-if(ENABLE_CODE_COVERAGE)
-     include(CodeCoverage)
-     setup_target_for_coverage(${PROJECT_NAME}_coverage tests coverage)
-endif()
 
 # Find Python
 set(Python_ADDITIONAL_VERSIONS 3.7 3.6 3.5)

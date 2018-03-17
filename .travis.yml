@@ -56,7 +56,6 @@ jobs:
           -DPYTHON_EXECUTABLE="${HOME}/miniconda/envs/helpme/bin/python"
       - cd build
       - make -j 2
-      - ls -R
       script: ctest -VV -j 2
     - stage: build and test
       os: linux
@@ -120,5 +119,4 @@ jobs:
           -DPYTHON_EXECUTABLE="${HOME}/miniconda/envs/helpme/bin/python"
       - cd build
       - make -j 2
-      - ls -R
       script: ctest -VV -j 2
