@@ -1,3 +1,7 @@
+<p align="center">
+<a href="https://travis-ci.org/andysim/helpme"> <img src="https://travis-ci.org/andysim/helpme.svg?branch=master" /></a>
+</p>
+
 # About #
 
 helPME: an efficient library for particle mesh Ewald.  The name is a tip of the
