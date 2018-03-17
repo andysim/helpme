@@ -1,3 +1,8 @@
+<p align="center">
+<a href="https://travis-ci.org/andysim/helpme"> <img src="https://travis-ci.org/andysim/helpme.svg?branch=master" /></a>
+<a href="https://opensource.org/licenses/BSD-3-Clause">_<img src=https://img.shields.io/github/license/andysim/helpme.svg /></a>
+</p>
+
 # About #
 
 helPME: an efficient library for particle mesh Ewald.  The name is a tip of the
@@ -43,9 +48,9 @@ enumerated below.
   [(BSL license)](https://opensource.org/licenses/BSL-1.0).
 
 ## Requirements ##
-helPME is written in C++11, and should work with any modern C++ (well,
-non-ancient) compiler.  Python and Fortran bindings are optional, and are built
-by default.
+helPME is written in C++11, and should work with any modern (well, non-ancient)
+C++ compiler.  Python and Fortran bindings are optional, and are built by
+default.
 
 ## Authors ##
 Andrew C. Simmonett (NIH)
