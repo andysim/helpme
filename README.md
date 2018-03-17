@@ -48,9 +48,9 @@ enumerated below.
   [(BSL license)](https://opensource.org/licenses/BSL-1.0).
 
 ## Requirements ##
-helPME is written in C++11, and should work with any modern C++ (well,
-non-ancient) compiler.  Python and Fortran bindings are optional, and are built
-by default.
+helPME is written in C++11, and should work with any modern (well, non-ancient)
+C++ compiler.  Python and Fortran bindings are optional, and are built by
+default.
 
 ## Authors ##
 Andrew C. Simmonett (NIH)
