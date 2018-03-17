@@ -1,5 +1,6 @@
 <p align="center">
 <a href="https://travis-ci.org/andysim/helpme"> <img src="https://travis-ci.org/andysim/helpme.svg?branch=master" /></a>
+<a href="https://codecov.io/gh/andysim/helpme"> <img src="https://img.shields.io/codecov/c/github/andysim/helpme/master.svg" /></a>
 <a href="https://opensource.org/licenses/BSD-3-Clause">_<img src=https://img.shields.io/github/license/andysim/helpme.svg /></a>
 </p>
 
