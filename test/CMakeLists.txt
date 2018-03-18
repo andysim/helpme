@@ -18,7 +18,7 @@ foreach(SOURCE_FILE ${SOURCES_HELPME})
 endforeach()
 
 include_directories(${PROJECT_SOURCE_DIR}/src)
-include_directories(${PROJECT_SOURCE_DIR}/single_header)
+include_directories(${PROJECT_SOURCE_DIR}/single_include)
 include_directories(${FFTW_INCLUDES})
 link_libraries(${BLAS_LIBRARIES} ${LAPACK_LIBRARIES} ${FFTW_LIBRARIES})
 
