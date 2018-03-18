@@ -65,8 +65,8 @@ while changes_made:
                 break
 
 thistext = warning + '\n\n' + "".join(output_array)
-existingtext = "".join(io.open('../single_header/helpme_standalone.h', 'r', encoding="utf-8").readlines())
+existingtext = "".join(io.open('../single_include/helpme_standalone.h', 'r', encoding="utf-8").readlines())
 
 if(thistext != existingtext):
-    with io.open('../single_header/helpme_standalone.h', 'w', encoding="utf-8") as fp:
+    with io.open('../single_include/helpme_standalone.h', 'w', encoding="utf-8") as fp:
         fp.write(thistext)
