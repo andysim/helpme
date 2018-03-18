@@ -27,6 +27,7 @@
 #include <cmath>
 #include <complex>
 #include <exception>
+#include <functional>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -783,6 +784,7 @@ int findGridSize(T inputSize, const std::initializer_list<T> &requiredDivisors) 
 #define _HELPME_LAPACK_WRAPPER_H_
 
 #include <exception>
+#include <functional>
 #include <complex>
 
 #if FC_SYMBOL == 2
