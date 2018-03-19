@@ -61,7 +61,7 @@ jobs:
           -DPYTHON_EXECUTABLE="${HOME}/miniconda/envs/helpme/bin/python"
       - cd build
       - make -j 2
-      script: ctest -VV -j 2
+      script: ctest -VV
     - stage: build and test
       os: linux
 #      compiler: clang
@@ -118,6 +118,7 @@ jobs:
       - export CTEST_OUTPUT_ON_FAILURE=1
       - ${CXX_COMPILER} --version
       - ${Fortran_COMPILER} --version
+      - which ${Fortran_COMPILER}
       - ${C_COMPILER} --version
       - >
           cmake -Bbuild -H.
@@ -129,4 +130,4 @@ jobs:
           -DPYTHON_EXECUTABLE="${HOME}/miniconda/envs/helpme/bin/python"
       - cd build
       - make -j 2
-      script: ctest -VV -j 2
+      script: ctest -VV
