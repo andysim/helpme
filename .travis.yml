@@ -18,7 +18,8 @@ jobs:
           - libfftw3-dev
           - clang-3.6
           - gfortran
-          - mpich2
+          - mpich
+          - mpi-default-dev
       env:
         - NAME='clang'
         - PYTHON_VER='3.6'
@@ -70,13 +71,14 @@ jobs:
           - llvm-toolchain-precise-3.6
           - ubuntu-toolchain-r-test
           packages:
-          - mpich2
           - lcov
           - liblapack-dev
           - libfftw3-dev
           - g++-4.9
           - gcc-4.9
           - gfortran-4.9
+          - mpich
+          - mpi-default-dev
       env:
         - NAME='gcc'
         - PYTHON_VER='2.7'
