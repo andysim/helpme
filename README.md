@@ -6,11 +6,11 @@
 
 # About #
 
-helPME: an efficient library for particle mesh Ewald.  The name is a tip of the
-hat to the early open source software tools and reflects the recursive
-algorithms that are key to helPME's support for arbitrary operators. The library
-is freely available and is designed to be easy to use, with minimal setup code
-required.
+**h**elPME: an **e**fficient **l**ibrary for **p**article **m**esh **E**wald.
+The recursive acronym is a tip of the hat to early open source software tools
+and reflects the recursive algorithms that are key to helPME's support for
+arbitrary operators. The library is freely available and is designed to be easy
+to use, with minimal setup code required.
 
 ## Features ##
 
@@ -55,5 +55,6 @@ default.
 
 ## Authors ##
 Andrew C. Simmonett (NIH)
+Lori A. Burns (GA Tech)
 Daniel R. Roe (NIH)
 Bernard R. Brooks (NIH)
