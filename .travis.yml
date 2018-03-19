@@ -54,9 +54,9 @@ jobs:
       - >
           cmake -Bbuild -H.
           -DCMAKE_BUILD_TYPE=${BUILD_TYPE}
-          -DCMAKE_CXX_COMPILER=/usr/local/bin/mpicxx
-          -DCMAKE_C_COMPILER=/usr/local/bin/mpicc
-          -DCMAKE_Fortran_COMPILER=/usr/local/bin/mpif90
+          -DCMAKE_CXX_COMPILER=/usr/bin/mpicxx
+          -DCMAKE_C_COMPILER=/usr/bin/mpicc
+          -DCMAKE_Fortran_COMPILER=/usr/bin/mpif90
           -DPYTHON_EXECUTABLE="${HOME}/miniconda/envs/helpme/bin/python"
       - cd build
       - make -j 2
@@ -117,13 +117,14 @@ jobs:
       - ${CXX_COMPILER} --version
       - ${Fortran_COMPILER} --version
       - ${C_COMPILER} --version
+      - whereis mpicc
       - >
           cmake -Bbuild -H.
           -DCMAKE_BUILD_TYPE=${BUILD_TYPE}
           -DENABLE_CODE_COVERAGE=ON
-          -DCMAKE_CXX_COMPILER=/usr/local/bin/mpicxx
-          -DCMAKE_C_COMPILER=/usr/local/bin/mpicc
-          -DCMAKE_Fortran_COMPILER=/usr/local/bin/mpif90
+          -DCMAKE_CXX_COMPILER=/usr/bin/mpicxx
+          -DCMAKE_C_COMPILER=/usr/bin/mpicc
+          -DCMAKE_Fortran_COMPILER=/usr/bin/mpif90
           -DPYTHON_EXECUTABLE="${HOME}/miniconda/envs/helpme/bin/python"
       - cd build
       - make -j 2
