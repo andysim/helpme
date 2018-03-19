@@ -37,6 +37,7 @@ set(helpme_URL "http://www.github.com/andysim/helpme")
 set(helpme_EMAIL "andrew.simmonett@nih.gov")
 set(helpme_LICENSE "BSD-3-clause")
 set(helpme_DESCRIPTION "helPME: an efficient library for particle mesh Ewald")
+set(helpme_VERSION "0.1.0")
 
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
 
@@ -74,17 +75,11 @@ set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0")
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -O0")
 set(CMAKE_Fortran_FLAGS_DEBUG "${CMAKE_Fortran_FLAGS_DEBUG} -O0")
 
-# Find Python
-set(Python_ADDITIONAL_VERSIONS 3.7 3.6 3.5)
-find_package(PythonLibsNew 2.7 REQUIRED)
-message(STATUS "${Cyan}Found Python ${PYTHON_VERSION_MAJOR}.${PYTHON_VERSION_MINOR}${ColourReset}: ${PYTHON_EXECUTABLE} (found version ${PYTHON_VERSION_STRING})")
-set(Python_ENABLED ON)
-add_subdirectory(external/pybind11)
-
 # Linear algebra stuff is needed
 find_package(BLAS REQUIRED)
 find_package(LAPACK REQUIRED)
 add_definitions("-DFC_SYMBOL=${FC_SYMBOL}")
+
 
 # FFTW
 find_package(FFTW REQUIRED)
@@ -98,6 +93,14 @@ else()
     message(STATUS "${Red}MPI not found${ColourReset}")
 endif()
 
+# Find Python
+set(Python_ADDITIONAL_VERSIONS 3.7 3.6 3.5)
+find_package(PythonLibsNew 2.7 REQUIRED)
+message(STATUS "${Cyan}Found Python ${PYTHON_VERSION_MAJOR}.${PYTHON_VERSION_MINOR}${ColourReset}: ${PYTHON_EXECUTABLE} (found version ${PYTHON_VERSION_STRING})")
+set(Python_ENABLED ON) # For now, we just always assume this is on
+add_subdirectory(external/pybind11)
+add_subdirectory(python)
+
 # Documentation
 find_package(Doxygen)
 find_package(Sphinx)
@@ -108,8 +111,10 @@ if(DOXYGEN_EXECUTABLE)
 endif()
 add_subdirectory(src)
 
+
 #
 # Testing
 #
 enable_testing ()
 add_subdirectory (test)
+
