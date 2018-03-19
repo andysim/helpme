@@ -75,7 +75,7 @@ foreach( name ${TARGETS_UNITTESTS_PARALLEL_TESTS} )
     target_compile_definitions(${name} PRIVATE "-DHAVE_MPI=1")
     target_include_directories(${name} PRIVATE "${MPI_CXX_INCLUDE_PATH}")
     add_test(NAME ${name}
-             COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ${name} ${MPIEXEC_POSTFLAGS}
+             COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./${name} ${MPIEXEC_POSTFLAGS}
              WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/test/unittests)
 endforeach()
 

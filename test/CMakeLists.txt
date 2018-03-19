@@ -63,7 +63,7 @@ if(HAVE_MPI)
     target_include_directories(RunCXXMPIWrapper PRIVATE "${MPI_CXX_INCLUDE_PATH}")
     target_link_libraries(RunCXXMPIWrapper ${MPI_CXX_LIBRARIES})
     add_test(NAME CXXMPIWrapperTest
-             COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} RunCXXMPIWrapper ${MPIEXEC_POSTFLAGS})
+             COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./RunCXXMPIWrapper ${MPIEXEC_POSTFLAGS})
 endif()
 
 # Fortran example
