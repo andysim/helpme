@@ -113,7 +113,7 @@ struct MPIWrapper {
      * \param outBuffer the buffer to send results to.
      * \param dimension the number of elements to be communicated.
      */
-    void allToAll(const std::complex<Real>* inBuffer, std::complex<Real>* outBuffer, int dimension) {
+    void allToAll(std::complex<Real>* inBuffer, std::complex<Real>* outBuffer, int dimension) {
         if (MPI_Alltoall(inBuffer, dimension, types_.complexType_, outBuffer, dimension, types_.complexType_,
                          mpiCommunicator_) != MPI_SUCCESS)
             throw std::runtime_error("Problem encountered calling MPI alltoall.");
@@ -124,7 +124,7 @@ struct MPIWrapper {
      * \param outBuffer the buffer to send results to.
      * \param dimension the number of elements to be communicated.
      */
-    void allToAll(const Real* inBuffer, Real* outBuffer, int dimension) {
+    void allToAll(Real* inBuffer, Real* outBuffer, int dimension) {
         if (MPI_Alltoall(inBuffer, dimension, types_.realType_, outBuffer, dimension, types_.realType_,
                          mpiCommunicator_) != MPI_SUCCESS)
             throw std::runtime_error("Problem encountered calling MPI alltoall.");
@@ -135,7 +135,7 @@ struct MPIWrapper {
      * \param outBuffer the buffer to send results to, which will be sent to node 0.
      * \param dimension the number of elements to be reduced.
      */
-    void reduce(const Real* inBuffer, Real* outBuffer, int dimension) {
+    void reduce(Real* inBuffer, Real* outBuffer, int dimension) {
         if (MPI_Reduce(inBuffer, outBuffer, dimension, types_.realType_, MPI_SUM, 0, mpiCommunicator_) != MPI_SUCCESS)
             throw std::runtime_error("Problem encountered calling MPI reduce.");
     }
