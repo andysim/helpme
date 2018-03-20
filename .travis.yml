@@ -119,6 +119,7 @@ jobs:
       - python -V
       - python -c 'import numpy; print(numpy.version.version)'
       - cd ${TRAVIS_BUILD_DIR}
+      - `which mpirun`
       - ln -s `which mpirun` mpiexec
       - export PATH=${TRAVIS_BUILD_DIR}:${PATH}
       - export CTEST_OUTPUT_ON_FAILURE=1
