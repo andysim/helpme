@@ -96,8 +96,76 @@ int main(int argc, char *argv[]) {
         if (myRank == 0) std::cout << "Total rec energy " << parallelEnergy << std::endl;
         if (myRank == 0) std::cout << "Total parallel (Z) forces " << std::endl << parallelForces << std::endl;
         if (myRank == 0) std::cout << "Total parallel (Z) virial " << std::endl << parallelVirial << std::endl;
+    } else if (numNodes == 8) {
+        double parallelEnergy, nodeEnergy;
+        helpme::Matrix<double> nodeForces(6, 3);
+        helpme::Matrix<double> nodeVirial(6, 1);
+        helpme::Matrix<double> parallelForces(6, 3);
+        helpme::Matrix<double> parallelVirial(6, 1);
+
+        // split along X,Y,Z
+        nodeForces.setZero();
+        nodeVirial.setZero();
+        pmeP->setupParallel(1, kappa, splineOrder, gridX, gridY, gridZ, scaleFactor, 1, MPI_COMM_WORLD,
+                            PMEInstanceD::NodeOrder::ZYX, 2, 2, 2);
+        pmeP->setLatticeVectors(20, 20, 20, 90, 90, 90, PMEInstanceD::LatticeType::XAligned);
+        nodeEnergy = pmeP->computeEFVRec(0, charges, coords, nodeForces, nodeVirial);
+        MPI_Reduce(&nodeEnergy, &parallelEnergy, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+        MPI_Reduce(nodeForces[0], parallelForces[0], 6 * 3, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+        MPI_Reduce(nodeVirial[0], parallelVirial[0], 6, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+        if (myRank == 0) std::cout << "Total rec energy " << parallelEnergy << std::endl;
+        if (myRank == 0) std::cout << "Total parallel (XYZ) forces " << std::endl << parallelForces << std::endl;
+        if (myRank == 0) std::cout << "Total parallel (XYZ) virial " << std::endl << parallelVirial << std::endl;
+    } else if (numNodes == 16) {
+        double parallelEnergy, nodeEnergy;
+        helpme::Matrix<double> nodeForces(6, 3);
+        helpme::Matrix<double> nodeVirial(6, 1);
+        helpme::Matrix<double> parallelForces(6, 3);
+        helpme::Matrix<double> parallelVirial(6, 1);
+
+        // split along X,y,z
+        nodeForces.setZero();
+        nodeVirial.setZero();
+        pmeP->setupParallel(1, kappa, splineOrder, gridX, gridY, gridZ, scaleFactor, 1, MPI_COMM_WORLD,
+                            PMEInstanceD::NodeOrder::ZYX, 4, 2, 2);
+        pmeP->setLatticeVectors(20, 20, 20, 90, 90, 90, PMEInstanceD::LatticeType::XAligned);
+        nodeEnergy = pmeP->computeEFVRec(0, charges, coords, nodeForces, nodeVirial);
+        MPI_Reduce(&nodeEnergy, &parallelEnergy, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+        MPI_Reduce(nodeForces[0], parallelForces[0], 6 * 3, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+        MPI_Reduce(nodeVirial[0], parallelVirial[0], 6, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+        if (myRank == 0) std::cout << "Total rec energy " << parallelEnergy << std::endl;
+        if (myRank == 0) std::cout << "Total parallel (Xyz) forces " << std::endl << parallelForces << std::endl;
+        if (myRank == 0) std::cout << "Total parallel (Xyz) virial " << std::endl << parallelVirial << std::endl;
+
+        // split along x,Y,z
+        nodeForces.setZero();
+        nodeVirial.setZero();
+        pmeP->setupParallel(1, kappa, splineOrder, gridX, gridY, gridZ, scaleFactor, 1, MPI_COMM_WORLD,
+                            PMEInstanceD::NodeOrder::ZYX, 2, 4, 2);
+        pmeP->setLatticeVectors(20, 20, 20, 90, 90, 90, PMEInstanceD::LatticeType::XAligned);
+        nodeEnergy = pmeP->computeEFVRec(0, charges, coords, nodeForces, nodeVirial);
+        MPI_Reduce(&nodeEnergy, &parallelEnergy, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+        MPI_Reduce(nodeForces[0], parallelForces[0], 6 * 3, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+        MPI_Reduce(nodeVirial[0], parallelVirial[0], 6, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+        if (myRank == 0) std::cout << "Total rec energy " << parallelEnergy << std::endl;
+        if (myRank == 0) std::cout << "Total parallel (xYz) forces " << std::endl << parallelForces << std::endl;
+        if (myRank == 0) std::cout << "Total parallel (xYz) virial " << std::endl << parallelVirial << std::endl;
+
+        // split along x,y,Z
+        nodeForces.setZero();
+        nodeVirial.setZero();
+        pmeP->setupParallel(1, kappa, splineOrder, gridX, gridY, gridZ, scaleFactor, 1, MPI_COMM_WORLD,
+                            PMEInstanceD::NodeOrder::ZYX, 2, 2, 4);
+        pmeP->setLatticeVectors(20, 20, 20, 90, 90, 90, PMEInstanceD::LatticeType::XAligned);
+        nodeEnergy = pmeP->computeEFVRec(0, charges, coords, nodeForces, nodeVirial);
+        MPI_Reduce(&nodeEnergy, &parallelEnergy, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+        MPI_Reduce(nodeForces[0], parallelForces[0], 6 * 3, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+        MPI_Reduce(nodeVirial[0], parallelVirial[0], 6, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+        if (myRank == 0) std::cout << "Total rec energy " << parallelEnergy << std::endl;
+        if (myRank == 0) std::cout << "Total parallel (xyZ) forces " << std::endl << parallelForces << std::endl;
+        if (myRank == 0) std::cout << "Total parallel (xyZ) virial " << std::endl << parallelVirial << std::endl;
     } else {
-        throw std::runtime_error("This test should be run with exactly 2 MPI instances.");
+        throw std::runtime_error("This test should be run with exactly 2, 8 or 16 MPI instances.");
     }
     pmeP.reset();  // This ensures that the PME object cleans up its MPI data BEFORE MPI_Finalize is called;
 
