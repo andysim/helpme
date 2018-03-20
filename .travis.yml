@@ -114,8 +114,8 @@ jobs:
       env:
         - NAME='mpi'
         - CXX_COMPILER='mpicxx'
-        - C_COMPILER='mpicc'
-        - Fortran_COMPILER='mpif90'
+        - C_COMPILER='gcc-4.8'
+        - Fortran_COMPILER='gfortran-4.8'
         - BUILD_TYPE='Debug'
       before_script:
       - python -V
