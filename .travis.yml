@@ -108,8 +108,7 @@ jobs:
           - liblapack-dev
           - libfftw3-dev
           - gfortran
-          - openmpi-bin
-          - openmpi-common 
+          - libopenmpi-dev
       env:
         - NAME='mpi'
         - CXX_COMPILER='mpicxx'
