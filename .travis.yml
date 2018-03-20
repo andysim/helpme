@@ -109,11 +109,13 @@ jobs:
           - lcov
           - liblapack-dev
           - libfftw3-dev
-          - gfortran
           - mpi-default-bin
           - mpi-default-dev
       env:
-        - NAME='gcc'
+        - NAME='mpi'
+        - CXX_COMPILER='mpicxx'
+        - C_COMPILER='mpicc'
+        - Fortran_COMPILER='mpif90'
         - BUILD_TYPE='Debug'
       before_script:
       - python -V
@@ -128,9 +130,9 @@ jobs:
           cmake -Bbuild -H.
           -DCMAKE_BUILD_TYPE=${BUILD_TYPE}
           -DENABLE_CODE_COVERAGE=ON
-          -DCMAKE_CXX_COMPILER=mpicxx
-          -DCMAKE_C_COMPILER=mpicc
-          -DCMAKE_Fortran_COMPILER=mpif90
+          -DCMAKE_CXX_COMPILER=${CXX_COMPILER}
+          -DCMAKE_C_COMPILER=${C_COMPILER}
+          -DCMAKE_Fortran_COMPILER=${Fortran_COMPILER}
           -DPYTHON_EXECUTABLE=`which python`
       - cd build
       - make -j 2
