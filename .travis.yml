@@ -109,6 +109,7 @@ jobs:
           - libfftw3-dev
           - gfortran
           - libopenmpi-dev
+          - openmpi-bin
       env:
         - NAME='mpi'
         - CXX_COMPILER='mpicxx'
@@ -119,7 +120,6 @@ jobs:
       - python -V
       - python -c 'import numpy; print(numpy.version.version)'
       - cd ${TRAVIS_BUILD_DIR}
-      - echo `which mpirun`
       - export PATH=${TRAVIS_BUILD_DIR}:${PATH}
       - export CTEST_OUTPUT_ON_FAILURE=1
       - ${CXX_COMPILER} --version
