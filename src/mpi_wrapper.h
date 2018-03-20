@@ -114,7 +114,7 @@ struct MPIWrapper {
      * \param dimension the number of elements to be communicated.
      */
     void allToAll(std::complex<Real>* inBuffer, std::complex<Real>* outBuffer, int dimension) {
-        if (MPI_Alltoall(inBuffer, dimension, types_.realType_, outBuffer, 2 * dimension, types_.realType_,
+        if (MPI_Alltoall(inBuffer, 2 * dimension, types_.realType_, outBuffer, 2 * dimension, types_.realType_,
                          mpiCommunicator_) != MPI_SUCCESS)
             throw std::runtime_error("Problem encountered calling MPI alltoall.");
     }
