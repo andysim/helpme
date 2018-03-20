@@ -33,7 +33,6 @@ jobs:
         - BUILD_TYPE='Release'
       before_script:
       - python -V
-      - pip install numpy
       - python -c 'import numpy; print(numpy.version.version)'
       - cd ${TRAVIS_BUILD_DIR}
       - export CTEST_OUTPUT_ON_FAILURE=1
@@ -76,7 +75,6 @@ jobs:
         - BUILD_TYPE='Release'
       before_script:
       - python -V
-      - pip install numpy
       - python -c 'import numpy; print(numpy.version.version)'
       - cd ${TRAVIS_BUILD_DIR}
       - export CTEST_OUTPUT_ON_FAILURE=1
@@ -110,8 +108,8 @@ jobs:
           - liblapack-dev
           - libfftw3-dev
           - gfortran
-          - mpi-default-bin
-          - mpi-default-dev
+          - openmpi-bin
+          - openmpi-common 
       env:
         - NAME='mpi'
         - CXX_COMPILER='mpicxx'
@@ -120,7 +118,6 @@ jobs:
         - BUILD_TYPE='Debug'
       before_script:
       - python -V
-      - pip install numpy
       - python -c 'import numpy; print(numpy.version.version)'
       - cd ${TRAVIS_BUILD_DIR}
       - export CTEST_OUTPUT_ON_FAILURE=1
