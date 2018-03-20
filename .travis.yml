@@ -120,8 +120,9 @@ jobs:
       - python -V
       - python -c 'import numpy; print(numpy.version.version)'
       - cd ${TRAVIS_BUILD_DIR}
-      - export PATH=${TRAVIS_BUILD_DIR}:${PATH}
       - export CTEST_OUTPUT_ON_FAILURE=1
+      - ln -s /usr/bin/mpiexec.openmpi mpiexec
+      - export PATH=${TRAVIS_BUILD_DIR}:${PATH}
       - ${CXX_COMPILER} --version
       - ${Fortran_COMPILER} --version
       - ${C_COMPILER} --version
