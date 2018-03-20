@@ -23,9 +23,9 @@ jobs:
       env:
         - NAME='clang'
         - PYTHON_VER='3.6'
-        - CXX_COMPILER='clang++-3.6'
-        - C_COMPILER='clang-3.6'
-        - Fortran_COMPILER='gfortran'
+        - CXX_COMPILER='/usr/bin/clang++-3.6'
+        - C_COMPILER='/usr/bin/clang-3.6'
+        - Fortran_COMPILER='/usr/bin/gfortran'
         - BUILD_TYPE='Release'
       install:
       - wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh;
@@ -82,9 +82,9 @@ jobs:
       env:
         - NAME='gcc'
         - PYTHON_VER='2.7'
-        - CXX_COMPILER='g++-4.9'
-        - C_COMPILER='gcc-4.9'
-        - Fortran_COMPILER='gfortran-4.9'
+        - CXX_COMPILER='/usr/bin/g++-4.9'
+        - C_COMPILER='/usr/bin/gcc-4.9'
+        - Fortran_COMPILER='/usr/bin/gfortran-4.9'
         - BUILD_TYPE='Debug'
       after_success:
           # Creating report
@@ -118,7 +118,6 @@ jobs:
       - export CTEST_OUTPUT_ON_FAILURE=1
       - ${CXX_COMPILER} --version
       - ${Fortran_COMPILER} --version
-      - which ${Fortran_COMPILER}
       - ${C_COMPILER} --version
       - >
           cmake -Bbuild -H.
