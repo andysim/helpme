@@ -39,6 +39,31 @@ PMEInstanceF* helpme_createF() {
         exit(1);
     }
 }
+
+void helpme_destroyD(PMEInstanceD* pme) {
+    try {
+        delete pme;
+    } catch (std::runtime_error& e) {
+        std::cerr << e.what() << std::endl;
+        exit(1);
+    } catch (...) {
+        std::cerr << "An unknown error occured in helpme_destroyD" << std::endl;
+        exit(1);
+    }
+}
+
+void helpme_destroyF(PMEInstanceF* pme) {
+    try {
+        delete pme;
+    } catch (std::runtime_error& e) {
+        std::cerr << e.what() << std::endl;
+        exit(1);
+    } catch (...) {
+        std::cerr << "An unknown error occured in helpme_destroyF" << std::endl;
+        exit(1);
+    }
+}
+
 void helpme_setupD(PMEInstanceD* pme, short rPower, double kappa, int splineOrder, int aDim, int bDim, int cDim,
                    double scaleFactor, int nThreads) {
     try {
@@ -91,6 +116,37 @@ void helpme_set_lattice_vectorsF(PMEInstanceF* pme, float A, float B, float C, f
     }
 }
 
+double helpme_compute_E_recD(PMEInstanceD* pme, int nAtoms, int parameterAngMom, double* parameters,
+                             double* coordinates) {
+    try {
+        int nParam = helpme::nCartesian(parameterAngMom);
+        helpme::Matrix<double> paramMat(parameters, nAtoms, nParam);
+        helpme::Matrix<double> coordMat(coordinates, nAtoms, 3);
+        return pme->computeERec(parameterAngMom, paramMat, coordMat);
+    } catch (std::runtime_error& e) {
+        std::cerr << e.what() << std::endl;
+        exit(1);
+    } catch (...) {
+        std::cerr << "An unknown error occured in helpme_compute_E_recD" << std::endl;
+        exit(1);
+    }
+}
+
+float helpme_compute_E_recF(PMEInstanceF* pme, int nAtoms, int parameterAngMom, float* parameters, float* coordinates) {
+    try {
+        int nParam = helpme::nCartesian(parameterAngMom);
+        helpme::Matrix<float> paramMat(parameters, nAtoms, nParam);
+        helpme::Matrix<float> coordMat(coordinates, nAtoms, 3);
+        return pme->computeERec(parameterAngMom, paramMat, coordMat);
+    } catch (std::runtime_error& e) {
+        std::cerr << e.what() << std::endl;
+        exit(1);
+    } catch (...) {
+        std::cerr << "An unknown error occured in helpme_compute_E_recF" << std::endl;
+        exit(1);
+    }
+}
+
 double helpme_compute_EF_recD(PMEInstanceD* pme, int nAtoms, int parameterAngMom, double* parameters,
                               double* coordinates, double* forces) {
     try {
@@ -103,7 +159,7 @@ double helpme_compute_EF_recD(PMEInstanceD* pme, int nAtoms, int parameterAngMom
         std::cerr << e.what() << std::endl;
         exit(1);
     } catch (...) {
-        std::cerr << "An unknown error occured in helpme_run_pmeD" << std::endl;
+        std::cerr << "An unknown error occured in helpme_compute_EF_recD" << std::endl;
         exit(1);
     }
 }
@@ -120,7 +176,43 @@ float helpme_compute_EF_recF(PMEInstanceF* pme, int nAtoms, int parameterAngMom,
         std::cerr << e.what() << std::endl;
         exit(1);
     } catch (...) {
-        std::cerr << "An unknown error occured in helpme_run_pmeF" << std::endl;
+        std::cerr << "An unknown error occured in helpme_compute_EF_recF" << std::endl;
+        exit(1);
+    }
+}
+
+double helpme_compute_EFV_recD(PMEInstanceD* pme, int nAtoms, int parameterAngMom, double* parameters,
+                               double* coordinates, double* forces, double* virial) {
+    try {
+        int nParam = helpme::nCartesian(parameterAngMom);
+        helpme::Matrix<double> paramMat(parameters, nAtoms, nParam);
+        helpme::Matrix<double> coordMat(coordinates, nAtoms, 3);
+        helpme::Matrix<double> forceMat(forces, nAtoms, 3);
+        helpme::Matrix<double> virialMat(virial, 1, 6);
+        return pme->computeEFVRec(parameterAngMom, paramMat, coordMat, forceMat, virialMat);
+    } catch (std::runtime_error& e) {
+        std::cerr << e.what() << std::endl;
+        exit(1);
+    } catch (...) {
+        std::cerr << "An unknown error occured in helpme_compute_EFV_recD" << std::endl;
+        exit(1);
+    }
+}
+
+float helpme_compute_EFV_recF(PMEInstanceF* pme, int nAtoms, int parameterAngMom, float* parameters, float* coordinates,
+                              float* forces, float* virial) {
+    try {
+        int nParam = helpme::nCartesian(parameterAngMom);
+        helpme::Matrix<float> paramMat(parameters, nAtoms, nParam);
+        helpme::Matrix<float> coordMat(coordinates, nAtoms, 3);
+        helpme::Matrix<float> forceMat(forces, nAtoms, 3);
+        helpme::Matrix<float> virialMat(virial, 1, 6);
+        return pme->computeEFVRec(parameterAngMom, paramMat, coordMat, forceMat, virialMat);
+    } catch (std::runtime_error& e) {
+        std::cerr << e.what() << std::endl;
+        exit(1);
+    } catch (...) {
+        std::cerr << "An unknown error occured in helpme_compute_EFV_recF" << std::endl;
         exit(1);
     }
 }

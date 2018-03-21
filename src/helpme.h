@@ -1857,6 +1857,8 @@ typedef enum { XAligned = 0, ShapeMatrix = 1 } LatticeType;
 typedef struct PMEInstance PMEInstance;
 extern struct PMEInstance *helpme_createD();
 extern struct PMEInstance *helpme_createF();
+extern void helpme_destroyD(struct PMEInstance *pme);
+extern void helpme_destroyF(struct PMEInstance *pme);
 extern void helpme_setupD(struct PMEInstance *pme, int rPower, double kappa, int splineOrder, int aDim, int bDim,
                           int cDim, double scaleFactor, int nThreads);
 extern void helpme_setupF(struct PMEInstance *pme, int rPower, float kappa, int splineOrder, int aDim, int bDim,
@@ -1865,9 +1867,17 @@ extern void helpme_set_lattice_vectorsD(struct PMEInstance *pme, double A, doubl
                                         double beta, double gamma, LatticeType latticeType);
 extern void helpme_set_lattice_vectorsF(struct PMEInstance *pme, float A, float B, float C, float kappa, float beta,
                                         float gamma, LatticeType latticeType);
+extern double helpme_compute_E_recD(struct PMEInstance *pme, size_t nAtoms, int parameterAngMom, double *parameters,
+                                    double *coordinates);
+extern float helpme_compute_E_recF(struct PMEInstance *pme, size_t nAtoms, int parameterAngMom, float *parameters,
+                                   float *coordinates);
 extern double helpme_compute_EF_recD(struct PMEInstance *pme, size_t nAtoms, int parameterAngMom, double *parameters,
                                      double *coordinates, double *forces);
 extern float helpme_compute_EF_recF(struct PMEInstance *pme, size_t nAtoms, int parameterAngMom, float *parameters,
                                     float *coordinates, float *forces);
+extern double helpme_compute_EFV_recD(struct PMEInstance *pme, size_t nAtoms, int parameterAngMom, double *parameters,
+                                      double *coordinates, double *forces, double *virial);
+extern float helpme_compute_EFV_recF(struct PMEInstance *pme, size_t nAtoms, int parameterAngMom, float *parameters,
+                                     float *coordinates, float *forces, float *virial);
 #endif  // C++/C
 #endif  // Header guard
