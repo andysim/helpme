@@ -21,6 +21,16 @@ module helpme
             type(c_ptr) :: helpme_createF
         end function
 
+        subroutine helpme_destroyD(pme) bind(C, name="helpme_destroyD")
+            use iso_c_binding
+            type(c_ptr), value :: pme
+        end subroutine
+
+        subroutine helpme_destroyF(pme) bind(C, name="helpme_destroyF")
+            use iso_c_binding
+            type(c_ptr), value :: pme
+        end subroutine
+
         subroutine helpme_setupD(pme, rPower, kappa, splineOrder, aDim, bDim, cDim, scaleFactor, nThreads)&
                             bind(C, name="helpme_setupD")
             use iso_c_binding
@@ -53,6 +63,24 @@ module helpme
             integer(kind(ShapeMatrix)), value :: lattice
         end subroutine
 
+        function helpme_compute_E_recD(pme, nAtoms, parameterAngMom, parameters, coordinates)&
+                            bind(C, name="helpme_compute_E_recD")
+            use iso_c_binding
+            real(c_double) helpme_compute_E_recD
+            type(c_ptr), value :: pme, parameters, coordinates
+            integer(c_size_t), value :: nAtoms
+            integer(c_int),  value :: parameterAngMom
+        end function
+
+        function helpme_compute_E_recF(pme, nAtoms, parameterAngMom, parameters, coordinates)&
+                            bind(C, name="helpme_compute_E_recF")
+            use iso_c_binding
+            real(c_float) helpme_compute_E_recF
+            type(c_ptr), value :: pme, parameters, coordinates
+            integer(c_size_t), value :: nAtoms
+            integer(c_int),  value :: parameterAngMom
+        end function
+
         function helpme_compute_EF_recD(pme, nAtoms, parameterAngMom, parameters, coordinates, forces)&
                             bind(C, name="helpme_compute_EF_recD")
             use iso_c_binding
@@ -67,6 +95,24 @@ module helpme
             use iso_c_binding
             real(c_float) helpme_compute_EF_recF
             type(c_ptr), value :: pme, parameters, coordinates, forces
+            integer(c_size_t), value :: nAtoms
+            integer(c_int),  value :: parameterAngMom
+        end function
+
+        function helpme_compute_EFV_recD(pme, nAtoms, parameterAngMom, parameters, coordinates, forces, virial)&
+                            bind(C, name="helpme_compute_EFV_recD")
+            use iso_c_binding
+            real(c_double) helpme_compute_EFV_recD
+            type(c_ptr), value :: pme, parameters, coordinates, forces, virial
+            integer(c_size_t), value :: nAtoms
+            integer(c_int),  value :: parameterAngMom
+        end function
+
+        function helpme_compute_EFV_recF(pme, nAtoms, parameterAngMom, parameters, coordinates, forces, virial)&
+                            bind(C, name="helpme_compute_EFV_recF")
+            use iso_c_binding
+            real(c_float) helpme_compute_EFV_recF
+            type(c_ptr), value :: pme, parameters, coordinates, forces, virial
             integer(c_size_t), value :: nAtoms
             integer(c_int),  value :: parameterAngMom
         end function

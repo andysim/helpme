@@ -13,35 +13,71 @@
 #include "helpme.h"
 #endif
 
+#include <iomanip>
+#include <iostream>
 #include <memory>
+#include <string>
+
+template <typename T>
+void printResults(std::string label, T e, const helpme::Matrix<T> &f, const helpme::Matrix<T> &v) {
+    std::cout << label << std::endl;
+    std::cout << "Energy = " << std::setw(16) << std::setprecision(10) << e << std::endl;
+    std::cout << "Forces:" << std::endl << f << std::endl;
+    std::cout << "Virial:" << std::endl << v << std::endl;
+}
 
 int main(int argc, char *argv[]) {
-    // N.B. using std::make_unique is a cleaner approach for instantiation in C++14 and later
-    // Instantiate double precision PME object
+    /*
+     *  Instantiate double precision PME object
+     */
     helpme::Matrix<double> coordsD(
         {{2.0, 2.0, 2.0}, {2.5, 2.0, 3.0}, {1.5, 2.0, 3.0}, {0.0, 0.0, 0.0}, {0.5, 0.0, 1.0}, {-0.5, 0.0, 1.0}});
     helpme::Matrix<double> chargesD({-0.834, 0.417, 0.417, -0.834, 0.417, 0.417});
     double scaleFactorD = 332.0716;
+
+    double energyD = 0;
     helpme::Matrix<double> forcesD(6, 3);
-    forcesD.setZero();
+    helpme::Matrix<double> virialD(1, 6);
 
     auto pmeD = std::unique_ptr<PMEInstanceD>(new PMEInstanceD);
     pmeD->setup(1, 0.3, 6, 64, 64, 64, scaleFactorD, 1);
     pmeD->setLatticeVectors(20, 20, 20, 90, 90, 90, PMEInstanceD::LatticeType::XAligned);
-    double energyD = pmeD->computeEFRec(0, chargesD, coordsD, forcesD);
+    // Compute just the energy
+    printResults("Before computeEFRec double", energyD, forcesD, virialD);
+    energyD = pmeD->computeERec(0, chargesD, coordsD);
+    printResults("After computeEFRec double", energyD, forcesD, virialD);
+    // Compute the energy and forces
+    energyD = pmeD->computeEFRec(0, chargesD, coordsD, forcesD);
+    printResults("After computeEFRec double", energyD, forcesD, virialD);
+    // Compute the energy, forces, and virial
+    energyD = pmeD->computeEFVRec(0, chargesD, coordsD, forcesD, virialD);
+    printResults("After computeEFVRec double", energyD, forcesD, virialD);
 
-    // Instantiate single precision PME object
+    /*
+     *  Instantiate single precision PME object
+     */
     helpme::Matrix<float> coordsF(
         {{2.0, 2.0, 2.0}, {2.5, 2.0, 3.0}, {1.5, 2.0, 3.0}, {0.0, 0.0, 0.0}, {0.5, 0.0, 1.0}, {-0.5, 0.0, 1.0}});
     helpme::Matrix<float> chargesF({-0.834, 0.417, 0.417, -0.834, 0.417, 0.417});
     float scaleFactorF = 332.0716f;
+
+    float energyF = 0;
     helpme::Matrix<float> forcesF(6, 3);
-    forcesF.setZero();
+    helpme::Matrix<float> virialF(1, 6);
 
     auto pmeF = std::unique_ptr<PMEInstanceF>(new PMEInstanceF);
     pmeF->setup(1, 0.3, 6, 64, 64, 64, scaleFactorF, 1);
     pmeF->setLatticeVectors(20, 20, 20, 90, 90, 90, PMEInstanceF::LatticeType::XAligned);
-    float energyF = pmeF->computeEFRec(0, chargesF, coordsF, forcesF);
+    // Compute just the energy
+    printResults("Before computeEFRec float", energyF, forcesF, virialF);
+    energyF = pmeF->computeERec(0, chargesF, coordsF);
+    printResults("After computeEFRec float", energyF, forcesF, virialF);
+    // Compute the energy and forces
+    energyF = pmeF->computeEFRec(0, chargesF, coordsF, forcesF);
+    printResults("After computeEFRec float", energyF, forcesF, virialF);
+    // Compute the energy, forces, and virial
+    energyF = pmeF->computeEFVRec(0, chargesF, coordsF, forcesF, virialF);
+    printResults("After computeEFVRec float", energyF, forcesF, virialF);
 
     return 0;
 }
