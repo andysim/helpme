@@ -15,6 +15,7 @@
 extern "C" {
 
 typedef enum { XAligned = 0, ShapeMatrix = 1 } LatticeType;
+typedef enum { ZYX = 0 } NodeOrder;
 
 PMEInstanceD* helpme_createD() {
     try {
@@ -89,6 +90,45 @@ void helpme_setupF(PMEInstanceF* pme, short rPower, float kappa, int splineOrder
         exit(1);
     }
 }
+
+#if HAVE_MPI == 1
+void helpme_setup_parallelD(PMEInstanceD* pme, int rPower, double kappa, int splineOrder, int dimA, int dimB, int dimC,
+                            double scaleFactor, int nThreads, MPI_Comm communicator, NodeOrder nodeOrder, int numNodesA,
+                            int numNodesB, int numNodesC) {
+    try {
+        pme->setupParallel(rPower, kappa, splineOrder, dimA, dimB, dimC, scaleFactor, nThreads, communicator,
+                           PMEInstanceD::NodeOrder(nodeOrder), numNodesA, numNodesB, numNodesC);
+    } catch (std::runtime_error& e) {
+        std::cerr << e.what() << std::endl;
+        exit(1);
+    } catch (...) {
+        std::cerr << "An unknown error occured in helpme_setup_parallelD" << std::endl;
+        exit(1);
+    }
+}
+
+void helpme_setup_parallelF(PMEInstanceF* pme, int rPower, float kappa, int splineOrder, int dimA, int dimB, int dimC,
+                            float scaleFactor, int nThreads, MPI_Comm communicator, NodeOrder nodeOrder, int numNodesA,
+                            int numNodesB, int numNodesC) {
+    try {
+        pme->setupParallel(rPower, kappa, splineOrder, dimA, dimB, dimC, scaleFactor, nThreads, communicator,
+                           PMEInstanceF::NodeOrder(nodeOrder), numNodesA, numNodesB, numNodesC);
+    } catch (std::runtime_error& e) {
+        std::cerr << e.what() << std::endl;
+        exit(1);
+    } catch (...) {
+        std::cerr << "An unknown error occured in helpme_setup_parallelF" << std::endl;
+        exit(1);
+    }
+}
+
+MPI_Comm* f_MPI_Comm_f2c(MPI_Fint Fcomm) {
+    MPI_Comm* Ccomm;
+    Ccomm = (MPI_Comm*)malloc(sizeof(MPI_Comm));
+    *Ccomm = MPI_Comm_f2c(Fcomm);
+    return Ccomm;
+}
+#endif
 
 void helpme_set_lattice_vectorsD(PMEInstanceD* pme, double A, double B, double C, double alpha, double beta,
                                  double gamma, LatticeType latticeType) {

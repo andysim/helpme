@@ -47,6 +47,14 @@ module helpme
             real(c_float), value :: kappa, scaleFactor
         end subroutine
 
+#if HAVE_MPI == 1
+        integer function MPI_Comm_c2f(c_handle) bind(C, name="f_MPI_Comm_c2f")
+            use iso_c_binding
+            type(c_ptr), value :: c_handle
+        end function
+#endif
+
+
         subroutine helpme_set_lattice_vectorsD(pme, A, B, C, alpha, beta, gamma, lattice)&
                             bind(C, name="helpme_set_lattice_vectorsD")
             use iso_c_binding

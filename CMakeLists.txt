@@ -79,7 +79,6 @@ find_package(BLAS REQUIRED)
 find_package(LAPACK REQUIRED)
 add_definitions("-DFC_SYMBOL=${FC_SYMBOL}")
 
-
 # FFTW
 find_package(FFTW REQUIRED)
 

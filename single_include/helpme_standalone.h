@@ -3595,8 +3595,12 @@ using PMEInstanceF = helpme::PMEInstance<float>;
 
 // C header
 #include <stddef.h>
+#if HAVE_MPI==1
+#include <mpi.h>
+#endif
 
 typedef enum { XAligned = 0, ShapeMatrix = 1 } LatticeType;
+typedef enum { ZYX = 0 } NodeOrder;
 
 typedef struct PMEInstance PMEInstance;
 extern struct PMEInstance *helpme_createD();
@@ -3607,6 +3611,13 @@ extern void helpme_setupD(struct PMEInstance *pme, int rPower, double kappa, int
                           int cDim, double scaleFactor, int nThreads);
 extern void helpme_setupF(struct PMEInstance *pme, int rPower, float kappa, int splineOrder, int aDim, int bDim,
                           int cDim, float scaleFactor, int nThreads);
+#if HAVE_MPI==1
+extern MPI_Fint f_MPI_Comm_c2f(MPI_Comm *comm) { return MPI_Comm_c2f(*comm); }
+extern void helpme_setup_parallelD(PMEInstance* pme, int rPower, double kappa, int splineOrder, int dimA, int dimB, int dimC, double scaleFactor,
+                     int nThreads, MPI_Comm communicator, NodeOrder nodeOrder, int numNodesA, int numNodesB, int numNodesC);
+extern void helpme_setup_parallelF(PMEInstance* pme, int rPower, float kappa, int splineOrder, int dimA, int dimB, int dimC, float scaleFactor,
+                     int nThreads, MPI_Comm communicator, NodeOrder nodeOrder, int numNodesA, int numNodesB, int numNodesC);
+#endif // HAVE_MPI
 extern void helpme_set_lattice_vectorsD(struct PMEInstance *pme, double A, double B, double C, double kappa,
                                         double beta, double gamma, LatticeType latticeType);
 extern void helpme_set_lattice_vectorsF(struct PMEInstance *pme, float A, float B, float C, float kappa, float beta,
