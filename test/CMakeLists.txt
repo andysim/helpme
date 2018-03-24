@@ -85,6 +85,25 @@ if(HAVE_MPI)
              COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./RunCMPIWrapper 1 2 1 ${MPIEXEC_POSTFLAGS})
     add_test(NAME CMPIWrapperTestZ
              COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./RunCMPIWrapper 1 1 2 ${MPIEXEC_POSTFLAGS})
+
+    # Fortran example
+    if(Fortran_ENABLED)
+        link_libraries(${MPI_Fortran_LIBRARIES})
+        add_executable(RunFortranMPIWrapper ${PROJECT_SOURCE_DIR}/src/helpme.F90 fullexample_parallel.F90 )
+        add_dependencies(RunFortranMPIWrapper helpmestatic)
+        if(CMAKE_CXX_COMPILER_ID MATCHES "AppleClang")
+            set(cpplib c++)
+        else()
+            set(cpplib stdc++)
+        endif()
+        target_link_libraries(RunFortranMPIWrapper ${helpmestatic_name} ${cpplib})
+        add_test(NAME FortranMPIWrapperTestX
+                 COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./RunFortranMPIWrapper 2 1 1 ${MPIEXEC_POSTFLAGS})
+        add_test(NAME FortranMPIWrapperTestY
+                 COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./RunFortranMPIWrapper 1 2 1 ${MPIEXEC_POSTFLAGS})
+        add_test(NAME FortranMPIWrapperTestZ
+                 COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./RunFortranMPIWrapper 1 1 2 ${MPIEXEC_POSTFLAGS})
+    endif()
 endif()
 
 # Fortran example

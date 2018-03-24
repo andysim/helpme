@@ -1868,7 +1868,6 @@ extern void helpme_setupD(struct PMEInstance *pme, int rPower, double kappa, int
 extern void helpme_setupF(struct PMEInstance *pme, int rPower, float kappa, int splineOrder, int aDim, int bDim,
                           int cDim, float scaleFactor, int nThreads);
 #if HAVE_MPI == 1
-extern MPI_Fint f_MPI_Comm_c2f(MPI_Comm *comm) { return MPI_Comm_c2f(*comm); }
 extern void helpme_setup_parallelD(PMEInstance *pme, int rPower, double kappa, int splineOrder, int dimA, int dimB,
                                    int dimC, double scaleFactor, int nThreads, MPI_Comm communicator,
                                    NodeOrder nodeOrder, int numNodesA, int numNodesB, int numNodesC);

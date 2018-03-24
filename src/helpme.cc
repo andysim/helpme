@@ -122,12 +122,9 @@ void helpme_setup_parallelF(PMEInstanceF* pme, int rPower, float kappa, int spli
     }
 }
 
-MPI_Comm* f_MPI_Comm_f2c(MPI_Fint Fcomm) {
-    MPI_Comm* Ccomm;
-    Ccomm = (MPI_Comm*)malloc(sizeof(MPI_Comm));
-    *Ccomm = MPI_Comm_f2c(Fcomm);
-    return Ccomm;
-}
+// Provide a wrapper to MPI_Comm_f2c; the C implementation may be a macro and is thus not callable from Fortran.
+MPI_Comm f_MPI_Comm_f2c(int Fcomm) { return MPI_Comm_f2c(Fcomm); }
+
 #endif
 
 void helpme_set_lattice_vectorsD(PMEInstanceD* pme, double A, double B, double C, double alpha, double beta,
