@@ -108,8 +108,7 @@ jobs:
           - liblapack-dev
           - libfftw3-dev
           - gfortran
-          - libopenmpi-dev
-          - openmpi-bin
+          - mpich2
       env:
         - NAME='mpi'
         - CXX_COMPILER='mpicxx'
@@ -121,7 +120,6 @@ jobs:
       - python -c 'import numpy; print(numpy.version.version)'
       - cd ${TRAVIS_BUILD_DIR}
       - export CTEST_OUTPUT_ON_FAILURE=1
-      - ln -s /usr/bin/mpiexec.openmpi mpiexec
       - export PATH=${TRAVIS_BUILD_DIR}:${PATH}
       - ${CXX_COMPILER} --version
       - ${Fortran_COMPILER} --version
