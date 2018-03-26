@@ -133,6 +133,7 @@ jobs:
           -DCMAKE_Fortran_COMPILER=${Fortran_COMPILER}
           -DPYTHON_EXECUTABLE=`which python`
       - cd build
+      - cat CMakeCache.txt
       - make VERBOSE=1 -j 2
       script: ctest -VV
       after_success:

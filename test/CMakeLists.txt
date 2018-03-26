@@ -26,7 +26,7 @@ if(HAVE_MPI)
     set_property(DIRECTORY APPEND
                  PROPERTY COMPILE_FLAGS "${MPI_CXX_COMPILE_FLAGS}"
                  PROPERTY COMPILE_DEFINITIONS "HAVE_MPI=1")
-    include_directories("${MPI_CXX_INCLUDE_PATH}")
+#    include_directories("${MPI_CXX_INCLUDE_PATH}")
     link_libraries(${MPI_CXX_LIBRARIES})
 endif()
 
