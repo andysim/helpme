@@ -104,6 +104,8 @@ class PMEInstance {
     int splineOrder_;
     /// The number of threads per MPI instance.
     int nThreads_;
+    /// The exponent of the (inverse) interatomic distance used in this kernel.
+    int rPower_;
     /// The scale factor to apply to all energies and derivatives.
     Real scaleFactor_;
     /// The attenuation parameter, whose units should be the inverse of those used to specify coordinates.
@@ -202,6 +204,15 @@ class PMEInstance {
     }
 
     /*!
+     * \brief assertInitialized makes sure that setup() has been called before running any calculations.
+     */
+    void assertInitialized() const {
+        if (!rPower_)
+            throw std::runtime_error(
+                "Either setup(...) or setup_parallel(...) must be called before computing anything.");
+    }
+
+    /*!
      * \brief makes a string representation of a multdimensional tensor, stored in a vector.
      * \param data the vector holding the tensor information.
      * \param rowDim the dimension of the fastest running index.
@@ -284,7 +295,8 @@ class PMEInstance {
      * \param coordinates the input coordinates.
      */
     void sanityChecks(int parameterAngMom, const RealMat &parameters, const RealMat &coordinates) {
-        // Start with some sanity checks.
+        assertInitialized();
+
         if (parameters.nRows() == 0)
             throw std::runtime_error("Parameters have not been set yet!  Call setParameters(...) before runPME(...);");
         if (coordinates.nRows() == 0)
@@ -612,54 +624,59 @@ class PMEInstance {
      */
     void common_init(int rPower, Real kappa, int splineOrder, int dimA, int dimB, int dimC, Real scaleFactor,
                      int nThreads) {
-        dimA_ = dimA;
-        dimB_ = dimB;
-        dimC_ = dimC;
-        complexDimA_ = dimA / 2 + 1;
-        myComplexDimA_ = myDimA_ / 2 + 1;
-        splineOrder_ = splineOrder;
-        nThreads_ = nThreads;
-        scaleFactor_ = scaleFactor;
-        kappa_ = kappa;
+        if (rPower_ != rPower || kappa_ != kappa || splineOrder_ != splineOrder || dimA_ != dimA || dimB_ != dimB ||
+            dimC_ != dimC || scaleFactor_ != scaleFactor || nThreads_ != nThreads) {
+            rPower_ = rPower;
 
-        // Helpers to perform 1D FFTs along each dimension.
-        fftHelperA_ = FFTWWrapper<Real>(dimA_);
-        fftHelperB_ = FFTWWrapper<Real>(dimB_);
-        fftHelperC_ = FFTWWrapper<Real>(dimC_);
+            dimA_ = dimA;
+            dimB_ = dimB;
+            dimC_ = dimC;
+            complexDimA_ = dimA / 2 + 1;
+            myComplexDimA_ = myDimA_ / 2 + 1;
+            splineOrder_ = splineOrder;
+            nThreads_ = nThreads;
+            scaleFactor_ = scaleFactor;
+            kappa_ = kappa;
 
-        // Grid iterators to correctly wrap the grid when using splines.
-        gridIteratorA_ = makeGridIterator(dimA_, firstA_, lastA_);
-        gridIteratorB_ = makeGridIterator(dimB_, firstB_, lastB_);
-        gridIteratorC_ = makeGridIterator(dimC_, firstC_, lastC_);
+            // Helpers to perform 1D FFTs along each dimension.
+            fftHelperA_ = FFTWWrapper<Real>(dimA_);
+            fftHelperB_ = FFTWWrapper<Real>(dimB_);
+            fftHelperC_ = FFTWWrapper<Real>(dimC_);
 
-        // Fourier space spline norms.
-        BSpline<Real> spline = BSpline<Real>(0, 0, splineOrder_, 0);
-        splineModA_ = spline.invSplineModuli(dimA_);
-        splineModB_ = spline.invSplineModuli(dimB_);
-        splineModC_ = spline.invSplineModuli(dimC_);
+            // Grid iterators to correctly wrap the grid when using splines.
+            gridIteratorA_ = makeGridIterator(dimA_, firstA_, lastA_);
+            gridIteratorB_ = makeGridIterator(dimB_, firstB_, lastB_);
+            gridIteratorC_ = makeGridIterator(dimC_, firstC_, lastC_);
 
-        // Set up function pointers by instantiating the appropriate evaluation functions.  We could add many more
-        // entries by default here, but don't right now to avoid code bloat.  To add an extra rPower kernel is a
-        // trivial cut and paste exercise; just add a new line with the desired 1/R power as the macro's argument.
-        switch (rPower) {
-            ENABLE_KERNEL_WITH_INVERSE_R_EXPONENT_OF(1);
-            ENABLE_KERNEL_WITH_INVERSE_R_EXPONENT_OF(6);
-            default:
-                std::string msg("Bad rPower requested.  To fix this, add the appropriate entry in");
-                msg += __FILE__;
-                msg += ", line number ";
-                msg += std::to_string(__LINE__ - 5);
-                throw std::runtime_error(msg.c_str());
-                break;
+            // Fourier space spline norms.
+            BSpline<Real> spline = BSpline<Real>(0, 0, splineOrder_, 0);
+            splineModA_ = spline.invSplineModuli(dimA_);
+            splineModB_ = spline.invSplineModuli(dimB_);
+            splineModC_ = spline.invSplineModuli(dimC_);
+
+            // Set up function pointers by instantiating the appropriate evaluation functions.  We could add many more
+            // entries by default here, but don't right now to avoid code bloat.  To add an extra rPower kernel is a
+            // trivial cut and paste exercise; just add a new line with the desired 1/R power as the macro's argument.
+            switch (rPower) {
+                ENABLE_KERNEL_WITH_INVERSE_R_EXPONENT_OF(1);
+                ENABLE_KERNEL_WITH_INVERSE_R_EXPONENT_OF(6);
+                default:
+                    std::string msg("Bad rPower requested.  To fix this, add the appropriate entry in");
+                    msg += __FILE__;
+                    msg += ", line number ";
+                    msg += std::to_string(__LINE__ - 5);
+                    throw std::runtime_error(msg.c_str());
+                    break;
+            }
+
+            subsetOfCAlongA_ = myDimC_ / numNodesA_;
+            subsetOfCAlongB_ = myDimC_ / numNodesB_;
+            subsetOfCAlongC_ = myDimC_ / numNodesC_;
+            subsetOfBAlongC_ = myDimB_ / numNodesC_;
+
+            workSpace1_ = helpme::vector<Complex>(myDimC_ * myComplexDimA_ * myDimB_);
+            workSpace2_ = helpme::vector<Complex>(myDimC_ * myComplexDimA_ * myDimB_);
         }
-
-        subsetOfCAlongA_ = myDimC_ / numNodesA_;
-        subsetOfCAlongB_ = myDimC_ / numNodesB_;
-        subsetOfCAlongC_ = myDimC_ / numNodesC_;
-        subsetOfBAlongC_ = myDimB_ / numNodesC_;
-
-        workSpace1_ = helpme::vector<Complex>(myDimC_ * myComplexDimA_ * myDimB_);
-        workSpace2_ = helpme::vector<Complex>(myDimC_ * myComplexDimA_ * myDimB_);
     }
 
    public:
@@ -673,7 +690,7 @@ class PMEInstance {
      */
     enum class NodeOrder : int { ZYX = 0 };
 
-    PMEInstance() : boxVecs_(3, 3), recVecs_(3, 3), scaledRecVecs_(3, 3) {}
+    PMEInstance() : boxVecs_(3, 3), recVecs_(3, 3), scaledRecVecs_(3, 3), rPower_(0) {}
 
     /*!
      * \brief cellVolume Compute the volume of the unit cell.
@@ -1209,6 +1226,7 @@ class PMEInstance {
      * \return the self energy.
      */
     Real computeESlf(int parameterAngMom, const RealMat &parameters) {
+        assertInitialized();
         return slfEFxn_(parameterAngMom, parameters, kappa_, scaleFactor_);
     }
 
@@ -1237,6 +1255,7 @@ class PMEInstance {
     Real computeEDir(const Matrix<short> &pairList, int parameterAngMom, const RealMat &parameters,
                      const RealMat &coordinates) {
         if (parameterAngMom) throw std::runtime_error("Multipole self terms have not been coded yet.");
+        sanityChecks(parameterAngMom, parameters, coordinates);
 
         Real energy = 0;
         Real kappaSquared = kappa_ * kappa_;
@@ -1279,6 +1298,7 @@ class PMEInstance {
     Real computeEFDir(const Matrix<short> &pairList, int parameterAngMom, const RealMat &parameters,
                       const RealMat &coordinates, RealMat &forces) {
         if (parameterAngMom) throw std::runtime_error("Multipole self terms have not been coded yet.");
+        sanityChecks(parameterAngMom, parameters, coordinates);
 
         Real energy = 0;
         Real kappaSquared = kappa_ * kappa_;
@@ -1332,6 +1352,7 @@ class PMEInstance {
     Real computeEFVDir(const Matrix<short> &pairList, int parameterAngMom, const RealMat &parameters,
                        const RealMat &coordinates, RealMat &forces, RealMat &virial) {
         if (parameterAngMom) throw std::runtime_error("Multipole self terms have not been coded yet.");
+        sanityChecks(parameterAngMom, parameters, coordinates);
 
         Real energy = 0;
         Real kappaSquared = kappa_ * kappa_;
@@ -1389,6 +1410,7 @@ class PMEInstance {
     Real computeEAdj(const Matrix<short> &pairList, int parameterAngMom, const RealMat &parameters,
                      const RealMat &coordinates) {
         if (parameterAngMom) throw std::runtime_error("Multipole self terms have not been coded yet.");
+        sanityChecks(parameterAngMom, parameters, coordinates);
 
         Real energy = 0;
         Real kappaSquared = kappa_ * kappa_;
@@ -1431,6 +1453,7 @@ class PMEInstance {
     Real computeEFAdj(const Matrix<short> &pairList, int parameterAngMom, const RealMat &parameters,
                       const RealMat &coordinates, RealMat &forces) {
         if (parameterAngMom) throw std::runtime_error("Multipole self terms have not been coded yet.");
+        sanityChecks(parameterAngMom, parameters, coordinates);
 
         Real energy = 0;
         Real kappaSquared = kappa_ * kappa_;
@@ -1484,6 +1507,7 @@ class PMEInstance {
     Real computeEFVAdj(const Matrix<short> &pairList, int parameterAngMom, const RealMat &parameters,
                        const RealMat &coordinates, RealMat &forces, RealMat &virial) {
         if (parameterAngMom) throw std::runtime_error("Multipole self terms have not been coded yet.");
+        sanityChecks(parameterAngMom, parameters, coordinates);
 
         Real energy = 0;
         Real kappaSquared = kappa_ * kappa_;
@@ -1646,6 +1670,8 @@ class PMEInstance {
      */
     Real computeEAll(const Matrix<short> &includedList, const Matrix<short> &excludedList, int parameterAngMom,
                      const RealMat &parameters, const RealMat &coordinates) {
+        sanityChecks(parameterAngMom, parameters, coordinates);
+
         Real energy = computeERec(parameterAngMom, parameters, coordinates);
         energy += computeESlf(parameterAngMom, parameters);
         energy += computeEDir(includedList, parameterAngMom, parameters, coordinates);
@@ -1682,6 +1708,8 @@ class PMEInstance {
      */
     Real computeEFAll(const Matrix<short> &includedList, const Matrix<short> &excludedList, int parameterAngMom,
                       const RealMat &parameters, const RealMat &coordinates, RealMat &forces) {
+        sanityChecks(parameterAngMom, parameters, coordinates);
+
         Real energy = computeEFRec(parameterAngMom, parameters, coordinates, forces);
         energy += computeESlf(parameterAngMom, parameters);
         energy += computeEFDir(includedList, parameterAngMom, parameters, coordinates, forces);
@@ -1720,6 +1748,8 @@ class PMEInstance {
      */
     Real computeEFVAll(const Matrix<short> &includedList, const Matrix<short> &excludedList, int parameterAngMom,
                        const RealMat &parameters, const RealMat &coordinates, RealMat &forces, RealMat &virial) {
+        sanityChecks(parameterAngMom, parameters, coordinates);
+
         Real energy = computeEFVRec(parameterAngMom, parameters, coordinates, forces, virial);
         energy += computeESlf(parameterAngMom, parameters);
         energy += computeEFVDir(includedList, parameterAngMom, parameters, coordinates, forces, virial);
@@ -1755,6 +1785,7 @@ class PMEInstance {
 
     /*!
      * \brief setup initializes this object for a PME calculation using only threading.
+     *        This may be called repeatedly without compromising performance.
      * \param rPower the exponent of the (inverse) distance kernel (e.g. 1 for Coulomb, 6 for attractive dispersion).
      * \param kappa the attenuation parameter in units inverse of those used to specify coordinates.
      * \param splineOrder the order of B-spline; must be at least (2 + max. multipole order + deriv. level needed).
@@ -1784,6 +1815,7 @@ class PMEInstance {
 
     /*!
      * \brief setup initializes this object for a PME calculation using MPI parallism and threading.
+     *        This may be called repeatedly without compromising performance.
      * \param rPower the exponent of the (inverse) distance kernel (e.g. 1 for Coulomb, 6 for attractive dispersion).
      * \param kappa the attenuation parameter in units inverse of those used to specify coordinates.
      * \param splineOrder the order of B-spline; must be at least (2 + max. multipole order + deriv. level needed).
@@ -1851,8 +1883,12 @@ using PMEInstanceF = helpme::PMEInstance<float>;
 
 // C header
 #include <stddef.h>
+#if HAVE_MPI == 1
+#include <mpi.h>
+#endif
 
 typedef enum { XAligned = 0, ShapeMatrix = 1 } LatticeType;
+typedef enum { ZYX = 0 } NodeOrder;
 
 typedef struct PMEInstance PMEInstance;
 extern struct PMEInstance *helpme_createD();
@@ -1863,6 +1899,14 @@ extern void helpme_setupD(struct PMEInstance *pme, int rPower, double kappa, int
                           int cDim, double scaleFactor, int nThreads);
 extern void helpme_setupF(struct PMEInstance *pme, int rPower, float kappa, int splineOrder, int aDim, int bDim,
                           int cDim, float scaleFactor, int nThreads);
+#if HAVE_MPI == 1
+extern void helpme_setup_parallelD(PMEInstance *pme, int rPower, double kappa, int splineOrder, int dimA, int dimB,
+                                   int dimC, double scaleFactor, int nThreads, MPI_Comm communicator,
+                                   NodeOrder nodeOrder, int numNodesA, int numNodesB, int numNodesC);
+extern void helpme_setup_parallelF(PMEInstance *pme, int rPower, float kappa, int splineOrder, int dimA, int dimB,
+                                   int dimC, float scaleFactor, int nThreads, MPI_Comm communicator,
+                                   NodeOrder nodeOrder, int numNodesA, int numNodesB, int numNodesC);
+#endif  // HAVE_MPI
 extern void helpme_set_lattice_vectorsD(struct PMEInstance *pme, double A, double B, double C, double kappa,
                                         double beta, double gamma, LatticeType latticeType);
 extern void helpme_set_lattice_vectorsF(struct PMEInstance *pme, float A, float B, float C, float kappa, float beta,

@@ -22,6 +22,10 @@ include_directories(${PROJECT_SOURCE_DIR}/single_include)
 include_directories(${FFTW_INCLUDES})
 link_libraries(${BLAS_LIBRARIES} ${LAPACK_LIBRARIES} ${FFTW_LIBRARIES})
 
+if(HAVE_MPI)
+    link_libraries(${MPI_CXX_LIBRARIES})
+endif()
+
 # Ensure headers are inlined every time a build is triggered
 add_custom_command(
     OUTPUT StandaloneHeader
@@ -52,23 +56,55 @@ add_test(NAME CXXWrapperTest COMMAND RunCXXWrapper)
 # CXX example using standalone header file
 add_executable (RunCXXWrapperStandalone fullexample.cpp)
 add_dependencies(RunCXXWrapperStandalone SingleHeader)
-target_compile_definitions(RunCXXWrapperStandalone PRIVATE "-DBUILD_STANDALONE=1")
+target_compile_definitions(RunCXXWrapperStandalone PRIVATE "BUILD_STANDALONE=1")
 add_test(NAME CXXWrapperStandaloneTest COMMAND RunCXXWrapperStandalone)
 
 # CXX MPI
 if(HAVE_MPI)
+    # CXX example
     add_executable (RunCXXMPIWrapper fullexample_parallel.cpp)
-    set_target_properties(RunCXXMPIWrapper PROPERTIES COMPILE_FLAGS "${MPI_CXX_COMPILE_FLAGS}")
-    target_compile_definitions(RunCXXMPIWrapper PRIVATE "-DHAVE_MPI=1")
-    target_include_directories(RunCXXMPIWrapper PRIVATE "${MPI_CXX_INCLUDE_PATH}")
-    target_link_libraries(RunCXXMPIWrapper ${MPI_CXX_LIBRARIES})
-    add_test(NAME CXXMPIWrapperTest
-             COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./RunCXXMPIWrapper ${MPIEXEC_POSTFLAGS})
+    add_test(NAME CXXMPIWrapperTestX
+             COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./RunCXXMPIWrapper 2 1 1 ${MPIEXEC_POSTFLAGS})
+    add_test(NAME CXXMPIWrapperTestY
+             COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./RunCXXMPIWrapper 1 2 1 ${MPIEXEC_POSTFLAGS})
+    add_test(NAME CXXMPIWrapperTestZ
+             COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./RunCXXMPIWrapper 1 1 2 ${MPIEXEC_POSTFLAGS})
+
+    # C example
+    add_executable (RunCMPIWrapper fullexample_parallel.c)
+    add_dependencies(RunCMPIWrapper helpmestatic)
+    target_link_libraries(RunCMPIWrapper ${helpmestatic_name})
+    set_target_properties(RunCMPIWrapper PROPERTIES LINKER_LANGUAGE CXX)
+    add_test(NAME CMPIWrapperTestX
+             COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./RunCMPIWrapper 2 1 1 ${MPIEXEC_POSTFLAGS})
+    add_test(NAME CMPIWrapperTestY
+             COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./RunCMPIWrapper 1 2 1 ${MPIEXEC_POSTFLAGS})
+    add_test(NAME CMPIWrapperTestZ
+             COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./RunCMPIWrapper 1 1 2 ${MPIEXEC_POSTFLAGS})
+
+    # Fortran example
+    if(Fortran_ENABLED)
+        link_libraries(${MPI_Fortran_LIBRARIES})
+        add_executable(RunFortranMPIWrapper ${PROJECT_SOURCE_DIR}/src/helpme.F90 fullexample_parallel.F90 )
+        add_dependencies(RunFortranMPIWrapper helpmestatic)
+        if(CMAKE_CXX_COMPILER_ID MATCHES "AppleClang")
+            set(cpplib c++)
+        else()
+            set(cpplib stdc++)
+        endif()
+        target_link_libraries(RunFortranMPIWrapper ${helpmestatic_name} ${cpplib})
+        add_test(NAME FortranMPIWrapperTestX
+                 COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./RunFortranMPIWrapper 2 1 1 ${MPIEXEC_POSTFLAGS})
+        add_test(NAME FortranMPIWrapperTestY
+                 COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./RunFortranMPIWrapper 1 2 1 ${MPIEXEC_POSTFLAGS})
+        add_test(NAME FortranMPIWrapperTestZ
+                 COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./RunFortranMPIWrapper 1 1 2 ${MPIEXEC_POSTFLAGS})
+    endif()
 endif()
 
 # Fortran example
 if(Fortran_ENABLED)
-    add_executable(RunFortranWrapper ${PROJECT_SOURCE_DIR}/src/helpme.f90 fullexample.f90 )
+    add_executable(RunFortranWrapper ${PROJECT_SOURCE_DIR}/src/helpme.F90 fullexample.F90 )
     add_dependencies(RunFortranWrapper helpmestatic)
     if(CMAKE_CXX_COMPILER_ID MATCHES "AppleClang")
         set(cpplib c++)

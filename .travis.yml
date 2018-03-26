@@ -108,20 +108,19 @@ jobs:
           - liblapack-dev
           - libfftw3-dev
           - gfortran
-          - libopenmpi-dev
-          - openmpi-bin
+          - libmpich-dev
+          - mpich
       env:
         - NAME='mpi'
         - CXX_COMPILER='mpicxx'
-        - C_COMPILER='gcc-4.8'
-        - Fortran_COMPILER='gfortran-4.8'
+        - C_COMPILER='mpicc'
+        - Fortran_COMPILER='mpif90'
         - BUILD_TYPE='Debug'
       before_script:
       - python -V
       - python -c 'import numpy; print(numpy.version.version)'
       - cd ${TRAVIS_BUILD_DIR}
       - export CTEST_OUTPUT_ON_FAILURE=1
-      - ln -s /usr/bin/mpiexec.openmpi mpiexec
       - export PATH=${TRAVIS_BUILD_DIR}:${PATH}
       - ${CXX_COMPILER} --version
       - ${Fortran_COMPILER} --version
@@ -135,7 +134,8 @@ jobs:
           -DCMAKE_Fortran_COMPILER=${Fortran_COMPILER}
           -DPYTHON_EXECUTABLE=`which python`
       - cd build
-      - make -j 2
+      - cat CMakeCache.txt
+      - make VERBOSE=1 -j 2
       script: ctest -VV
       after_success:
           # Creating report

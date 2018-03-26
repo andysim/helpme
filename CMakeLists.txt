@@ -79,7 +79,6 @@ find_package(BLAS REQUIRED)
 find_package(LAPACK REQUIRED)
 add_definitions("-DFC_SYMBOL=${FC_SYMBOL}")
 
-
 # FFTW
 find_package(FFTW REQUIRED)
 
@@ -88,6 +87,7 @@ find_package(MPI)
 if(MPI_CXX_FOUND)
     message(STATUS "${Cyan}Found MPI: ${MPI_INCLUDE_PATH}${ColourReset}")
     set(HAVE_MPI TRUE)
+    add_definitions("-DHAVE_MPI=1")
 else()
     message(STATUS "${Red}MPI not found${ColourReset}")
 endif()

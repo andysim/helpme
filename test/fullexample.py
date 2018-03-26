@@ -60,7 +60,7 @@ class TestHelpme(unittest.TestCase):
 
         energy = 0
         forces = np.zeros((6,3),dtype=np.float32)
-        virial = np.zeros((1,6),dtype=np.float64)
+        virial = np.zeros((1,6),dtype=np.float32)
 
         pmeF = pme.PMEInstanceF()
         pmeF.setup(1, 0.3, 5, 32, 32, 32, 332.0716, 1)
