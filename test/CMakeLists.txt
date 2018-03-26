@@ -24,7 +24,6 @@ link_libraries(${BLAS_LIBRARIES} ${LAPACK_LIBRARIES} ${FFTW_LIBRARIES})
 
 if(HAVE_MPI)
     set_property(DIRECTORY APPEND
-                 PROPERTY LINKER_LANGUAGE "CXX"
                  PROPERTY COMPILE_FLAGS "${MPI_CXX_COMPILE_FLAGS}"
                  PROPERTY COMPILE_DEFINITIONS "HAVE_MPI=1")
     include_directories("${MPI_CXX_INCLUDE_PATH}")
