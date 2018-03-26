@@ -108,7 +108,7 @@ jobs:
           - liblapack-dev
           - libfftw3-dev
           - gfortran
-          - mpich2
+          - libmpich-dev
       env:
         - NAME='mpi'
         - CXX_COMPILER='mpicxx'
