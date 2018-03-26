@@ -60,7 +60,7 @@ add_test(NAME CXXWrapperTest COMMAND RunCXXWrapper)
 # CXX example using standalone header file
 add_executable (RunCXXWrapperStandalone fullexample.cpp)
 add_dependencies(RunCXXWrapperStandalone SingleHeader)
-target_compile_definitions(RunCXXWrapperStandalone PRIVATE "-DBUILD_STANDALONE=1")
+target_compile_definitions(RunCXXWrapperStandalone PRIVATE "BUILD_STANDALONE=1")
 add_test(NAME CXXWrapperStandaloneTest COMMAND RunCXXWrapperStandalone)
 
 # CXX MPI
