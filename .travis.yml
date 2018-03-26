@@ -133,7 +133,7 @@ jobs:
           -DCMAKE_Fortran_COMPILER=${Fortran_COMPILER}
           -DPYTHON_EXECUTABLE=`which python`
       - cd build
-      - make -j 2
+      - make VERBOSE=1 -j 2
       script: ctest -VV
       after_success:
           # Creating report
