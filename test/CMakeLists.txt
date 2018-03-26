@@ -23,8 +23,6 @@ include_directories(${FFTW_INCLUDES})
 link_libraries(${BLAS_LIBRARIES} ${LAPACK_LIBRARIES} ${FFTW_LIBRARIES})
 
 if(HAVE_MPI)
-    set_property(DIRECTORY APPEND
-                 PROPERTY COMPILE_DEFINITIONS "HAVE_MPI=1")
     link_libraries(${MPI_CXX_LIBRARIES})
 endif()
 

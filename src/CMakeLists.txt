@@ -15,9 +15,3 @@ set_target_properties(helpmestatic PROPERTIES PREFIX ""
                                               OUTPUT_NAME helpme
                                               EXPORT_NAME helpme
                                               SUFFIX ".a")
-if(HAVE_MPI)
-    set_target_properties(helpmestatic PROPERTIES COMPILE_FLAGS "${MPI_CXX_COMPILE_FLAGS}")
-    target_compile_definitions(helpmestatic PRIVATE "HAVE_MPI=1")
-    target_include_directories(helpmestatic PRIVATE "${MPI_CXX_INCLUDE_PATH}")
-    target_link_libraries(helpmestatic ${MPI_CXX_LIBRARIES})
-endif()
