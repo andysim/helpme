@@ -19,6 +19,7 @@
 #include <tuple>
 
 #include "lapack_wrapper.h"
+#include "string_utils.h"
 #include "memory.h"
 
 namespace helpme {
@@ -431,7 +432,7 @@ class Matrix {
             const Real* rowData = data_ + row * nCols_;
             std::cout.setf(std::ios::fixed, std::ios::floatfield);
             for (int col = 0; col < nCols_; ++col) {
-                os << std::setw(18) << std::setprecision(10) << rowData[col] << " ";
+                os << formatNumber(rowData[col], nCols_, nCols_) << " ";
             }
             os << std::endl;
         }
