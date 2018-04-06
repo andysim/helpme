@@ -9,6 +9,7 @@ set( SOURCES_UNITTESTS_TESTS
     unittest-matrix.cpp
     unittest-powers.cpp
     unittest-splines.cpp
+    unittest-string.cpp
 )
 if(HAVE_MPI)
     set( SOURCES_UNITTESTS_PARALLEL_TESTS

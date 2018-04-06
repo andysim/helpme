@@ -22,7 +22,6 @@
 #include <iostream>
 #include <memory>
 #include <string>
-#include <sstream>
 #include <tuple>
 #include <vector>
 
@@ -38,6 +37,7 @@ typedef struct ompi_communicator_t *MPI_Comm;
 #endif
 #include "powers.h"
 #include "splines.h"
+#include "string_utils.h"
 
 /*!
  * \file helpme.h
@@ -210,47 +210,6 @@ class PMEInstance {
         if (!rPower_)
             throw std::runtime_error(
                 "Either setup(...) or setup_parallel(...) must be called before computing anything.");
-    }
-
-    /*!
-     * \brief makes a string representation of a multdimensional tensor, stored in a vector.
-     * \param data the vector holding the tensor information.
-     * \param rowDim the dimension of the fastest running index.
-     * \return the string representation of the tensor.
-     */
-    template <typename T>
-    std::string stringify(helpme::vector<T> data, size_t rowDim) {
-        std::stringstream stream;
-        std::cout.setf(std::ios::fixed, std::ios::floatfield);
-        for (size_t ind = 0; ind < data.size(); ++ind) {
-            stream << std::setw(18) << std::setprecision(10) << data[ind];
-            if (ind % rowDim == rowDim - 1)
-                stream << std::endl;
-            else
-                stream << "  ";
-        }
-        return stream.str();
-    }
-
-    /*!
-     * \brief makes a string representation of a multdimensional tensor, stored in a vector.
-     * \param data the array holding the tensor information.
-     * \param size the length of the array holding the tensor information.
-     * \param rowDim the dimension of the fastest running index.
-     * \return the string representation of the tensor.
-     */
-    template <typename T>
-    std::string stringify(T *data, size_t size, size_t rowDim) {
-        std::stringstream stream;
-        std::cout.setf(std::ios::fixed, std::ios::floatfield);
-        for (size_t ind = 0; ind < size; ++ind) {
-            stream << std::setw(18) << std::setprecision(10) << data[ind];
-            if (ind % rowDim == rowDim - 1)
-                stream << std::endl;
-            else
-                stream << "  ";
-        }
-        return stream.str();
     }
 
     /*!
