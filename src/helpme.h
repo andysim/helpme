@@ -164,7 +164,7 @@ class PMEInstance {
     /// The {X,Y,Z} dimensions of the locally owned chunk of the grid.
     int myDimA_, myDimB_, myDimC_;
     /// The subsets of a given dimension to be processed when doing a transform along another dimension.
-    int subsetOfCAlongA_, subsetOfCAlongB_, subsetOfCAlongC_, subsetOfBAlongC_;
+    int subsetOfCAlongA_, subsetOfCAlongB_, subsetOfBAlongC_;
     /// Communication buffers for MPI parallelism.
     helpme::vector<Complex> workSpace1_, workSpace2_;
     /// FFTW wrappers to help with transformations in the {A,B,C} dimensions.
@@ -396,21 +396,16 @@ class PMEInstance {
             energy += prefac * std::norm(gridPtr[0]);
         }
 
-        // The parallel scheme leads to a very confusing situation; dividing the aDim/2+1 elements among the x Nodes
-        // is achieved by assigning aDim/(2 numNodesX) values to each node.  Node 0 then has one extra element than
-        // the remaining nodes, which have a slice of zeros in place of this extra element.
-        int actualNx = startX ? myNx - 1 : myNx;
-
-        std::vector<short> xMVals(actualNx), yMVals(myNy), zMVals(nz);
+        std::vector<short> xMVals(myNx), yMVals(myNy), zMVals(nz);
         // Iterators to conveniently map {X,Y,Z} grid location to m_{X,Y,Z} value, where -1/2 << m/dim < 1/2.
-        for (int kx = 0; kx < actualNx; ++kx) xMVals[kx] = startX + (kx + startX >= (nx + 1) / 2 ? kx - nx : kx);
+        for (int kx = 0; kx < myNx; ++kx) xMVals[kx] = startX + (kx + startX >= (nx + 1) / 2 ? kx - nx : kx);
         for (int ky = 0; ky < myNy; ++ky) yMVals[ky] = startY + (ky + startY >= (ny + 1) / 2 ? ky - ny : ky);
         for (int kz = 0; kz < nz; ++kz) zMVals[kz] = kz >= (nz + 1) / 2 ? kz - nz : kz;
 
         Real bPrefac = M_PI * M_PI / (kappa * kappa);
         Real volPrefac = scaleFactor * pow(M_PI, rPower - 1) / (sqrtPi * gammaComputer<Real, rPower>::value * volume);
         int halfNx = nx / 2 + 1;
-        size_t nxz = actualNx * nz;
+        size_t nxz = myNx * nz;
         Real Vxx = 0;
         Real Vxy = 0;
         Real Vyy = 0;
@@ -630,7 +625,6 @@ class PMEInstance {
 
             subsetOfCAlongA_ = myDimC_ / numNodesA_;
             subsetOfCAlongB_ = myDimC_ / numNodesB_;
-            subsetOfCAlongC_ = myDimC_ / numNodesC_;
             subsetOfBAlongC_ = myDimB_ / numNodesC_;
 
             workSpace1_ = helpme::vector<Complex>(myDimC_ * myComplexDimA_ * myDimB_);
@@ -758,20 +752,24 @@ class PMEInstance {
             }
         }
 #endif
+        // Each parallel node allocates buffers of length dimA/(2 numNodesA)+1 for A, leading to a total of
+        // dimA/2 + numNodesA = complexDimA+numNodesA-1 if dimA is even
+        // and
+        // numNodesA (dimA-1)/2 + numNodesA = complexDimA + numNodesA/2-1 if dimA is odd
+        // We just allocate the larger size here, remembering that the final padding values on the last node
+        // will all be alllocated to zero and will not contribute to the final answer.
+        helpme::vector<Complex> buffer(complexDimA_ + numNodesA_ - 1);
 
         // A transform, with instant sort to CAB ordering for each local block
-        helpme::vector<Complex> buffer(complexDimA_);
         auto scratch = buffer.data();
         for (int c = 0; c < subsetOfCAlongA_; ++c) {
             for (int b = 0; b < myDimB_; ++b) {
                 Real *gridPtr = realGrid + c * myDimB_ * dimA_ + b * dimA_;
                 fftHelperA_.transform(gridPtr, scratch);
                 for (int chunk = 0; chunk < numNodesA_; ++chunk) {
-                    // The overall transform dim is numA/2+1.  We stuff the extra element in the 0th block.
-                    int aShift = (chunk ? 1 : 0);
-                    for (int a = 0; a < myComplexDimA_ - aShift; ++a) {
+                    for (int a = 0; a < myComplexDimA_; ++a) {
                         buffer1[(chunk * subsetOfCAlongA_ + c) * myComplexDimA_ * myDimB_ + a * myDimB_ + b] =
-                            scratch[chunk * (myComplexDimA_ - 1) + a + aShift];
+                            scratch[chunk * myComplexDimA_ + a];
                     }
                 }
             }
@@ -836,11 +834,10 @@ class PMEInstance {
                 }
             }
         }
-
 #if HAVE_MPI == 1
         if (numNodesC_ > 1) {
             // Communicate C along columns
-            mpiCommunicatorC_->allToAll(buffer2, buffer1, subsetOfCAlongC_ * myComplexDimA_ * myDimB_);
+            mpiCommunicatorC_->allToAll(buffer2, buffer1, subsetOfBAlongC_ * myComplexDimA_ * myDimC_);
             for (int b = 0; b < subsetOfBAlongC_; ++b) {
                 Complex *outPtrB = buffer2 + b * myComplexDimA_ * dimC_;
                 for (int a = 0; a < myComplexDimA_; ++a) {
@@ -907,7 +904,7 @@ class PMEInstance {
                     }
                 }
             }
-            mpiCommunicatorC_->allToAll(buffer1, buffer2, subsetOfCAlongC_ * myComplexDimA_ * myDimB_);
+            mpiCommunicatorC_->allToAll(buffer1, buffer2, subsetOfBAlongC_ * myComplexDimA_ * myDimC_);
         }
 #endif
 
@@ -969,11 +966,9 @@ class PMEInstance {
                 Complex *cPtr = buffer1 + c * myDimB_ * complexDimA_;
                 for (int b = 0; b < myDimB_; ++b) {
                     for (int chunk = 0; chunk < numNodesA_; ++chunk) {
-                        int aShift = (chunk ? 1 : 0);
                         Complex *inPtr =
                             buffer2 + (chunk * subsetOfCAlongA_ + c) * myComplexDimA_ * myDimB_ + b * myComplexDimA_;
-                        std::copy(inPtr, inPtr + myComplexDimA_ - aShift,
-                                  cPtr + b * complexDimA_ + chunk * (myComplexDimA_ - 1) + aShift);
+                        std::copy(inPtr, inPtr + myComplexDimA_, cPtr + b * complexDimA_ + chunk * myComplexDimA_);
                     }
                 }
             }
@@ -1014,8 +1009,7 @@ class PMEInstance {
      * \return the reciprocal space energy.
      */
     Real convolveE(Complex *transformedGrid) {
-        return convolveEFxn_(dimA_, dimB_, dimC_, myComplexDimA_, myDimB_ / numNodesC_,
-                             rankA_ * myComplexDimA_ - (rankA_ ? rankA_ - 1 : 0),
+        return convolveEFxn_(dimA_, dimB_, dimC_, myComplexDimA_, myDimB_ / numNodesC_, rankA_ * myComplexDimA_,
                              rankB_ * myDimB_ + rankC_ * myDimB_ / numNodesC_, scaleFactor_, transformedGrid, recVecs_,
                              cellVolume(), kappa_, splineModA_, splineModB_, splineModC_);
     }
@@ -1028,8 +1022,7 @@ class PMEInstance {
      * \return the reciprocal space energy.
      */
     Real convolveEV(Complex *transformedGrid, RealMat &virial) {
-        return convolveEVFxn_(dimA_, dimB_, dimC_, myComplexDimA_, myDimB_ / numNodesC_,
-                              rankA_ * myComplexDimA_ - (rankA_ ? rankA_ - 1 : 0),
+        return convolveEVFxn_(dimA_, dimB_, dimC_, myComplexDimA_, myDimB_ / numNodesC_, rankA_ * myComplexDimA_,
                               rankB_ * myDimB_ + rankC_ * myDimB_ / numNodesC_, scaleFactor_, transformedGrid, recVecs_,
                               cellVolume(), kappa_, splineModA_, splineModB_, splineModC_, virial);
     }

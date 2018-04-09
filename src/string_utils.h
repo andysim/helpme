@@ -59,7 +59,7 @@ template <typename T>
 std::string stringify(T *data, size_t size, size_t rowDim, int width = 14, int precision = 8) {
     std::stringstream stream;
     for (size_t ind = 0; ind < size; ++ind) {
-        stream << formatNumber(data[ind], precision, width);
+        stream << formatNumber(data[ind], width, precision);
         if (ind % rowDim == rowDim - 1)
             stream << std::endl;
         else

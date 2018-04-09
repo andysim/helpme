@@ -428,14 +428,7 @@ class Matrix {
      * \return modified stream object.
      */
     std::ostream& write(std::ostream& os) const {
-        for (int row = 0; row < nRows_; ++row) {
-            const Real* rowData = data_ + row * nCols_;
-            std::cout.setf(std::ios::fixed, std::ios::floatfield);
-            for (int col = 0; col < nCols_; ++col) {
-                os << formatNumber(rowData[col], nCols_, nCols_) << " ";
-            }
-            os << std::endl;
-        }
+        for (int row = 0; row < nRows_; ++row) os << stringify(data_ + row * nCols_, nCols_, nCols_);
         os << std::endl;
         return os;
     }

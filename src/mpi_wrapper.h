@@ -157,13 +157,17 @@ std::ostream& operator<<(std::ostream& os, const std::unique_ptr<MPIWrapper<Real
 }
 
 // A convenience macro to guarantee that each node prints in order.
-#define PRINT(out)                                                                                       \
-    for (int node = 0; node < mpiCommunicator_->numNodes_; ++node) {                                     \
-        std::cout.setf(std::ios::fixed, std::ios::floatfield);                                           \
-        if (node == mpiCommunicator_->myRank_)                                                           \
-            std::cout << mpiCommunicator_ << std::setw(18) << std::setprecision(10) << out << std::endl; \
-        mpiCommunicator_->barrier();                                                                     \
-    };
+#define PRINT(out)                                                                                           \
+    if (mpiCommunicator_) {                                                                                  \
+        for (int node = 0; node < mpiCommunicator_->numNodes_; ++node) {                                     \
+            std::cout.setf(std::ios::fixed, std::ios::floatfield);                                           \
+            if (node == mpiCommunicator_->myRank_)                                                           \
+                std::cout << mpiCommunicator_ << std::setw(18) << std::setprecision(10) << out << std::endl; \
+            mpiCommunicator_->barrier();                                                                     \
+        };                                                                                                   \
+    } else {                                                                                                 \
+        std::cout << std::setw(18) << std::setprecision(10) << out << std::endl;                             \
+    }
 
 }  // Namespace helpme
 #endif  // Header guard
