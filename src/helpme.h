@@ -307,6 +307,8 @@ class PMEInstance {
                           ((rPower - 3) * gammaComputer<Real, rPower>::value * volume);
             energy += prefac * std::norm(gridPtr[0]);
         }
+        // Ensure the m=0 term convolution product is zeroed for the backtransform; it's been accounted for above.
+        if (nodeZero) gridPtr[0] = Complex(0, 0);
 
         // The parallel scheme leads to a very confusing situation; dividing the aDim/2+1 elements among the x Nodes
         // is achieved by assigning aDim/(2 numNodesX) values to each node.  Node 0 then has one extra element than
@@ -395,6 +397,8 @@ class PMEInstance {
                           ((rPower - 3) * gammaComputer<Real, rPower>::value * volume);
             energy += prefac * std::norm(gridPtr[0]);
         }
+        // Ensure the m=0 term convolution product is zeroed for the backtransform; it's been accounted for above.
+        if (nodeZero) gridPtr[0] = Complex(0, 0);
 
         std::vector<short> xMVals(myNx), yMVals(myNy), zMVals(nz);
         // Iterators to conveniently map {X,Y,Z} grid location to m_{X,Y,Z} value, where -1/2 << m/dim < 1/2.
