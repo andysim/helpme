@@ -54,18 +54,31 @@ class BSpline {
     }
 
    public:
-    /// The B-splines and their derivatives
-    BSpline(short start, Real value, short order, short derivativeLevel)
-        : order_(order),
-          derivativeLevel_(derivativeLevel),
-          splines_(derivativeLevel + 1, order),
-          startingGridPoint_(start) {
+    /// The B-splines and their derivatives.  See update() for argument details.
+    BSpline(short start, Real value, short order, short derivativeLevel) : splines_(derivativeLevel + 1, order) {
+        update(start, value, order, derivativeLevel);
+    }
+
+    /*!
+     * \brief update computes information for BSpline, without reallocating memory unless needed.
+     * \param start the grid point at which to start interpolation.
+     * \param value the distance (in fractional coordinates) from the starting grid point.
+     * \param order the order of the BSpline.
+     * \param derivativeLevel the maximum level of derivative needed for this BSpline.
+     */
+    void update(short start, Real value, short order, short derivativeLevel) {
+        startingGridPoint_ = start;
+        order_ = order;
+        derivativeLevel_ = derivativeLevel;
+        // The +1 is to account for the fact that we need to store entries up to and including the max.
+        if (splines_.nRows() < derivativeLevel + 1 || splines_.nCols() != order)
+            splines_ = Matrix<Real>(derivativeLevel + 1, order);
         splines_.setZero();
         splines_(0, 0) = 1 - value;
         splines_(0, 1) = value;
-        for (short m = 1; m < order - 1; ++m) {
+        for (short m = 1; m < order_ - 1; ++m) {
             makeSplineInPlace(splines_[0], value, m + 2);
-            if (m >= order - derivativeLevel_ - 2) {
+            if (m >= order_ - derivativeLevel_ - 2) {
                 short currentDerivative = order_ - m - 2;
                 for (short l = 0; l < currentDerivative; ++l)
                     differentiateSpline(splines_[l], splines_[l + 1], m + 2 + currentDerivative);

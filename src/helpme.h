@@ -169,6 +169,10 @@ class PMEInstance {
     helpme::vector<Complex> workSpace1_, workSpace2_;
     /// FFTW wrappers to help with transformations in the {A,B,C} dimensions.
     FFTWWrapper<Real> fftHelperA_, fftHelperB_, fftHelperC_;
+    /// The list of atoms, and their fractional coordinates, that will contribute to this node.
+    std::vector<std::tuple<int, Real, Real, Real>> atomList_;
+    /// The cached list of splines, which is stored as a member to make it persistent.
+    std::vector<std::tuple<int, BSpline<Real>, BSpline<Real>, BSpline<Real>>> splineCache_;
 
     /*!
      * \brief A simple helper to compute factorials.
@@ -200,6 +204,61 @@ class PMEInstance {
                     ++count;
                 }
             }
+        }
+    }
+
+    void filterAtomsAndBuildSplineCache(int splineDerivativeLevel, const RealMat &coords) {
+        assertInitialized();
+
+        atomList_.clear();
+        size_t nAtoms = coords.nRows();
+        for (int atom = 0; atom < nAtoms; ++atom) {
+            const Real *atomCoords = coords[atom];
+            constexpr float EPS = 1e-6;
+            Real aCoord =
+                atomCoords[0] * recVecs_(0, 0) + atomCoords[1] * recVecs_(1, 0) + atomCoords[2] * recVecs_(2, 0) - EPS;
+            Real bCoord =
+                atomCoords[0] * recVecs_(0, 1) + atomCoords[1] * recVecs_(1, 1) + atomCoords[2] * recVecs_(2, 1) - EPS;
+            Real cCoord =
+                atomCoords[0] * recVecs_(0, 2) + atomCoords[1] * recVecs_(1, 2) + atomCoords[2] * recVecs_(2, 2) - EPS;
+            // Make sure the fractional coordinates fall in the range 0 <= s < 1
+            aCoord -= floor(aCoord);
+            bCoord -= floor(bCoord);
+            cCoord -= floor(cCoord);
+            short aStartingGridPoint = dimA_ * aCoord;
+            short bStartingGridPoint = dimB_ * bCoord;
+            short cStartingGridPoint = dimC_ * cCoord;
+            const auto &aGridIterator = gridIteratorA_[aStartingGridPoint];
+            const auto &bGridIterator = gridIteratorB_[bStartingGridPoint];
+            const auto &cGridIterator = gridIteratorC_[cStartingGridPoint];
+            //            if(true || aGridIterator.size() && bGridIterator.size() && cGridIterator.size())
+            atomList_.emplace_back(atom, aCoord, bCoord, cCoord);
+        }
+
+        // Now we know how many atoms we loop over the dense list, redefining nAtoms accordingly.
+        // The first stage above is to get the number of atoms, so we can avoid calling push_back
+        // and thus avoid the many memory allocations.  Calling resize() / update() instead should
+        // be more efficient, due to the similar number of atoms expected from one call to the next.
+        nAtoms = atomList_.size();
+        splineCache_.resize(nAtoms);
+
+        for (int atomListNum = 0; atomListNum < nAtoms; ++atomListNum) {
+            const auto &entry = atomList_[atomListNum];
+            const int absoluteAtomNumber = std::get<0>(entry);
+            const Real aCoord = std::get<1>(entry);
+            const Real bCoord = std::get<2>(entry);
+            const Real cCoord = std::get<3>(entry);
+            short aStartingGridPoint = dimA_ * aCoord;
+            short bStartingGridPoint = dimB_ * bCoord;
+            short cStartingGridPoint = dimC_ * cCoord;
+            auto &atomSplines = splineCache_[atomListNum];
+            std::get<0>(atomSplines) = absoluteAtomNumber;
+            std::get<1>(atomSplines)
+                .update(aStartingGridPoint, dimA_ * aCoord - aStartingGridPoint, splineOrder_, splineDerivativeLevel);
+            std::get<2>(atomSplines)
+                .update(bStartingGridPoint, dimB_ * bCoord - bStartingGridPoint, splineOrder_, splineDerivativeLevel);
+            std::get<3>(atomSplines)
+                .update(cStartingGridPoint, dimC_ * cCoord - cStartingGridPoint, splineOrder_, splineDerivativeLevel);
         }
     }
 
@@ -1032,7 +1091,10 @@ class PMEInstance {
     }
 
     /*!
-     * \brief Spread the parameters onto the charge grid.
+     * \brief Spread the parameters onto the charge grid.  Generally this shouldn't be called;
+     *        use the various computeE() methods instead. This the more efficient version that filters
+     *        the atom list and uses pre-computed splines.  Therefore, the splineCache_
+     *        member must have been updated via a call to filterAtomsAndBuildSplineCache() first.
      * \param parameterAngMom the angular momentum of the parameters (0 for charges, C6 coefficients, 2 for quadrupoles,
      * etc.).
      * \param parameters the list of parameters associated with each atom (charges, C6 coefficients, multipoles,
@@ -1048,7 +1110,62 @@ class PMEInstance {
      *         for Ly in range(0, L - Lz + 1):
      *              Lx  = L - Ly - Lz
      * \endcode
-     * Generally this shouldn't be called; use runPME() instead.
+     * \return realGrid the array of discretized parameters (stored in CBA order).
+     */
+    Real *spreadParameters(int parameterAngMom, const RealMat &parameters) {
+        Real *realGrid = reinterpret_cast<Real *>(workSpace1_.data());
+        std::fill(workSpace1_.begin(), workSpace1_.end(), 0);
+        updateAngMomIterator(parameterAngMom);
+        int nComponents = nCartesian(parameterAngMom);
+        for (const auto &entry : splineCache_) {
+            const int &atom = std::get<0>(entry);
+            const auto &splineA = std::get<1>(entry);
+            const auto &splineB = std::get<2>(entry);
+            const auto &splineC = std::get<3>(entry);
+            const auto &aGridIterator = gridIteratorA_[splineA.startingGridPoint()];
+            const auto &bGridIterator = gridIteratorB_[splineB.startingGridPoint()];
+            const auto &cGridIterator = gridIteratorC_[splineC.startingGridPoint()];
+            for (int component = 0; component < nComponents; ++component) {
+                const auto &quanta = angMomIterator_[component];
+                Real param = parameters(atom, component);
+                const Real *splineValsA = splineA[quanta[0]];
+                const Real *splineValsB = splineB[quanta[1]];
+                const Real *splineValsC = splineC[quanta[2]];
+                for (const auto &cPoint : cGridIterator) {
+                    Real cValP = param * splineValsC[cPoint.second];
+                    for (const auto &bPoint : bGridIterator) {
+                        Real cbValP = cValP * splineValsB[bPoint.second];
+                        Real *cbRow = realGrid + cPoint.first * myDimB_ * myDimA_ + bPoint.first * myDimA_;
+                        for (const auto &aPoint : aGridIterator) {
+                            cbRow[aPoint.first] += cbValP * splineValsA[aPoint.second];
+                        }
+                    }
+                }
+            }
+        }
+        return realGrid;
+    }
+
+    /*!
+     * \brief Spread the parameters onto the charge grid.  Generally this shouldn't be called;
+     *        use the various computeE() methods instead.  This is the slower version of this call that recomputes
+     * splines on demand and makes no assumptions about the integrity of the spline cache. \param parameterAngMom the
+     * angular momentum of the parameters (0 for charges, C6 coefficients, 2 for quadrupoles, etc.). \param parameters
+     * the list of parameters associated with each atom (charges, C6 coefficients, multipoles, etc...). For a parameter
+     * with angular momentum L, a matrix of dimension nAtoms x nL is expected, where nL = (L+1)*(L+2)*(L+3)/6 and the
+     * fast running index nL has the ordering
+     *
+     * 0 X Y Z XX XY YY XZ YZ ZZ XXX XXY XYY YYY XXZ XYZ YYZ XZZ YZZ ZZZ ...
+     *
+     * i.e. generated by the python loops
+     * \code{.py}
+     * for L in range(maxAM+1):
+     *     for Lz in range(0,L+1):
+     *         for Ly in range(0, L - Lz + 1):
+     *              Lx  = L - Ly - Lz
+     * \endcode
+     * \param coordinates the cartesian coordinates, ordered in memory as {x1,y1,z1,x2,y2,z2,....xN,yN,zN}.
+     * \return realGrid the array of discretized parameters (stored in CBA order).
      */
     Real *spreadParameters(int parameterAngMom, const RealMat &parameters, const RealMat &coordinates) {
         Real *realGrid = reinterpret_cast<Real *>(workSpace1_.data());
@@ -1057,10 +1174,12 @@ class PMEInstance {
         int nComponents = nCartesian(parameterAngMom);
         size_t nAtoms = coordinates.nRows();
         for (size_t atom = 0; atom < nAtoms; ++atom) {
+            // Blindly reconstruct splines for this atom, assuming nothing about the validity of the cache.
+            // Note that this incurs a somewhat steep cost due to repeated memory allocations.
             auto bSplines = makeBSplines(coordinates[atom], parameterAngMom);
-            auto splineA = std::get<0>(bSplines);
-            auto splineB = std::get<1>(bSplines);
-            auto splineC = std::get<2>(bSplines);
+            const auto &splineA = std::get<0>(bSplines);
+            const auto &splineB = std::get<1>(bSplines);
+            const auto &splineC = std::get<2>(bSplines);
             const auto &aGridIterator = gridIteratorA_[splineA.startingGridPoint()];
             const auto &bGridIterator = gridIteratorB_[splineB.startingGridPoint()];
             const auto &cGridIterator = gridIteratorC_[splineC.startingGridPoint()];
@@ -1518,8 +1637,9 @@ class PMEInstance {
      */
     Real computeERec(int parameterAngMom, const RealMat &parameters, const RealMat &coordinates) {
         sanityChecks(parameterAngMom, parameters, coordinates);
+        filterAtomsAndBuildSplineCache(parameterAngMom, coordinates);
 
-        auto realGrid = spreadParameters(parameterAngMom, parameters, coordinates);
+        auto realGrid = spreadParameters(parameterAngMom, parameters);
         auto gridAddress = forwardTransform(realGrid);
         return convolveE(gridAddress);
     }
@@ -1549,8 +1669,10 @@ class PMEInstance {
      */
     Real computeEFRec(int parameterAngMom, const RealMat &parameters, const RealMat &coordinates, RealMat &forces) {
         sanityChecks(parameterAngMom, parameters, coordinates);
+        // Spline derivative level bumped by 1, for energy gradients.
+        filterAtomsAndBuildSplineCache(parameterAngMom + 1, coordinates);
 
-        auto realGrid = spreadParameters(parameterAngMom, parameters, coordinates);
+        auto realGrid = spreadParameters(parameterAngMom, parameters);
         auto gridAddress = forwardTransform(realGrid);
         Real energy = convolveE(gridAddress);
         const auto potentialGrid = inverseTransform(gridAddress);
@@ -1588,7 +1710,10 @@ class PMEInstance {
                        RealMat &virial) {
         sanityChecks(parameterAngMom, parameters, coordinates);
 
-        auto realGrid = spreadParameters(parameterAngMom, parameters, coordinates);
+        // Spline derivative level bumped by 1, for energy gradients.
+        filterAtomsAndBuildSplineCache(parameterAngMom + 1, coordinates);
+
+        auto realGrid = spreadParameters(parameterAngMom, parameters);
         auto gridPtr = forwardTransform(realGrid);
         Real energy = convolveEV(gridPtr, virial);
         const auto potentialGrid = inverseTransform(gridPtr);
