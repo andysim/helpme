@@ -176,7 +176,7 @@ class Matrix {
     /*!
      * \brief Matrix Constructs an empty matrix.
      */
-    Matrix() {}
+    Matrix() : nRows_(0), nCols_(0) {}
 
     /*!
      * \brief Matrix Constructs a new matrix, allocating memory.
