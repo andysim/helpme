@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <complex>
 #include <exception>
+#include <fstream>
 #include <initializer_list>
 #include <iostream>
 #include <iomanip>
@@ -185,6 +186,35 @@ class Matrix {
      */
     Matrix(size_t nRows, size_t nCols)
         : nRows_(nRows), nCols_(nCols), allocatedData_(nRows * nCols, 0), data_(allocatedData_.data()) {}
+
+    /*!
+     * \brief Matrix Constructs a new matrix, allocating memory.
+     * \param filename the ASCII file from which to read this matrix
+     */
+    Matrix(const std::string& filename) {
+        Real tmp;
+        std::ifstream inFile(filename);
+
+        if (!inFile) {
+            std::string msg("Unable to open file ");
+            msg += filename;
+            throw std::runtime_error(msg);
+        }
+
+        inFile >> nRows_;
+        inFile >> nCols_;
+        while (inFile >> tmp) allocatedData_.push_back(tmp);
+        inFile.close();
+        if (nRows_ * nCols_ != allocatedData_.size()) {
+            allocatedData_.clear();
+            std::string msg("Inconsistent dimensions in ");
+            msg += filename;
+            msg += ".  Amount of data inconsitent with declared size.";
+            throw std::runtime_error(msg);
+        }
+        allocatedData_.shrink_to_fit();
+        data_ = allocatedData_.data();
+    }
 
     /*!
      * \brief Matrix Constructs a new matrix, allocating memory and initializing values using the braced initializer.

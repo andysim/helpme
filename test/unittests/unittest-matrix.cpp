@@ -10,6 +10,7 @@
 #include "catch.hpp"
 #include "matrix.h"
 
+#include <fstream>
 #include <vector>
 
 TEST_CASE("test the matrix class.") {
@@ -40,6 +41,22 @@ TEST_CASE("test the matrix class.") {
                 helpme::Matrix<double> mat(3, 1);
                 helpme::Matrix<double> matExplicit({0, 0, 0});
                 REQUIRE(mat.almostEquals(matExplicit));
+            }
+            SECTION("from file") {
+                std::ofstream stream;
+
+                std::string goodcontents("2 3\n1.0 1.0 1.0\n 2.0 2.0 2.0");
+                stream.open("exampleofgoodmatrix.txt");
+                stream << goodcontents;
+                stream.close();
+                helpme::Matrix<double> matGoodRef({{1, 1, 1}, {2, 2, 2}});
+                REQUIRE(matGoodRef.almostEquals(helpme::Matrix<double>("exampleofgoodmatrix.txt")));
+
+                std::string badcontents("1 3\n1.0 1.0 1.0\n 2.0 2.0 2.0");
+                stream.open("exampleofbadmatrix.txt");
+                stream << badcontents;
+                stream.close();
+                REQUIRE_THROWS(helpme::Matrix<double>("exampleofbadmatrix.txt"));
             }
         }
     }
