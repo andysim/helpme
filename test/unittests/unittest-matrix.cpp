@@ -52,6 +52,8 @@ TEST_CASE("test the matrix class.") {
                 helpme::Matrix<double> matGoodRef({{1, 1, 1}, {2, 2, 2}});
                 REQUIRE(matGoodRef.almostEquals(helpme::Matrix<double>("exampleofgoodmatrix.txt")));
 
+                REQUIRE_THROWS(helpme::Matrix<double>("nonexistentfile.txt"));
+
                 std::string badcontents("1 3\n1.0 1.0 1.0\n 2.0 2.0 2.0");
                 stream.open("exampleofbadmatrix.txt");
                 stream << badcontents;
