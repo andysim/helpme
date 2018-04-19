@@ -316,7 +316,51 @@ class PMEInstance {
     }
 
     /*!
-     * \brief Probes the grid and computes the force for a single atom.
+     * \brief Probes the grid and computes the force for a single atom, specialized for zero parameter angular momentum.
+     * \param potentialGrid pointer to the array containing the potential, in ZYX order.
+     * \param splineA the BSpline object for the A direction.
+     * \param splineB the BSpline object for the B direction.
+     * \param splineC the BSpline object for the C direction.
+     * \param parameter the list of parameter associated with the given atom.
+     * \param forces a 3 vector of the forces for this atom, ordered in memory as {Fx, Fy, Fz}.
+     */
+    void probeGridImpl(const Real *potentialGrid, const BSpline<Real> &splineA, const BSpline<Real> &splineB,
+                       const BSpline<Real> &splineC, const Real &parameter, Real *forces) {
+        const auto &aGridIterator = gridIteratorA_[splineA.startingGridPoint()];
+        const auto &bGridIterator = gridIteratorB_[splineB.startingGridPoint()];
+        const auto &cGridIterator = gridIteratorC_[splineC.startingGridPoint()];
+        const Real *splineStartA0 = splineA[0];
+        const Real *splineStartB0 = splineB[0];
+        const Real *splineStartC0 = splineC[0];
+        const Real *splineStartA1 = splineStartA0 + splineOrder_;
+        const Real *splineStartB1 = splineStartB0 + splineOrder_;
+        const Real *splineStartC1 = splineStartC0 + splineOrder_;
+        Real Ex = 0, Ey = 0, Ez = 0;
+        for (const auto &cPoint : cGridIterator) {
+            const Real &splineC0 = splineStartC0[cPoint.second];
+            const Real &splineC1 = splineStartC1[cPoint.second];
+            for (const auto &bPoint : bGridIterator) {
+                const Real &splineB0 = splineStartB0[bPoint.second];
+                const Real &splineB1 = splineStartB1[bPoint.second];
+                const Real *cbRow = potentialGrid + cPoint.first * myDimA_ * myDimB_ + bPoint.first * myDimA_;
+                for (const auto &aPoint : aGridIterator) {
+                    const Real &splineA0 = splineStartA0[aPoint.second];
+                    const Real &splineA1 = splineStartA1[aPoint.second];
+                    Real gridVal = cbRow[aPoint.first];
+                    Ex += gridVal * splineA1 * splineB0 * splineC0;
+                    Ey += gridVal * splineA0 * splineB1 * splineC0;
+                    Ez += gridVal * splineA0 * splineB0 * splineC1;
+                }
+            }
+        }
+
+        forces[0] += parameter * (scaledRecVecs_[0][0] * Ex + scaledRecVecs_[0][1] * Ey + scaledRecVecs_[0][2] * Ez);
+        forces[1] += parameter * (scaledRecVecs_[1][0] * Ex + scaledRecVecs_[1][1] * Ey + scaledRecVecs_[1][2] * Ez);
+        forces[2] += parameter * (scaledRecVecs_[2][0] * Ex + scaledRecVecs_[2][1] * Ey + scaledRecVecs_[2][2] * Ez);
+    }
+
+    /*!
+     * \brief Probes the grid and computes the force for a single atom, for arbitrary parameter angular momentum.
      * \param atom the absolute atom number.
      * \param potentialGrid pointer to the array containing the potential, in ZYX order.
      * \param nComponents the number of angular momentum components in the parameters.
@@ -343,11 +387,15 @@ class PMEInstance {
      */
     void probeGridImpl(const int &atom, const Real *potentialGrid, const int &nComponents, const int &nForceComponents,
                        const BSpline<Real> &splineA, const BSpline<Real> &splineB, const BSpline<Real> &splineC,
-                       RealMat &fractionalPhis, const RealMat &parameters, RealMat &forces) {
+                       RealMat &fractionalPhis, const RealMat &parameters, Real *forces) {
         fractionalPhis.setZero();
         const auto &aGridIterator = gridIteratorA_[splineA.startingGridPoint()];
         const auto &bGridIterator = gridIteratorB_[splineB.startingGridPoint()];
         const auto &cGridIterator = gridIteratorC_[splineC.startingGridPoint()];
+        const Real *splineStartA = splineA[0];
+        const Real *splineStartB = splineB[0];
+        const Real *splineStartC = splineC[0];
+        Real *phiPtr = fractionalPhis[0];
         for (const auto &cPoint : cGridIterator) {
             for (const auto &bPoint : bGridIterator) {
                 const Real *cbRow = potentialGrid + cPoint.first * myDimA_ * myDimB_ + bPoint.first * myDimA_;
@@ -355,11 +403,11 @@ class PMEInstance {
                     Real gridVal = cbRow[aPoint.first];
                     for (int component = 0; component < nForceComponents; ++component) {
                         const auto &quanta = angMomIterator_[component];
-                        const Real *splineValsA = splineA[quanta[0]];
-                        const Real *splineValsB = splineB[quanta[1]];
-                        const Real *splineValsC = splineC[quanta[2]];
-                        fractionalPhis[0][component] += gridVal * splineValsA[aPoint.second] *
-                                                        splineValsB[bPoint.second] * splineValsC[cPoint.second];
+                        const Real *splineValsA = splineStartA + quanta[0] * splineOrder_;
+                        const Real *splineValsB = splineStartB + quanta[1] * splineOrder_;
+                        const Real *splineValsC = splineStartC + quanta[2] * splineOrder_;
+                        phiPtr[component] += gridVal * splineValsA[aPoint.second] * splineValsB[bPoint.second] *
+                                             splineValsC[cPoint.second];
                     }
                 }
             }
@@ -372,16 +420,16 @@ class PMEInstance {
             short lx = quanta[0];
             short ly = quanta[1];
             short lz = quanta[2];
-            fracForce[0] += param * fractionalPhis(0, cartAddress(lx + 1, ly, lz));
-            fracForce[1] += param * fractionalPhis(0, cartAddress(lx, ly + 1, lz));
-            fracForce[2] += param * fractionalPhis(0, cartAddress(lx, ly, lz + 1));
+            fracForce[0] += param * phiPtr[cartAddress(lx + 1, ly, lz)];
+            fracForce[1] += param * phiPtr[cartAddress(lx, ly + 1, lz)];
+            fracForce[2] += param * phiPtr[cartAddress(lx, ly, lz + 1)];
         }
-        forces(atom, 0) += scaledRecVecs_[0][0] * fracForce[0] + scaledRecVecs_[0][1] * fracForce[1] +
-                           scaledRecVecs_[0][2] * fracForce[2];
-        forces(atom, 1) += scaledRecVecs_[1][0] * fracForce[0] + scaledRecVecs_[1][1] * fracForce[1] +
-                           scaledRecVecs_[1][2] * fracForce[2];
-        forces(atom, 2) += scaledRecVecs_[2][0] * fracForce[0] + scaledRecVecs_[2][1] * fracForce[1] +
-                           scaledRecVecs_[2][2] * fracForce[2];
+        forces[0] += scaledRecVecs_[0][0] * fracForce[0] + scaledRecVecs_[0][1] * fracForce[1] +
+                     scaledRecVecs_[0][2] * fracForce[2];
+        forces[1] += scaledRecVecs_[1][0] * fracForce[0] + scaledRecVecs_[1][1] * fracForce[1] +
+                     scaledRecVecs_[1][2] * fracForce[2];
+        forces[2] += scaledRecVecs_[2][0] * fracForce[0] + scaledRecVecs_[2][1] * fracForce[1] +
+                     scaledRecVecs_[2][2] * fracForce[2];
     }
 
     /*!
@@ -506,6 +554,7 @@ class PMEInstance {
         Real volPrefac = scaleFactor * pow(M_PI, rPower - 1) / (sqrtPi * gammaComputer<Real, rPower>::value * volume);
         int halfNx = nx / 2 + 1;
         size_t nxz = actualNx * nz;
+        const Real *boxPtr = boxInv[0];
         for (int ky = 0; ky < myNy; ++ky) {
             // Exclude m=0 cell.
             size_t start = ky == 0 && nodeZero ? 1 : 0;
@@ -521,9 +570,9 @@ class PMEInstance {
                 Real mx = (Real)xMVals[kx];
                 Real mz = (Real)zMVals[kz];
                 // TODO clean this up and move stuff up into outer loops.
-                Real mVecX = boxInv(0, 0) * mx + boxInv(0, 1) * my + boxInv(0, 2) * mz;
-                Real mVecY = boxInv(1, 0) * mx + boxInv(1, 1) * my + boxInv(1, 2) * mz;
-                Real mVecZ = boxInv(2, 0) * mx + boxInv(2, 1) * my + boxInv(2, 2) * mz;
+                Real mVecX = boxPtr[0] * mx + boxPtr[1] * my + boxPtr[2] * mz;
+                Real mVecY = boxPtr[3] * mx + boxPtr[4] * my + boxPtr[5] * mz;
+                Real mVecZ = boxPtr[6] * mx + boxPtr[7] * my + boxPtr[8] * mz;
                 Real mNormSq = mVecX * mVecX + mVecY * mVecY + mVecZ * mVecZ;
                 Real mTerm = raiseNormToIntegerPower<Real, rPower - 3>::compute(mNormSq);
                 Real bSquared = bPrefac * mNormSq;
@@ -597,6 +646,7 @@ class PMEInstance {
         Real Vxz = 0;
         Real Vyz = 0;
         Real Vzz = 0;
+        const Real *boxPtr = boxInv[0];
         for (int ky = 0; ky < myNy; ++ky) {
             // Exclude m=0 cell.
             size_t start = ky == 0 && nodeZero ? 1 : 0;
@@ -611,9 +661,9 @@ class PMEInstance {
                 Real permPrefac = kx + startX != 0 && kx + startX != halfNx - 1 ? 2 : 1;
                 Real mx = (Real)xMVals[kx];
                 Real mz = (Real)zMVals[kz];
-                Real mVecX = boxInv(0, 0) * mx + boxInv(0, 1) * my + boxInv(0, 2) * mz;
-                Real mVecY = boxInv(1, 0) * mx + boxInv(1, 1) * my + boxInv(1, 2) * mz;
-                Real mVecZ = boxInv(2, 0) * mx + boxInv(2, 1) * my + boxInv(2, 2) * mz;
+                Real mVecX = boxPtr[0] * mx + boxPtr[1] * my + boxPtr[2] * mz;
+                Real mVecY = boxPtr[3] * mx + boxPtr[4] * my + boxPtr[5] * mz;
+                Real mVecZ = boxPtr[6] * mx + boxPtr[7] * my + boxPtr[8] * mz;
                 Real mNormSq = mVecX * mVecX + mVecY * mVecY + mVecZ * mVecZ;
                 Real mTerm = raiseNormToIntegerPower<Real, rPower - 3>::compute(mNormSq);
                 Real bSquared = bPrefac * mNormSq;
@@ -1327,7 +1377,7 @@ class PMEInstance {
             auto splineB = std::get<1>(bSplines);
             auto splineC = std::get<2>(bSplines);
             probeGridImpl(atom, potentialGrid, nComponents, nForceComponents, splineA, splineB, splineC, fractionalPhis,
-                          parameters, forces);
+                          parameters, forces[atom]);
         }
     }
 
@@ -1359,6 +1409,7 @@ class PMEInstance {
         updateAngMomIterator(parameterAngMom + 1);
         int nComponents = nCartesian(parameterAngMom);
         int nForceComponents = nCartesian(parameterAngMom + 1);
+        const Real *paramPtr = parameters[0];
         RealMat fractionalPhis(1, nForceComponents);
         for (const auto &entry : splineCache_) {
             fractionalPhis.setZero();
@@ -1366,8 +1417,12 @@ class PMEInstance {
             const auto &splineA = std::get<1>(entry);
             const auto &splineB = std::get<2>(entry);
             const auto &splineC = std::get<3>(entry);
-            probeGridImpl(atom, potentialGrid, nComponents, nForceComponents, splineA, splineB, splineC, fractionalPhis,
-                          parameters, forces);
+            if (parameterAngMom) {
+                probeGridImpl(atom, potentialGrid, nComponents, nForceComponents, splineA, splineB, splineC,
+                              fractionalPhis, parameters, forces[atom]);
+            } else {
+                probeGridImpl(potentialGrid, splineA, splineB, splineC, paramPtr[atom], forces[atom]);
+            }
         }
     }
 
