@@ -73,8 +73,8 @@ class Matrix {
     inline const Real* operator[](int row) const { return data_ + row * nCols_; }
     inline Real* operator[](int row) { return data_ + row * nCols_; }
 
-    Real* begin() { return data_; }
-    Real* end() { return data_ + nRows_ * nCols_; }
+    Real* begin() const { return data_; }
+    Real* end() const { return data_ + nRows_ * nCols_; }
     const Real* cbegin() const { return data_; }
     const Real* cend() const { return data_ + nRows_ * nCols_; }
 

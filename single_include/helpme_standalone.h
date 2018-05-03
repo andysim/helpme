@@ -1020,8 +1020,8 @@ class Matrix {
     inline const Real* operator[](int row) const { return data_ + row * nCols_; }
     inline Real* operator[](int row) { return data_ + row * nCols_; }
 
-    Real* begin() { return data_; }
-    Real* end() { return data_ + nRows_ * nCols_; }
+    Real* begin() const { return data_; }
+    Real* end() const { return data_ + nRows_ * nCols_; }
     const Real* cbegin() const { return data_; }
     const Real* cend() const { return data_ + nRows_ * nCols_; }
 
@@ -1793,7 +1793,7 @@ class BSpline {
     short startingGridPoint_;
 
     /// Makes B-Spline array.
-    void makeSplineInPlace(Real *array, Real val, short n) {
+    inline void makeSplineInPlace(Real *array, const Real &val, const short &n) const {
         Real denom = (Real)1 / (n - 1);
         array[n - 1] = denom * val * array[n - 2];
         for (short j = 1; j < n - 1; ++j)
@@ -1802,7 +1802,7 @@ class BSpline {
     }
 
     /// Takes BSpline derivative.
-    void differentiateSpline(const Real *array, Real *dArray, short n) {
+    inline void differentiateSpline(const Real *array, Real *dArray, const short &n) const {
         dArray[0] = -array[0];
         for (short j = 1; j < n - 1; ++j) dArray[j] = array[j - 1] - array[j];
         dArray[n - 1] = array[n - 2];
@@ -1850,10 +1850,10 @@ class BSpline {
      */
     helpme::vector<Real> invSplineModuli(short gridDim) {
         helpme::vector<Real> splineMods(gridDim, 0);
-        Real prefac = 2.0 * M_PI / gridDim;
+        Real prefac = 2 * M_PI / gridDim;
         for (int i = 0; i < gridDim; ++i) {
-            Real real = 0.0;
-            Real imag = 0.0;
+            Real real = 0;
+            Real imag = 0;
             for (int j = 0; j < order_; ++j) {
                 Real exparg = i * j * prefac;
                 Real jSpline = splines_(0, j);
@@ -1864,14 +1864,14 @@ class BSpline {
         }
 
         // Correct tiny values.
-        constexpr Real EPS = 1e-7;
-        if (splineMods[0] < EPS) splineMods[0] = 0.5 * splineMods[1];
+        constexpr Real EPS = 1e-7f;
+        if (splineMods[0] < EPS) splineMods[0] = splineMods[1] / 2;
         for (int i = 0; i < gridDim - 1; ++i)
-            if (splineMods[i] < EPS) splineMods[i] = 0.5 * (splineMods[i - 1] + splineMods[i + 1]);
-        if (splineMods[gridDim - 1] < EPS) splineMods[gridDim - 1] = 0.5 * splineMods[gridDim - 2];
+            if (splineMods[i] < EPS) splineMods[i] = (splineMods[i - 1] + splineMods[i + 1]) / 2;
+        if (splineMods[gridDim - 1] < EPS) splineMods[gridDim - 1] = splineMods[gridDim - 2] / 2;
 
         // Invert, to avoid division later on.
-        for (int i = 0; i < gridDim; ++i) splineMods[i] = 1.0 / splineMods[i];
+        for (int i = 0; i < gridDim; ++i) splineMods[i] = 1 / splineMods[i];
         return splineMods;
     }
 
@@ -1885,7 +1885,7 @@ class BSpline {
      * \brief Returns the B-Spline, or derivative thereof.
      * \param deriv the derivative level of the spline to be returned.
      */
-    const Real *operator[](short deriv) const { return splines_[deriv]; }
+    const Real *operator[](const int &deriv) const { return splines_[deriv]; }
 
     /*!
      * \brief Get read-only access to the full spline data.
@@ -2044,6 +2044,33 @@ class PMEInstance {
         return ret;
     }
 
+    /*!
+     * \brief makeGridIterator makes an iterator over the spline values that contribute to this node's grid
+     *        in a given Cartesian dimension.  The iterator is of the form (grid point, spline index) and is
+     *        sorted by increasing grid point, for cache efficiency.
+     * \param dimension the dimension of the grid in the Cartesian dimension of interest.
+     * \param first the first grid point in the Cartesian dimension to be handled by this node.
+     * \param last the element past the last grid point in the Cartesian dimension to be handled by this node.
+     * \return the vector of spline iterators for each starting grid point.
+     */
+    GridIterator makeGridIterator(int dimension, int first, int last) const {
+        GridIterator gridIterator;
+        for (int gridStart = 0; gridStart < dimension; ++gridStart) {
+            std::vector<std::pair<short, short>> splineIterator(splineOrder_);
+            splineIterator.clear();
+            for (int splineIndex = 0; splineIndex < splineOrder_; ++splineIndex) {
+                int gridPoint = (splineIndex + gridStart) % dimension;
+                if (gridPoint >= first && gridPoint < last)
+                    splineIterator.push_back(std::make_pair(gridPoint - first, splineIndex));
+            }
+            splineIterator.shrink_to_fit();
+            std::sort(splineIterator.begin(), splineIterator.end());
+            gridIterator.push_back(splineIterator);
+        }
+        gridIterator.shrink_to_fit();
+        return gridIterator;
+    }
+
     /*! Make sure that the iterator over AM components is up to date.
      * \param angMom the angular momentum required for the iterator over multipole components.
      */
@@ -2184,7 +2211,7 @@ class PMEInstance {
      * \param forces a 3 vector of the forces for this atom, ordered in memory as {Fx, Fy, Fz}.
      */
     void probeGridImpl(const Real *potentialGrid, const BSpline<Real> &splineA, const BSpline<Real> &splineB,
-                       const BSpline<Real> &splineC, const Real &parameter, Real *forces) {
+                       const BSpline<Real> &splineC, const Real &parameter, Real *forces) const {
         const auto &aGridIterator = gridIteratorA_[splineA.startingGridPoint()];
         const auto &bGridIterator = gridIteratorB_[splineB.startingGridPoint()];
         const auto &cGridIterator = gridIteratorC_[splineC.startingGridPoint()];
@@ -2307,10 +2334,10 @@ class PMEInstance {
      * \return a 3-tuple containing the {x,y,z} B-splines.
      */
     std::tuple<BSpline<Real>, BSpline<Real>, BSpline<Real>> makeBSplines(const Real *atomCoords,
-                                                                         short derivativeLevel) {
+                                                                         short derivativeLevel) const {
         // Subtract a tiny amount to make sure we're not exactly on the rightmost (excluded)
         // grid point. The calculation is translationally invariant, so this is valid.
-        constexpr float EPS = 1e-6;
+        constexpr float EPS = 1e-6f;
         Real aCoord =
             atomCoords[0] * recVecs_(0, 0) + atomCoords[1] * recVecs_(1, 0) + atomCoords[2] * recVecs_(2, 0) - EPS;
         Real bCoord =
@@ -2398,21 +2425,16 @@ class PMEInstance {
         // Ensure the m=0 term convolution product is zeroed for the backtransform; it's been accounted for above.
         if (nodeZero) gridPtr[0] = Complex(0, 0);
 
-        // The parallel scheme leads to a very confusing situation; dividing the aDim/2+1 elements among the x Nodes
-        // is achieved by assigning aDim/(2 numNodesX) values to each node.  Node 0 then has one extra element than
-        // the remaining nodes, which have a slice of zeros in place of this extra element.
-        int actualNx = startX ? myNx - 1 : myNx;
-
-        std::vector<short> xMVals(actualNx), yMVals(myNy), zMVals(nz);
+        std::vector<short> xMVals(myNx), yMVals(myNy), zMVals(nz);
         // Iterators to conveniently map {X,Y,Z} grid location to m_{X,Y,Z} value, where -1/2 << m/dim < 1/2.
-        for (int kx = 0; kx < actualNx; ++kx) xMVals[kx] = startX + (kx + startX >= (nx + 1) / 2 ? kx - nx : kx);
+        for (int kx = 0; kx < myNx; ++kx) xMVals[kx] = startX + (kx + startX >= (nx + 1) / 2 ? kx - nx : kx);
         for (int ky = 0; ky < myNy; ++ky) yMVals[ky] = startY + (ky + startY >= (ny + 1) / 2 ? ky - ny : ky);
         for (int kz = 0; kz < nz; ++kz) zMVals[kz] = kz >= (nz + 1) / 2 ? kz - nz : kz;
 
         Real bPrefac = M_PI * M_PI / (kappa * kappa);
         Real volPrefac = scaleFactor * pow(M_PI, rPower - 1) / (sqrtPi * gammaComputer<Real, rPower>::value * volume);
         int halfNx = nx / 2 + 1;
-        size_t nxz = actualNx * nz;
+        size_t nxz = myNx * nz;
         const Real *boxPtr = boxInv[0];
         for (int ky = 0; ky < myNy; ++ky) {
             // Exclude m=0 cell.
@@ -2428,7 +2450,6 @@ class PMEInstance {
                 Real permPrefac = kx + startX != 0 && kx + startX != halfNx - 1 ? 2 : 1;
                 Real mx = (Real)xMVals[kx];
                 Real mz = (Real)zMVals[kz];
-                // TODO clean this up and move stuff up into outer loops.
                 Real mVecX = boxPtr[0] * mx + boxPtr[1] * my + boxPtr[2] * mz;
                 Real mVecY = boxPtr[3] * mx + boxPtr[4] * my + boxPtr[5] * mz;
                 Real mVecZ = boxPtr[6] * mx + boxPtr[7] * my + boxPtr[8] * mz;
@@ -2499,12 +2520,7 @@ class PMEInstance {
         Real volPrefac = scaleFactor * pow(M_PI, rPower - 1) / (sqrtPi * gammaComputer<Real, rPower>::value * volume);
         int halfNx = nx / 2 + 1;
         size_t nxz = myNx * nz;
-        Real Vxx = 0;
-        Real Vxy = 0;
-        Real Vyy = 0;
-        Real Vxz = 0;
-        Real Vyz = 0;
-        Real Vzz = 0;
+        Real Vxx = 0, Vxy = 0, Vyy = 0, Vxz = 0, Vyz = 0, Vzz = 0;
         const Real *boxPtr = boxInv[0];
         for (int ky = 0; ky < myNy; ++ky) {
             // Exclude m=0 cell.
@@ -3840,32 +3856,6 @@ class PMEInstance {
         energy += computeEFVDir(includedList, parameterAngMom, parameters, coordinates, forces, virial);
         energy += computeEFVAdj(excludedList, parameterAngMom, parameters, coordinates, forces, virial);
         return energy;
-    }
-
-    /*!
-     * \brief makeGridIterator makes an iterator over the spline values that contribute to this node's grid
-     *        in a given Cartesian dimension.  The iterator is of the form (grid point, spline index) and is
-     *        sorted by increasing grid point, for cache efficiency.
-     * \param dimension the dimension of the grid in the Cartesian dimension of interest.
-     * \param first the first grid point in the Cartesian dimension to be handled by this node.
-     * \param last the element past the last grid point in the Cartesian dimension to be handled by this node.
-     * \return the vector of spline iterators for each starting grid point.
-     */
-    GridIterator makeGridIterator(int dimension, int first, int last) {
-        // TODO make me private!
-        GridIterator gridIterator;
-        for (int gridStart = 0; gridStart < dimension; ++gridStart) {
-            std::vector<std::pair<short, short>> splineIterator(splineOrder_);
-            splineIterator.clear();
-            for (int splineIndex = 0; splineIndex < splineOrder_; ++splineIndex) {
-                int gridPoint = (splineIndex + gridStart) % dimension;
-                if (gridPoint >= first && gridPoint < last)
-                    splineIterator.push_back(std::make_pair(gridPoint - first, splineIndex));
-            }
-            std::sort(splineIterator.begin(), splineIterator.end());
-            gridIterator.push_back(splineIterator);
-        }
-        return gridIterator;
     }
 
     /*!
