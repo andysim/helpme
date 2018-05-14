@@ -70,9 +70,11 @@ class BSpline {
         startingGridPoint_ = start;
         order_ = order;
         derivativeLevel_ = derivativeLevel;
+
         // The +1 is to account for the fact that we need to store entries up to and including the max.
         if (splines_.nRows() < derivativeLevel + 1 || splines_.nCols() != order)
             splines_ = Matrix<Real>(derivativeLevel + 1, order);
+
         splines_.setZero();
         splines_(0, 0) = 1 - value;
         splines_(0, 1) = value;
