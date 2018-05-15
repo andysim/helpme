@@ -13,7 +13,7 @@
 int main(int argc, char *argv[]) {
     bool useFloat = false;
     int rPower = 1;
-    int nCalcs = 100;
+    int nCalcs = 500;
 
     float scaleFactor = rPower == 1 ? 332.0716f : -1.0f;
     helpme::Matrix<double> coordsD("dhfr_coords.txt");

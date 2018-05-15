@@ -18,6 +18,11 @@ TEST_CASE("test the matrix class.") {
         SECTION("from existing memory") {
             std::vector<double> vec{1, 5, 9, 0, 2, 1};
             helpme::Matrix<double> testMat(vec.data(), 3, 2);
+            SECTION("move assignment") {
+                helpme::Matrix<double> refMat(vec.data(), 3, 2);
+                auto m2 = std::move(testMat);
+                REQUIRE(refMat.almostEquals(m2));
+            }
             SECTION("compare with explicitly declared matrix") {
                 helpme::Matrix<double> testMat2({{1, 5}, {9, 0}, {2, 1}});
                 REQUIRE(testMat.almostEquals(testMat2));

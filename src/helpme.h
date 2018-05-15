@@ -78,6 +78,21 @@ static int cartAddress(int lx, int ly, int lz) {
         break;
 
 /*!
+ * \class splineCacheEntry
+ * \brief A placeholder to encapsulate information about a given atom's splines
+ */
+template <typename Real>
+struct SplineCacheEntry {
+    BSpline<Real> aSpline, bSpline, cSpline;
+    int absoluteAtomNumber;
+    SplineCacheEntry(int order, int derivativeLevel)
+        : aSpline(0, 0, order, derivativeLevel),
+          bSpline(0, 0, order, derivativeLevel),
+          cSpline(0, 0, order, derivativeLevel),
+          absoluteAtomNumber(-1) {}
+};
+
+/*!
  * \class PMEInstance
  * \brief A class to encapsulate information related to a particle mesh Ewald calculation.
  *
@@ -90,6 +105,7 @@ template <typename Real>
 class PMEInstance {
     using GridIterator = std::vector<std::vector<std::pair<short, short>>>;
     using Complex = std::complex<Real>;
+    using Spline = BSpline<Real>;
     using RealMat = Matrix<Real>;
     using RealVec = helpme::vector<Real>;
 
@@ -172,7 +188,7 @@ class PMEInstance {
     /// The list of atoms, and their fractional coordinates, that will contribute to this node.
     std::vector<std::tuple<int, Real, Real, Real>> atomList_;
     /// The cached list of splines, which is stored as a member to make it persistent.
-    std::vector<std::tuple<int, BSpline<Real>, BSpline<Real>, BSpline<Real>>> splineCache_;
+    std::vector<SplineCacheEntry<Real>> splineCache_;
 
     /*!
      * \brief A simple helper to compute factorials.
@@ -183,6 +199,33 @@ class PMEInstance {
         unsigned int ret = 1;
         for (unsigned int i = 1; i <= n; ++i) ret *= i;
         return ret;
+    }
+
+    /*!
+     * \brief makeGridIterator makes an iterator over the spline values that contribute to this node's grid
+     *        in a given Cartesian dimension.  The iterator is of the form (grid point, spline index) and is
+     *        sorted by increasing grid point, for cache efficiency.
+     * \param dimension the dimension of the grid in the Cartesian dimension of interest.
+     * \param first the first grid point in the Cartesian dimension to be handled by this node.
+     * \param last the element past the last grid point in the Cartesian dimension to be handled by this node.
+     * \return the vector of spline iterators for each starting grid point.
+     */
+    GridIterator makeGridIterator(int dimension, int first, int last) const {
+        GridIterator gridIterator;
+        for (int gridStart = 0; gridStart < dimension; ++gridStart) {
+            std::vector<std::pair<short, short>> splineIterator(splineOrder_);
+            splineIterator.clear();
+            for (int splineIndex = 0; splineIndex < splineOrder_; ++splineIndex) {
+                int gridPoint = (splineIndex + gridStart) % dimension;
+                if (gridPoint >= first && gridPoint < last)
+                    splineIterator.push_back(std::make_pair(gridPoint - first, splineIndex));
+            }
+            splineIterator.shrink_to_fit();
+            std::sort(splineIterator.begin(), splineIterator.end());
+            gridIterator.push_back(splineIterator);
+        }
+        gridIterator.shrink_to_fit();
+        return gridIterator;
     }
 
     /*! Make sure that the iterator over AM components is up to date.
@@ -242,10 +285,14 @@ class PMEInstance {
 
         // Now we know how many atoms we loop over the dense list, redefining nAtoms accordingly.
         // The first stage above is to get the number of atoms, so we can avoid calling push_back
-        // and thus avoid the many memory allocations.  Calling resize() / update() instead should
-        // be more efficient, due to the similar number of atoms expected from one call to the next.
+        // and thus avoid the many memory allocations.  If the cache is too small, grow it by a
+        // certain scale factor to try and minimize allocations in a not-too-wasteful manner.
         nAtoms = atomList_.size();
-        splineCache_.resize(nAtoms);
+        if (splineCache_.size() < nAtoms) {
+            size_t newSize = static_cast<size_t>(1.2 * nAtoms);
+            for (int atom = splineCache_.size(); atom < newSize; ++atom)
+                splineCache_.emplace_back(splineOrder_, splineDerivativeLevel);
+        }
 
         for (int atomListNum = 0; atomListNum < nAtoms; ++atomListNum) {
             const auto &entry = atomList_[atomListNum];
@@ -257,13 +304,13 @@ class PMEInstance {
             short bStartingGridPoint = dimB_ * bCoord;
             short cStartingGridPoint = dimC_ * cCoord;
             auto &atomSplines = splineCache_[atomListNum];
-            std::get<0>(atomSplines) = absoluteAtomNumber;
-            std::get<1>(atomSplines)
-                .update(aStartingGridPoint, dimA_ * aCoord - aStartingGridPoint, splineOrder_, splineDerivativeLevel);
-            std::get<2>(atomSplines)
-                .update(bStartingGridPoint, dimB_ * bCoord - bStartingGridPoint, splineOrder_, splineDerivativeLevel);
-            std::get<3>(atomSplines)
-                .update(cStartingGridPoint, dimC_ * cCoord - cStartingGridPoint, splineOrder_, splineDerivativeLevel);
+            atomSplines.absoluteAtomNumber = absoluteAtomNumber;
+            atomSplines.aSpline.update(aStartingGridPoint, dimA_ * aCoord - aStartingGridPoint, splineOrder_,
+                                       splineDerivativeLevel);
+            atomSplines.bSpline.update(bStartingGridPoint, dimB_ * bCoord - bStartingGridPoint, splineOrder_,
+                                       splineDerivativeLevel);
+            atomSplines.cSpline.update(cStartingGridPoint, dimC_ * cCoord - cStartingGridPoint, splineOrder_,
+                                       splineDerivativeLevel);
         }
     }
 
@@ -291,23 +338,29 @@ class PMEInstance {
      *              Lx  = L - Ly - Lz
      * \endcode
      */
-    void spreadParametersImpl(const int &atom, Real *realGrid, const int &nComponents, const BSpline<Real> &splineA,
-                              const BSpline<Real> &splineB, const BSpline<Real> &splineC, const RealMat &parameters) {
+    void spreadParametersImpl(const int &atom, Real *realGrid, const int &nComponents, const Spline &splineA,
+                              const Spline &splineB, const Spline &splineC, const RealMat &parameters) {
         const auto &aGridIterator = gridIteratorA_[splineA.startingGridPoint()];
         const auto &bGridIterator = gridIteratorB_[splineB.startingGridPoint()];
         const auto &cGridIterator = gridIteratorC_[splineC.startingGridPoint()];
+        int numPointsA = static_cast<int>(aGridIterator.size());
+        int numPointsB = static_cast<int>(bGridIterator.size());
+        int numPointsC = static_cast<int>(cGridIterator.size());
         for (int component = 0; component < nComponents; ++component) {
             const auto &quanta = angMomIterator_[component];
             Real param = parameters(atom, component);
             const Real *splineValsA = splineA[quanta[0]];
             const Real *splineValsB = splineB[quanta[1]];
             const Real *splineValsC = splineC[quanta[2]];
-            for (const auto &cPoint : cGridIterator) {
+            for (int pointC = 0; pointC < numPointsC; ++pointC) {
+                const auto &cPoint = cGridIterator[pointC];
                 Real cValP = param * splineValsC[cPoint.second];
-                for (const auto &bPoint : bGridIterator) {
+                for (int pointB = 0; pointB < numPointsB; ++pointB) {
+                    const auto &bPoint = bGridIterator[pointB];
                     Real cbValP = cValP * splineValsB[bPoint.second];
                     Real *cbRow = realGrid + cPoint.first * myDimB_ * myDimA_ + bPoint.first * myDimA_;
-                    for (const auto &aPoint : aGridIterator) {
+                    for (int pointA = 0; pointA < numPointsA; ++pointA) {
+                        const auto &aPoint = aGridIterator[pointA];
                         cbRow[aPoint.first] += cbValP * splineValsA[aPoint.second];
                     }
                 }
@@ -316,7 +369,62 @@ class PMEInstance {
     }
 
     /*!
-     * \brief Probes the grid and computes the force for a single atom.
+     * \brief Probes the grid and computes the force for a single atom, specialized for zero parameter angular momentum.
+     * \param potentialGrid pointer to the array containing the potential, in ZYX order.
+     * \param splineA the BSpline object for the A direction.
+     * \param splineB the BSpline object for the B direction.
+     * \param splineC the BSpline object for the C direction.
+     * \param parameter the list of parameter associated with the given atom.
+     * \param forces a 3 vector of the forces for this atom, ordered in memory as {Fx, Fy, Fz}.
+     */
+    void probeGridImpl(const Real *potentialGrid, const Spline &splineA, const Spline &splineB, const Spline &splineC,
+                       const Real &parameter, Real *forces) const {
+        const auto &aGridIterator = gridIteratorA_[splineA.startingGridPoint()];
+        const auto &bGridIterator = gridIteratorB_[splineB.startingGridPoint()];
+        const auto &cGridIterator = gridIteratorC_[splineC.startingGridPoint()];
+        // We unpack the vector to raw pointers, as profiling shows that using range based for loops over vectors
+        // causes a signficant penalty in the innermost loop, primarily due to checking the loop stop condition.
+        int numPointsA = static_cast<int>(aGridIterator.size());
+        int numPointsB = static_cast<int>(bGridIterator.size());
+        int numPointsC = static_cast<int>(cGridIterator.size());
+        const auto *iteratorDataA = aGridIterator.data();
+        const auto *iteratorDataB = bGridIterator.data();
+        const auto *iteratorDataC = cGridIterator.data();
+        const Real *splineStartA0 = splineA[0];
+        const Real *splineStartB0 = splineB[0];
+        const Real *splineStartC0 = splineC[0];
+        const Real *splineStartA1 = splineStartA0 + splineOrder_;
+        const Real *splineStartB1 = splineStartB0 + splineOrder_;
+        const Real *splineStartC1 = splineStartC0 + splineOrder_;
+        Real Ex = 0, Ey = 0, Ez = 0;
+        for (int pointC = 0; pointC < numPointsC; ++pointC) {
+            const auto &cPoint = iteratorDataC[pointC];
+            const Real &splineC0 = splineStartC0[cPoint.second];
+            const Real &splineC1 = splineStartC1[cPoint.second];
+            for (int pointB = 0; pointB < numPointsB; ++pointB) {
+                const auto &bPoint = iteratorDataB[pointB];
+                const Real &splineB0 = splineStartB0[bPoint.second];
+                const Real &splineB1 = splineStartB1[bPoint.second];
+                const Real *cbRow = potentialGrid + cPoint.first * myDimA_ * myDimB_ + bPoint.first * myDimA_;
+                for (int pointA = 0; pointA < numPointsA; ++pointA) {
+                    const auto &aPoint = iteratorDataA[pointA];
+                    const Real &splineA0 = splineStartA0[aPoint.second];
+                    const Real &splineA1 = splineStartA1[aPoint.second];
+                    Real gridVal = cbRow[aPoint.first];
+                    Ex += gridVal * splineA1 * splineB0 * splineC0;
+                    Ey += gridVal * splineA0 * splineB1 * splineC0;
+                    Ez += gridVal * splineA0 * splineB0 * splineC1;
+                }
+            }
+        }
+
+        forces[0] += parameter * (scaledRecVecs_[0][0] * Ex + scaledRecVecs_[0][1] * Ey + scaledRecVecs_[0][2] * Ez);
+        forces[1] += parameter * (scaledRecVecs_[1][0] * Ex + scaledRecVecs_[1][1] * Ey + scaledRecVecs_[1][2] * Ez);
+        forces[2] += parameter * (scaledRecVecs_[2][0] * Ex + scaledRecVecs_[2][1] * Ey + scaledRecVecs_[2][2] * Ez);
+    }
+
+    /*!
+     * \brief Probes the grid and computes the force for a single atom, for arbitrary parameter angular momentum.
      * \param atom the absolute atom number.
      * \param potentialGrid pointer to the array containing the potential, in ZYX order.
      * \param nComponents the number of angular momentum components in the parameters.
@@ -342,12 +450,16 @@ class PMEInstance {
      * \param forces a Nx3 matrix of the forces, ordered in memory as {Fx1,Fy1,Fz1,Fx2,Fy2,Fz2,....FxN,FyN,FzN}.
      */
     void probeGridImpl(const int &atom, const Real *potentialGrid, const int &nComponents, const int &nForceComponents,
-                       const BSpline<Real> &splineA, const BSpline<Real> &splineB, const BSpline<Real> &splineC,
-                       RealMat &fractionalPhis, const RealMat &parameters, RealMat &forces) {
+                       const Spline &splineA, const Spline &splineB, const Spline &splineC, RealMat &fractionalPhis,
+                       const RealMat &parameters, Real *forces) {
         fractionalPhis.setZero();
         const auto &aGridIterator = gridIteratorA_[splineA.startingGridPoint()];
         const auto &bGridIterator = gridIteratorB_[splineB.startingGridPoint()];
         const auto &cGridIterator = gridIteratorC_[splineC.startingGridPoint()];
+        const Real *splineStartA = splineA[0];
+        const Real *splineStartB = splineB[0];
+        const Real *splineStartC = splineC[0];
+        Real *phiPtr = fractionalPhis[0];
         for (const auto &cPoint : cGridIterator) {
             for (const auto &bPoint : bGridIterator) {
                 const Real *cbRow = potentialGrid + cPoint.first * myDimA_ * myDimB_ + bPoint.first * myDimA_;
@@ -355,11 +467,11 @@ class PMEInstance {
                     Real gridVal = cbRow[aPoint.first];
                     for (int component = 0; component < nForceComponents; ++component) {
                         const auto &quanta = angMomIterator_[component];
-                        const Real *splineValsA = splineA[quanta[0]];
-                        const Real *splineValsB = splineB[quanta[1]];
-                        const Real *splineValsC = splineC[quanta[2]];
-                        fractionalPhis[0][component] += gridVal * splineValsA[aPoint.second] *
-                                                        splineValsB[bPoint.second] * splineValsC[cPoint.second];
+                        const Real *splineValsA = splineStartA + quanta[0] * splineOrder_;
+                        const Real *splineValsB = splineStartB + quanta[1] * splineOrder_;
+                        const Real *splineValsC = splineStartC + quanta[2] * splineOrder_;
+                        phiPtr[component] += gridVal * splineValsA[aPoint.second] * splineValsB[bPoint.second] *
+                                             splineValsC[cPoint.second];
                     }
                 }
             }
@@ -372,16 +484,16 @@ class PMEInstance {
             short lx = quanta[0];
             short ly = quanta[1];
             short lz = quanta[2];
-            fracForce[0] += param * fractionalPhis(0, cartAddress(lx + 1, ly, lz));
-            fracForce[1] += param * fractionalPhis(0, cartAddress(lx, ly + 1, lz));
-            fracForce[2] += param * fractionalPhis(0, cartAddress(lx, ly, lz + 1));
+            fracForce[0] += param * phiPtr[cartAddress(lx + 1, ly, lz)];
+            fracForce[1] += param * phiPtr[cartAddress(lx, ly + 1, lz)];
+            fracForce[2] += param * phiPtr[cartAddress(lx, ly, lz + 1)];
         }
-        forces(atom, 0) += scaledRecVecs_[0][0] * fracForce[0] + scaledRecVecs_[0][1] * fracForce[1] +
-                           scaledRecVecs_[0][2] * fracForce[2];
-        forces(atom, 1) += scaledRecVecs_[1][0] * fracForce[0] + scaledRecVecs_[1][1] * fracForce[1] +
-                           scaledRecVecs_[1][2] * fracForce[2];
-        forces(atom, 2) += scaledRecVecs_[2][0] * fracForce[0] + scaledRecVecs_[2][1] * fracForce[1] +
-                           scaledRecVecs_[2][2] * fracForce[2];
+        forces[0] += scaledRecVecs_[0][0] * fracForce[0] + scaledRecVecs_[0][1] * fracForce[1] +
+                     scaledRecVecs_[0][2] * fracForce[2];
+        forces[1] += scaledRecVecs_[1][0] * fracForce[0] + scaledRecVecs_[1][1] * fracForce[1] +
+                     scaledRecVecs_[1][2] * fracForce[2];
+        forces[2] += scaledRecVecs_[2][0] * fracForce[0] + scaledRecVecs_[2][1] * fracForce[1] +
+                     scaledRecVecs_[2][2] * fracForce[2];
     }
 
     /*!
@@ -399,11 +511,10 @@ class PMEInstance {
      * \param derivativeLevel level of derivative needed for the splines.
      * \return a 3-tuple containing the {x,y,z} B-splines.
      */
-    std::tuple<BSpline<Real>, BSpline<Real>, BSpline<Real>> makeBSplines(const Real *atomCoords,
-                                                                         short derivativeLevel) {
+    std::tuple<Spline, Spline, Spline> makeBSplines(const Real *atomCoords, short derivativeLevel) const {
         // Subtract a tiny amount to make sure we're not exactly on the rightmost (excluded)
         // grid point. The calculation is translationally invariant, so this is valid.
-        constexpr float EPS = 1e-6;
+        constexpr float EPS = 1e-6f;
         Real aCoord =
             atomCoords[0] * recVecs_(0, 0) + atomCoords[1] * recVecs_(1, 0) + atomCoords[2] * recVecs_(2, 0) - EPS;
         Real bCoord =
@@ -420,10 +531,9 @@ class PMEInstance {
         Real aDistanceFromGridPoint = dimA_ * aCoord - aStartingGridPoint;
         Real bDistanceFromGridPoint = dimB_ * bCoord - bStartingGridPoint;
         Real cDistanceFromGridPoint = dimC_ * cCoord - cStartingGridPoint;
-        return std::make_tuple(
-            BSpline<Real>(aStartingGridPoint, aDistanceFromGridPoint, splineOrder_, derivativeLevel),
-            BSpline<Real>(bStartingGridPoint, bDistanceFromGridPoint, splineOrder_, derivativeLevel),
-            BSpline<Real>(cStartingGridPoint, cDistanceFromGridPoint, splineOrder_, derivativeLevel));
+        return std::make_tuple(Spline(aStartingGridPoint, aDistanceFromGridPoint, splineOrder_, derivativeLevel),
+                               Spline(bStartingGridPoint, bDistanceFromGridPoint, splineOrder_, derivativeLevel),
+                               Spline(cStartingGridPoint, cDistanceFromGridPoint, splineOrder_, derivativeLevel));
     }
 
     /*!
@@ -491,21 +601,17 @@ class PMEInstance {
         // Ensure the m=0 term convolution product is zeroed for the backtransform; it's been accounted for above.
         if (nodeZero) gridPtr[0] = Complex(0, 0);
 
-        // The parallel scheme leads to a very confusing situation; dividing the aDim/2+1 elements among the x Nodes
-        // is achieved by assigning aDim/(2 numNodesX) values to each node.  Node 0 then has one extra element than
-        // the remaining nodes, which have a slice of zeros in place of this extra element.
-        int actualNx = startX ? myNx - 1 : myNx;
-
-        std::vector<short> xMVals(actualNx), yMVals(myNy), zMVals(nz);
+        std::vector<short> xMVals(myNx), yMVals(myNy), zMVals(nz);
         // Iterators to conveniently map {X,Y,Z} grid location to m_{X,Y,Z} value, where -1/2 << m/dim < 1/2.
-        for (int kx = 0; kx < actualNx; ++kx) xMVals[kx] = startX + (kx + startX >= (nx + 1) / 2 ? kx - nx : kx);
+        for (int kx = 0; kx < myNx; ++kx) xMVals[kx] = startX + (kx + startX >= (nx + 1) / 2 ? kx - nx : kx);
         for (int ky = 0; ky < myNy; ++ky) yMVals[ky] = startY + (ky + startY >= (ny + 1) / 2 ? ky - ny : ky);
         for (int kz = 0; kz < nz; ++kz) zMVals[kz] = kz >= (nz + 1) / 2 ? kz - nz : kz;
 
         Real bPrefac = M_PI * M_PI / (kappa * kappa);
         Real volPrefac = scaleFactor * pow(M_PI, rPower - 1) / (sqrtPi * gammaComputer<Real, rPower>::value * volume);
         int halfNx = nx / 2 + 1;
-        size_t nxz = actualNx * nz;
+        size_t nxz = myNx * nz;
+        const Real *boxPtr = boxInv[0];
         for (int ky = 0; ky < myNy; ++ky) {
             // Exclude m=0 cell.
             size_t start = ky == 0 && nodeZero ? 1 : 0;
@@ -520,10 +626,9 @@ class PMEInstance {
                 Real permPrefac = kx + startX != 0 && kx + startX != halfNx - 1 ? 2 : 1;
                 Real mx = (Real)xMVals[kx];
                 Real mz = (Real)zMVals[kz];
-                // TODO clean this up and move stuff up into outer loops.
-                Real mVecX = boxInv(0, 0) * mx + boxInv(0, 1) * my + boxInv(0, 2) * mz;
-                Real mVecY = boxInv(1, 0) * mx + boxInv(1, 1) * my + boxInv(1, 2) * mz;
-                Real mVecZ = boxInv(2, 0) * mx + boxInv(2, 1) * my + boxInv(2, 2) * mz;
+                Real mVecX = boxPtr[0] * mx + boxPtr[1] * my + boxPtr[2] * mz;
+                Real mVecY = boxPtr[3] * mx + boxPtr[4] * my + boxPtr[5] * mz;
+                Real mVecZ = boxPtr[6] * mx + boxPtr[7] * my + boxPtr[8] * mz;
                 Real mNormSq = mVecX * mVecX + mVecY * mVecY + mVecZ * mVecZ;
                 Real mTerm = raiseNormToIntegerPower<Real, rPower - 3>::compute(mNormSq);
                 Real bSquared = bPrefac * mNormSq;
@@ -591,12 +696,8 @@ class PMEInstance {
         Real volPrefac = scaleFactor * pow(M_PI, rPower - 1) / (sqrtPi * gammaComputer<Real, rPower>::value * volume);
         int halfNx = nx / 2 + 1;
         size_t nxz = myNx * nz;
-        Real Vxx = 0;
-        Real Vxy = 0;
-        Real Vyy = 0;
-        Real Vxz = 0;
-        Real Vyz = 0;
-        Real Vzz = 0;
+        Real Vxx = 0, Vxy = 0, Vyy = 0, Vxz = 0, Vyz = 0, Vzz = 0;
+        const Real *boxPtr = boxInv[0];
         for (int ky = 0; ky < myNy; ++ky) {
             // Exclude m=0 cell.
             size_t start = ky == 0 && nodeZero ? 1 : 0;
@@ -611,9 +712,9 @@ class PMEInstance {
                 Real permPrefac = kx + startX != 0 && kx + startX != halfNx - 1 ? 2 : 1;
                 Real mx = (Real)xMVals[kx];
                 Real mz = (Real)zMVals[kz];
-                Real mVecX = boxInv(0, 0) * mx + boxInv(0, 1) * my + boxInv(0, 2) * mz;
-                Real mVecY = boxInv(1, 0) * mx + boxInv(1, 1) * my + boxInv(1, 2) * mz;
-                Real mVecZ = boxInv(2, 0) * mx + boxInv(2, 1) * my + boxInv(2, 2) * mz;
+                Real mVecX = boxPtr[0] * mx + boxPtr[1] * my + boxPtr[2] * mz;
+                Real mVecY = boxPtr[3] * mx + boxPtr[4] * my + boxPtr[5] * mz;
+                Real mVecZ = boxPtr[6] * mx + boxPtr[7] * my + boxPtr[8] * mz;
                 Real mNormSq = mVecX * mVecX + mVecY * mVecY + mVecZ * mVecZ;
                 Real mTerm = raiseNormToIntegerPower<Real, rPower - 3>::compute(mNormSq);
                 Real bSquared = bPrefac * mNormSq;
@@ -741,8 +842,8 @@ class PMEInstance {
      *              Lx  = L - Ly - Lz
      * \endcode
      * \param kappa the attenuation parameter in units inverse of those used to specify coordinates.
-     * \param scaleFactor a scale factor to be applied to all computed energies and derivatives thereof (e.g. the 1 / [4
-     * pi epslion0] for Coulomb calculations).
+     * \param scaleFactor a scale factor to be applied to all computed energies and derivatives thereof
+     *        (e.g. the 1 / [4 pi epslion0] for Coulomb calculations).
      * \return the self energy.  N.B. there is no self force associated with this term.
      */
     template <int rPower>
@@ -788,7 +889,7 @@ class PMEInstance {
             gridIteratorC_ = makeGridIterator(dimC_, firstC_, lastC_);
 
             // Fourier space spline norms.
-            BSpline<Real> spline = BSpline<Real>(0, 0, splineOrder_, 0);
+            Spline spline = Spline(0, 0, splineOrder_, 0);
             splineModA_ = spline.invSplineModuli(dimA_);
             splineModB_ = spline.invSplineModuli(dimB_);
             splineModC_ = spline.invSplineModuli(dimC_);
@@ -1238,12 +1339,14 @@ class PMEInstance {
         Real *realGrid = reinterpret_cast<Real *>(workSpace1_.data());
         std::fill(workSpace1_.begin(), workSpace1_.end(), 0);
         updateAngMomIterator(parameterAngMom);
+        size_t nAtoms = atomList_.size();
         int nComponents = nCartesian(parameterAngMom);
-        for (const auto &entry : splineCache_) {
-            const int &atom = std::get<0>(entry);
-            const auto &splineA = std::get<1>(entry);
-            const auto &splineB = std::get<2>(entry);
-            const auto &splineC = std::get<3>(entry);
+        for (size_t relativeAtomNumber = 0; relativeAtomNumber < nAtoms; ++relativeAtomNumber) {
+            const auto &entry = splineCache_[relativeAtomNumber];
+            const int &atom = entry.absoluteAtomNumber;
+            const auto &splineA = entry.aSpline;
+            const auto &splineB = entry.bSpline;
+            const auto &splineC = entry.cSpline;
             spreadParametersImpl(atom, realGrid, nComponents, splineA, splineB, splineC, parameters);
         }
         return realGrid;
@@ -1318,7 +1421,7 @@ class PMEInstance {
         int nComponents = nCartesian(parameterAngMom);
         int nForceComponents = nCartesian(parameterAngMom + 1);
         RealMat fractionalPhis(1, nForceComponents);
-        size_t nAtoms = coordinates.nRows();
+        size_t nAtoms = parameters.nRows();
         for (size_t atom = 0; atom < nAtoms; ++atom) {
             fractionalPhis.setZero();
 
@@ -1327,7 +1430,7 @@ class PMEInstance {
             auto splineB = std::get<1>(bSplines);
             auto splineC = std::get<2>(bSplines);
             probeGridImpl(atom, potentialGrid, nComponents, nForceComponents, splineA, splineB, splineC, fractionalPhis,
-                          parameters, forces);
+                          parameters, forces[atom]);
         }
     }
 
@@ -1359,15 +1462,22 @@ class PMEInstance {
         updateAngMomIterator(parameterAngMom + 1);
         int nComponents = nCartesian(parameterAngMom);
         int nForceComponents = nCartesian(parameterAngMom + 1);
+        const Real *paramPtr = parameters[0];
         RealMat fractionalPhis(1, nForceComponents);
-        for (const auto &entry : splineCache_) {
+        size_t nAtoms = atomList_.size();
+        for (size_t relativeAtomNumber = 0; relativeAtomNumber < nAtoms; ++relativeAtomNumber) {
+            const auto &entry = splineCache_[relativeAtomNumber];
             fractionalPhis.setZero();
-            const int &atom = std::get<0>(entry);
-            const auto &splineA = std::get<1>(entry);
-            const auto &splineB = std::get<2>(entry);
-            const auto &splineC = std::get<3>(entry);
-            probeGridImpl(atom, potentialGrid, nComponents, nForceComponents, splineA, splineB, splineC, fractionalPhis,
-                          parameters, forces);
+            const int &atom = entry.absoluteAtomNumber;
+            const auto &splineA = entry.aSpline;
+            const auto &splineB = entry.bSpline;
+            const auto &splineC = entry.cSpline;
+            if (parameterAngMom) {
+                probeGridImpl(atom, potentialGrid, nComponents, nForceComponents, splineA, splineB, splineC,
+                              fractionalPhis, parameters, forces[atom]);
+            } else {
+                probeGridImpl(potentialGrid, splineA, splineB, splineC, paramPtr[atom], forces[atom]);
+            }
         }
     }
 
@@ -1926,32 +2036,6 @@ class PMEInstance {
         energy += computeEFVDir(includedList, parameterAngMom, parameters, coordinates, forces, virial);
         energy += computeEFVAdj(excludedList, parameterAngMom, parameters, coordinates, forces, virial);
         return energy;
-    }
-
-    /*!
-     * \brief makeGridIterator makes an iterator over the spline values that contribute to this node's grid
-     *        in a given Cartesian dimension.  The iterator is of the form (grid point, spline index) and is
-     *        sorted by increasing grid point, for cache efficiency.
-     * \param dimension the dimension of the grid in the Cartesian dimension of interest.
-     * \param first the first grid point in the Cartesian dimension to be handled by this node.
-     * \param last the element past the last grid point in the Cartesian dimension to be handled by this node.
-     * \return the vector of spline iterators for each starting grid point.
-     */
-    GridIterator makeGridIterator(int dimension, int first, int last) {
-        // TODO make me private!
-        GridIterator gridIterator;
-        for (int gridStart = 0; gridStart < dimension; ++gridStart) {
-            std::vector<std::pair<short, short>> splineIterator(splineOrder_);
-            splineIterator.clear();
-            for (int splineIndex = 0; splineIndex < splineOrder_; ++splineIndex) {
-                int gridPoint = (splineIndex + gridStart) % dimension;
-                if (gridPoint >= first && gridPoint < last)
-                    splineIterator.push_back(std::make_pair(gridPoint - first, splineIndex));
-            }
-            std::sort(splineIterator.begin(), splineIterator.end());
-            gridIterator.push_back(splineIterator);
-        }
-        return gridIterator;
     }
 
     /*!

@@ -38,7 +38,7 @@ class BSpline {
     short startingGridPoint_;
 
     /// Makes B-Spline array.
-    void makeSplineInPlace(Real *array, Real val, short n) {
+    inline void makeSplineInPlace(Real *array, const Real &val, const short &n) const {
         Real denom = (Real)1 / (n - 1);
         array[n - 1] = denom * val * array[n - 2];
         for (short j = 1; j < n - 1; ++j)
@@ -47,7 +47,7 @@ class BSpline {
     }
 
     /// Takes BSpline derivative.
-    void differentiateSpline(const Real *array, Real *dArray, short n) {
+    inline void differentiateSpline(const Real *array, Real *dArray, const short &n) const {
         dArray[0] = -array[0];
         for (short j = 1; j < n - 1; ++j) dArray[j] = array[j - 1] - array[j];
         dArray[n - 1] = array[n - 2];
@@ -70,9 +70,11 @@ class BSpline {
         startingGridPoint_ = start;
         order_ = order;
         derivativeLevel_ = derivativeLevel;
+
         // The +1 is to account for the fact that we need to store entries up to and including the max.
         if (splines_.nRows() < derivativeLevel + 1 || splines_.nCols() != order)
             splines_ = Matrix<Real>(derivativeLevel + 1, order);
+
         splines_.setZero();
         splines_(0, 0) = 1 - value;
         splines_(0, 1) = value;
@@ -95,10 +97,10 @@ class BSpline {
      */
     helpme::vector<Real> invSplineModuli(short gridDim) {
         helpme::vector<Real> splineMods(gridDim, 0);
-        Real prefac = 2.0 * M_PI / gridDim;
+        Real prefac = 2 * M_PI / gridDim;
         for (int i = 0; i < gridDim; ++i) {
-            Real real = 0.0;
-            Real imag = 0.0;
+            Real real = 0;
+            Real imag = 0;
             for (int j = 0; j < order_; ++j) {
                 Real exparg = i * j * prefac;
                 Real jSpline = splines_(0, j);
@@ -109,14 +111,14 @@ class BSpline {
         }
 
         // Correct tiny values.
-        constexpr Real EPS = 1e-7;
-        if (splineMods[0] < EPS) splineMods[0] = 0.5 * splineMods[1];
+        constexpr Real EPS = 1e-7f;
+        if (splineMods[0] < EPS) splineMods[0] = splineMods[1] / 2;
         for (int i = 0; i < gridDim - 1; ++i)
-            if (splineMods[i] < EPS) splineMods[i] = 0.5 * (splineMods[i - 1] + splineMods[i + 1]);
-        if (splineMods[gridDim - 1] < EPS) splineMods[gridDim - 1] = 0.5 * splineMods[gridDim - 2];
+            if (splineMods[i] < EPS) splineMods[i] = (splineMods[i - 1] + splineMods[i + 1]) / 2;
+        if (splineMods[gridDim - 1] < EPS) splineMods[gridDim - 1] = splineMods[gridDim - 2] / 2;
 
         // Invert, to avoid division later on.
-        for (int i = 0; i < gridDim; ++i) splineMods[i] = 1.0 / splineMods[i];
+        for (int i = 0; i < gridDim; ++i) splineMods[i] = 1 / splineMods[i];
         return splineMods;
     }
 
@@ -130,7 +132,7 @@ class BSpline {
      * \brief Returns the B-Spline, or derivative thereof.
      * \param deriv the derivative level of the spline to be returned.
      */
-    const Real *operator[](short deriv) const { return splines_[deriv]; }
+    const Real *operator[](const int &deriv) const { return splines_[deriv]; }
 
     /*!
      * \brief Get read-only access to the full spline data.
