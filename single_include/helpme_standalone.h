@@ -2204,18 +2204,24 @@ class PMEInstance {
         const auto &aGridIterator = gridIteratorA_[splineA.startingGridPoint()];
         const auto &bGridIterator = gridIteratorB_[splineB.startingGridPoint()];
         const auto &cGridIterator = gridIteratorC_[splineC.startingGridPoint()];
+        int numPointsA = static_cast<int>(aGridIterator.size());
+        int numPointsB = static_cast<int>(bGridIterator.size());
+        int numPointsC = static_cast<int>(cGridIterator.size());
         for (int component = 0; component < nComponents; ++component) {
             const auto &quanta = angMomIterator_[component];
             Real param = parameters(atom, component);
             const Real *splineValsA = splineA[quanta[0]];
             const Real *splineValsB = splineB[quanta[1]];
             const Real *splineValsC = splineC[quanta[2]];
-            for (const auto &cPoint : cGridIterator) {
+            for (int pointC = 0; pointC < numPointsC; ++pointC) {
+                const auto &cPoint = cGridIterator[pointC];
                 Real cValP = param * splineValsC[cPoint.second];
-                for (const auto &bPoint : bGridIterator) {
+                for (int pointB = 0; pointB < numPointsB; ++pointB) {
+                    const auto &bPoint = bGridIterator[pointB];
                     Real cbValP = cValP * splineValsB[bPoint.second];
                     Real *cbRow = realGrid + cPoint.first * myDimB_ * myDimA_ + bPoint.first * myDimA_;
-                    for (const auto &aPoint : aGridIterator) {
+                    for (int pointA = 0; pointA < numPointsA; ++pointA) {
+                        const auto &aPoint = aGridIterator[pointA];
                         cbRow[aPoint.first] += cbValP * splineValsA[aPoint.second];
                     }
                 }
@@ -2237,6 +2243,14 @@ class PMEInstance {
         const auto &aGridIterator = gridIteratorA_[splineA.startingGridPoint()];
         const auto &bGridIterator = gridIteratorB_[splineB.startingGridPoint()];
         const auto &cGridIterator = gridIteratorC_[splineC.startingGridPoint()];
+        // We unpack the vector to raw pointers, as profiling shows that using range based for loops over vectors
+        // causes a signficant penalty in the innermost loop, primarily due to checking the loop stop condition.
+        int numPointsA = static_cast<int>(aGridIterator.size());
+        int numPointsB = static_cast<int>(bGridIterator.size());
+        int numPointsC = static_cast<int>(cGridIterator.size());
+        const auto *iteratorDataA = aGridIterator.data();
+        const auto *iteratorDataB = bGridIterator.data();
+        const auto *iteratorDataC = cGridIterator.data();
         const Real *splineStartA0 = splineA[0];
         const Real *splineStartB0 = splineB[0];
         const Real *splineStartC0 = splineC[0];
@@ -2244,14 +2258,17 @@ class PMEInstance {
         const Real *splineStartB1 = splineStartB0 + splineOrder_;
         const Real *splineStartC1 = splineStartC0 + splineOrder_;
         Real Ex = 0, Ey = 0, Ez = 0;
-        for (const auto &cPoint : cGridIterator) {
+        for (int pointC = 0; pointC < numPointsC; ++pointC) {
+            const auto &cPoint = iteratorDataC[pointC];
             const Real &splineC0 = splineStartC0[cPoint.second];
             const Real &splineC1 = splineStartC1[cPoint.second];
-            for (const auto &bPoint : bGridIterator) {
+            for (int pointB = 0; pointB < numPointsB; ++pointB) {
+                const auto &bPoint = iteratorDataB[pointB];
                 const Real &splineB0 = splineStartB0[bPoint.second];
                 const Real &splineB1 = splineStartB1[bPoint.second];
                 const Real *cbRow = potentialGrid + cPoint.first * myDimA_ * myDimB_ + bPoint.first * myDimA_;
-                for (const auto &aPoint : aGridIterator) {
+                for (int pointA = 0; pointA < numPointsA; ++pointA) {
+                    const auto &aPoint = iteratorDataA[pointA];
                     const Real &splineA0 = splineStartA0[aPoint.second];
                     const Real &splineA1 = splineStartA1[aPoint.second];
                     Real gridVal = cbRow[aPoint.first];
