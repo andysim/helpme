@@ -56,6 +56,8 @@ endif()
 # Build options
 #
 include(optionsTools)
+option_with_print(ENABLE_OPENMP "Enables OpenMP parallelization" ON)
+option_with_print(ENABLE_MPI "Enables MPI parallelization" ON)
 option_with_flags(ENABLE_CODE_COVERAGE "Enables details on code coverage" OFF
                   "-ftest-coverage -fprofile-arcs -fPIC -O0 -g")
 option_with_flags(ENABLE_BOUNDS_CHECK "Enables bounds check in Fortran" OFF
@@ -82,14 +84,39 @@ add_definitions("-DFC_SYMBOL=${FC_SYMBOL}")
 # FFTW
 find_package(FFTW REQUIRED)
 
+# OpenMP
+if(ENABLE_OPENMP)
+    find_package(OpenMP)
+endif()
+
+if(OPENMP_FOUND)
+    add_definitions(-DHAVE_OPENMP)
+    if(DEFINED CMAKE_C_COMPILER_ID)
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+    endif()
+    if(DEFINED CMAKE_CXX_COMPILER_ID)
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+    endif()
+    if(DEFINED CMAKE_Fortran_COMPILER_ID)
+        set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} ${OpenMP_Fortran_FLAGS}")
+    endif()
+endif()
+
 # MPI
-find_package(MPI)
+if(ENABLE_MPI)
+    find_package(MPI)
+endif()
+
 if(MPI_CXX_FOUND)
     message(STATUS "${Cyan}Found MPI: ${MPI_INCLUDE_PATH}${ColourReset}")
     set(HAVE_MPI TRUE)
     add_definitions("-DHAVE_MPI=1")
 else()
-    message(STATUS "${Red}MPI not found${ColourReset}")
+    if(ENABLE_MPI)
+        message(STATUS "${Red}MPI not found${ColourReset}")
+    else()
+        message(STATUS "${Red}MPI not searched for${ColourReset}")
+    endif()
 endif()
 
 # Find Python

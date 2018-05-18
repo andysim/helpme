@@ -66,7 +66,7 @@ TEST_CASE("test the gamma function and incomplete gamma function.") {
         REQUIRE(helpme::incompleteGammaComputer<double, 0>::compute(-10.0) == Approx(-2492.23).margin(TOL));
         REQUIRE(helpme::incompleteGammaComputer<double, 0>::compute(-60.0) == Approx(-1.93618e24).margin(TOL));
 
-        std::tuple<double, double> pair;
+        std::pair<double, double> pair;
         pair = helpme::incompleteGammaVirialComputer<double, -4>::compute(3.0);
         REQUIRE(std::get<0>(pair) == Approx(9.922940618e-4).margin(TOL));
         REQUIRE(std::get<1>(pair) == Approx(3.547308362e-3).margin(TOL));
@@ -148,7 +148,7 @@ TEST_CASE("test the gamma function and incomplete gamma function.") {
         REQUIRE(helpme::incompleteGammaComputer<float, 0>::compute(-10.0) == Approx(-2492.23f).margin(TOL));
         REQUIRE(helpme::incompleteGammaComputer<float, 0>::compute(-60.0) == Approx(-1.93618e24f).margin(TOL));
 
-        std::tuple<float, float> pair;
+        std::pair<float, float> pair;
         pair = helpme::incompleteGammaVirialComputer<float, -4>::compute(3.0);
         REQUIRE(std::get<0>(pair) == Approx(9.922940618e-4f).margin(TOL));
         REQUIRE(std::get<1>(pair) == Approx(3.547308362e-3f).margin(TOL));
