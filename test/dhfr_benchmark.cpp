@@ -28,7 +28,7 @@ int main(int argc, char *argv[]) {
     auto startTime = std::chrono::system_clock::now();
     if (useFloat) {
         auto pme = std::unique_ptr<PMEInstanceF>(new PMEInstanceF());
-        pme->setup(rPower, kappa, splineOrder, gridX, gridY, gridZ, scaleFactor, 1);
+        pme->setup(rPower, kappa, splineOrder, gridX, gridY, gridZ, scaleFactor, 0);
         pme->setLatticeVectors(62.23f, 62.23f, 62.23f, 90.0f, 90.0f, 90.0f, PMEInstanceF::LatticeType::XAligned);
         helpme::Matrix<float> coordsF = coordsD.cast<float>();
         helpme::Matrix<float> paramsF = paramsD.cast<float>();
@@ -37,7 +37,7 @@ int main(int argc, char *argv[]) {
         for (int n = 0; n < nCalcs; ++n) pme->computeEFVRec(0, paramsF, coordsF, forces, virial);
     } else {
         auto pme = std::unique_ptr<PMEInstanceD>(new PMEInstanceD());
-        pme->setup(rPower, kappa, splineOrder, gridX, gridY, gridZ, scaleFactor, 1);
+        pme->setup(rPower, kappa, splineOrder, gridX, gridY, gridZ, scaleFactor, 0);
         pme->setLatticeVectors(62.23, 62.23, 62.23, 90, 90, 90, PMEInstanceD::LatticeType::XAligned);
         helpme::Matrix<double> forces(coordsD.nRows(), coordsD.nCols());
         helpme::Matrix<double> virial(6, 1);

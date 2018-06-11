@@ -54,7 +54,7 @@ add_executable (DHFRBenchmark dhfr_benchmark.cpp)
 configure_file(data/dhfr_charges.txt . COPYONLY)
 configure_file(data/dhfr_c6s.txt . COPYONLY)
 configure_file(data/dhfr_coords.txt . COPYONLY)
-target_compile_options(DHFRBenchmark  PRIVATE -g -pg)
+#target_compile_options(DHFRBenchmark  PRIVATE -g)
 
 # CXX example
 add_executable (RunCXXWrapper fullexample.cpp)

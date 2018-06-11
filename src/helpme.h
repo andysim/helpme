@@ -21,8 +21,12 @@
 #include <functional>
 #include <iostream>
 #include <memory>
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 #include <string>
 #include <tuple>
+#include <unistd.h>
 #include <vector>
 
 #include "fftw_wrapper.h"
@@ -142,13 +146,13 @@ class PMEInstance {
     /// The (inverse) bspline moduli to normalize the spreading / probing steps; these are folded into the convolution.
     RealVec splineModA_, splineModB_, splineModC_;
     /// A function pointer to call the approprate function to implement convolution, templated to the rPower value.
-    std::function<Real(int, int, int, int, int, int, int, Real, Complex *, const RealMat &, Real, Real, const RealVec &,
-                       const RealVec &, const RealVec &)>
+    std::function<Real(int, int, int, int, int, int, int, Real, Complex *, const RealMat &, Real, Real, const Real *,
+                       const Real *, const Real *, int)>
         convolveEFxn_;
     /// A function pointer to call the approprate function to implement convolution with virial, templated to
     /// the rPower value.
-    std::function<Real(int, int, int, int, int, int, int, Real, Complex *, const RealMat &, Real, Real, const RealVec &,
-                       const RealVec &, const RealVec &, RealMat &)>
+    std::function<Real(int, int, int, int, int, int, int, Real, Complex *, const RealMat &, Real, Real, const Real *,
+                       const Real *, const Real *, RealMat &, int)>
         convolveEVFxn_;
     /// A function pointer to call the approprate function to compute self energy, templated to the rPower value.
     std::function<Real(int, const RealMat &, Real, Real)> slfEFxn_;
@@ -181,6 +185,8 @@ class PMEInstance {
     int myDimA_, myDimB_, myDimC_;
     /// The subsets of a given dimension to be processed when doing a transform along another dimension.
     int subsetOfCAlongA_, subsetOfCAlongB_, subsetOfBAlongC_;
+    /// The size of a cache line, in units of the size of the Real type, to allow better memory allocation policies.
+    Real cacheLineSizeInReals_;
     /// Communication buffers for MPI parallelism.
     helpme::vector<Complex> workSpace1_, workSpace2_;
     /// FFTW wrappers to help with transformations in the {A,B,C} dimensions.
@@ -317,7 +323,7 @@ class PMEInstance {
     /*!
      * \brief Spreads parameters onto the grid for a single atom
      * \param atom the absolute atom number.
-     * \param reallGrid pointer to the array containing the grid in CBA order
+     * \param realGrid pointer to the array containing the grid in CBA order
      * \param nComponents the number of angular momentum components in the parameters.
      * \param nForceComponents the number of angular momentum components in the parameters with one extra
      *        level of angular momentum to permit evaluation of forces.
@@ -346,6 +352,9 @@ class PMEInstance {
         int numPointsA = static_cast<int>(aGridIterator.size());
         int numPointsB = static_cast<int>(bGridIterator.size());
         int numPointsC = static_cast<int>(cGridIterator.size());
+        const auto *iteratorDataA = aGridIterator.data();
+        const auto *iteratorDataB = bGridIterator.data();
+        const auto *iteratorDataC = cGridIterator.data();
         for (int component = 0; component < nComponents; ++component) {
             const auto &quanta = angMomIterator_[component];
             Real param = parameters(atom, component);
@@ -353,14 +362,14 @@ class PMEInstance {
             const Real *splineValsB = splineB[quanta[1]];
             const Real *splineValsC = splineC[quanta[2]];
             for (int pointC = 0; pointC < numPointsC; ++pointC) {
-                const auto &cPoint = cGridIterator[pointC];
+                const auto &cPoint = iteratorDataC[pointC];
                 Real cValP = param * splineValsC[cPoint.second];
                 for (int pointB = 0; pointB < numPointsB; ++pointB) {
-                    const auto &bPoint = bGridIterator[pointB];
+                    const auto &bPoint = iteratorDataB[pointB];
                     Real cbValP = cValP * splineValsB[bPoint.second];
                     Real *cbRow = realGrid + cPoint.first * myDimB_ * myDimA_ + bPoint.first * myDimA_;
                     for (int pointA = 0; pointA < numPointsA; ++pointA) {
-                        const auto &aPoint = aGridIterator[pointA];
+                        const auto &aPoint = iteratorDataA[pointA];
                         cbRow[aPoint.first] += cbValP * splineValsA[aPoint.second];
                     }
                 }
@@ -410,10 +419,10 @@ class PMEInstance {
                     const auto &aPoint = iteratorDataA[pointA];
                     const Real &splineA0 = splineStartA0[aPoint.second];
                     const Real &splineA1 = splineStartA1[aPoint.second];
-                    Real gridVal = cbRow[aPoint.first];
-                    Ex += gridVal * splineA1 * splineB0 * splineC0;
+                    const Real &gridVal = cbRow[aPoint.first];
                     Ey += gridVal * splineA0 * splineB1 * splineC0;
                     Ez += gridVal * splineA0 * splineB0 * splineC1;
+                    Ex += gridVal * splineA1 * splineB0 * splineC0;
                 }
             }
         }
@@ -433,7 +442,7 @@ class PMEInstance {
      * \param splineA the BSpline object for the A direction.
      * \param splineB the BSpline object for the B direction.
      * \param splineC the BSpline object for the C direction.
-     * \param fractionalPhis a scratch matrix of length nForceComponents, to store the fractional potential.
+     * \param phiPtr a scratch array of length nForceComponents, to store the fractional potential.
      * \param parameters the list of parameters associated with each atom (charges, C6 coefficients, multipoles,
      * etc...). For a parameter with angular momentum L, a matrix of dimension nAtoms x nL is expected, where nL =
      * (L+1)*(L+2)*(L+3)/6 and the fast running index nL has the ordering
@@ -450,16 +459,15 @@ class PMEInstance {
      * \param forces a Nx3 matrix of the forces, ordered in memory as {Fx1,Fy1,Fz1,Fx2,Fy2,Fz2,....FxN,FyN,FzN}.
      */
     void probeGridImpl(const int &atom, const Real *potentialGrid, const int &nComponents, const int &nForceComponents,
-                       const Spline &splineA, const Spline &splineB, const Spline &splineC, RealMat &fractionalPhis,
+                       const Spline &splineA, const Spline &splineB, const Spline &splineC, Real *phiPtr,
                        const RealMat &parameters, Real *forces) {
-        fractionalPhis.setZero();
+        std::fill(phiPtr, phiPtr + nForceComponents, 0);
         const auto &aGridIterator = gridIteratorA_[splineA.startingGridPoint()];
         const auto &bGridIterator = gridIteratorB_[splineB.startingGridPoint()];
         const auto &cGridIterator = gridIteratorC_[splineC.startingGridPoint()];
         const Real *splineStartA = splineA[0];
         const Real *splineStartB = splineB[0];
         const Real *splineStartC = splineC[0];
-        Real *phiPtr = fractionalPhis[0];
         for (const auto &cPoint : cGridIterator) {
             for (const auto &bPoint : bGridIterator) {
                 const Real *cbRow = potentialGrid + cPoint.first * myDimA_ * myDimB_ + bPoint.first * myDimA_;
@@ -582,12 +590,13 @@ class PMEInstance {
      * \param xMods the Fourier space norms of the x B-Splines.
      * \param yMods the Fourier space norms of the y B-Splines.
      * \param zMods the Fourier space norms of the z B-Splines.
+     * \param nThreads the number of OpenMP threads to use.
      * \return the reciprocal space energy.
      */
     template <int rPower>
     static Real convolveEImpl(int nx, int ny, int nz, int myNx, int myNy, int startX, int startY, Real scaleFactor,
-                              Complex *gridPtr, const RealMat &boxInv, Real volume, Real kappa, const RealVec &xMods,
-                              const RealVec &yMods, const RealVec &zMods) {
+                              Complex *gridPtr, const RealMat &boxInv, Real volume, Real kappa, const Real *xMods,
+                              const Real *yMods, const Real *zMods, int nThreads) {
         Real energy = 0;
 
         bool nodeZero = startX == 0 && startY == 0;
@@ -612,34 +621,35 @@ class PMEInstance {
         int halfNx = nx / 2 + 1;
         size_t nxz = myNx * nz;
         const Real *boxPtr = boxInv[0];
-        for (int ky = 0; ky < myNy; ++ky) {
-            // Exclude m=0 cell.
-            size_t start = ky == 0 && nodeZero ? 1 : 0;
-            Complex *yPtr = gridPtr + ky * myNx * nz;
+        size_t nyxz = myNy * nxz;
+        // Exclude m=0 cell.
+        int start = (nodeZero ? 1 : 0);
+        // Writing the three nested loops in one allows for better load balancing in parallel.
+#pragma omp parallel for reduction(+ : energy) num_threads(nThreads)
+        for (size_t yxz = start; yxz < nyxz; ++yxz) {
+            size_t xz = yxz % nxz;
+            short ky = yxz / nxz;
+            short kx = xz / nz;
+            short kz = xz % nz;
+            // We only loop over the first nx/2+1 x values; this
+            // accounts for the "missing" complex conjugate values.
+            Real permPrefac = kx + startX != 0 && kx + startX != halfNx - 1 ? 2 : 1;
+            Real mx = (Real)xMVals[kx];
             Real my = (Real)yMVals[ky];
-            Real yMod = yMods[ky + startY];
-            for (size_t xz = start; xz < nxz; ++xz) {
-                int kx = xz / nz;
-                int kz = xz % nz;
-                // We only loop over the first nx/2+1 x values; this accounts for the "missing" complex conjugate
-                // values.
-                Real permPrefac = kx + startX != 0 && kx + startX != halfNx - 1 ? 2 : 1;
-                Real mx = (Real)xMVals[kx];
-                Real mz = (Real)zMVals[kz];
-                Real mVecX = boxPtr[0] * mx + boxPtr[1] * my + boxPtr[2] * mz;
-                Real mVecY = boxPtr[3] * mx + boxPtr[4] * my + boxPtr[5] * mz;
-                Real mVecZ = boxPtr[6] * mx + boxPtr[7] * my + boxPtr[8] * mz;
-                Real mNormSq = mVecX * mVecX + mVecY * mVecY + mVecZ * mVecZ;
-                Real mTerm = raiseNormToIntegerPower<Real, rPower - 3>::compute(mNormSq);
-                Real bSquared = bPrefac * mNormSq;
-                Real incompleteGammaTerm = incompleteGammaComputer<Real, 3 - rPower>::compute(bSquared);
-                Complex &gridVal = yPtr[kx * nz + kz];
-                Real structFacNorm = std::norm(gridVal);
-                Real influenceFunction =
-                    volPrefac * incompleteGammaTerm * mTerm * yMod * xMods[kx + startX] * zMods[kz];
-                gridVal *= influenceFunction;
-                energy += permPrefac * influenceFunction * structFacNorm;
-            }
+            Real mz = (Real)zMVals[kz];
+            Real mVecX = boxPtr[0] * mx + boxPtr[1] * my + boxPtr[2] * mz;
+            Real mVecY = boxPtr[3] * mx + boxPtr[4] * my + boxPtr[5] * mz;
+            Real mVecZ = boxPtr[6] * mx + boxPtr[7] * my + boxPtr[8] * mz;
+            Real mNormSq = mVecX * mVecX + mVecY * mVecY + mVecZ * mVecZ;
+            Real mTerm = raiseNormToIntegerPower<Real, rPower - 3>::compute(mNormSq);
+            Real bSquared = bPrefac * mNormSq;
+            Real incompleteGammaTerm = incompleteGammaComputer<Real, 3 - rPower>::compute(bSquared);
+            Complex &gridVal = gridPtr[ky * nxz + kx * nz + kz];
+            Real structFacNorm = std::norm(gridVal);
+            Real influenceFunction =
+                volPrefac * incompleteGammaTerm * mTerm * yMods[ky + startY] * xMods[kx + startX] * zMods[kz];
+            gridVal *= influenceFunction;
+            energy += permPrefac * influenceFunction * structFacNorm;
         }
         energy /= 2;
 
@@ -667,12 +677,13 @@ class PMEInstance {
      * \param zMods the Fourier space norms of the z B-Splines.
      * \param virial a vector of length 6 containing the unique virial elements, in the order XX XY YY XZ YZ ZZ.
      *        This vector is incremented, not assigned.
+     * \param nThreads the number of OpenMP threads to use.
      * \return the reciprocal space energy.
      */
     template <int rPower>
     static Real convolveEVImpl(int nx, int ny, int nz, int myNx, int myNy, int startX, int startY, Real scaleFactor,
-                               Complex *gridPtr, const RealMat &boxInv, Real volume, Real kappa, const RealVec &xMods,
-                               const RealVec &yMods, const RealVec &zMods, RealMat &virial) {
+                               Complex *gridPtr, const RealMat &boxInv, Real volume, Real kappa, const Real *xMods,
+                               const Real *yMods, const Real *zMods, RealMat &virial, int nThreads) {
         Real energy = 0;
 
         bool nodeZero = startX == 0 && startY == 0;
@@ -686,7 +697,7 @@ class PMEInstance {
         // Ensure the m=0 term convolution product is zeroed for the backtransform; it's been accounted for above.
         if (nodeZero) gridPtr[0] = Complex(0, 0);
 
-        std::vector<short> xMVals(myNx), yMVals(myNy), zMVals(nz);
+        std::vector<Real> xMVals(myNx), yMVals(myNy), zMVals(nz);
         // Iterators to conveniently map {X,Y,Z} grid location to m_{X,Y,Z} value, where -1/2 << m/dim < 1/2.
         for (int kx = 0; kx < myNx; ++kx) xMVals[kx] = startX + (kx + startX >= (nx + 1) / 2 ? kx - nx : kx);
         for (int ky = 0; ky < myNy; ++ky) yMVals[ky] = startY + (ky + startY >= (ny + 1) / 2 ? ky - ny : ky);
@@ -698,45 +709,50 @@ class PMEInstance {
         size_t nxz = myNx * nz;
         Real Vxx = 0, Vxy = 0, Vyy = 0, Vxz = 0, Vyz = 0, Vzz = 0;
         const Real *boxPtr = boxInv[0];
-        for (int ky = 0; ky < myNy; ++ky) {
-            // Exclude m=0 cell.
-            size_t start = ky == 0 && nodeZero ? 1 : 0;
-            Complex *yPtr = gridPtr + ky * myNx * nz;
-            Real my = (Real)yMVals[ky];
-            Real yMod = yMods[ky + startY];
-            for (size_t xz = start; xz < nxz; ++xz) {
-                int kx = xz / nz;
-                int kz = xz % nz;
-                // We only loop over the first nx/2+1 x values; this accounts for the "missing" complex conjugate
-                // values.
-                Real permPrefac = kx + startX != 0 && kx + startX != halfNx - 1 ? 2 : 1;
-                Real mx = (Real)xMVals[kx];
-                Real mz = (Real)zMVals[kz];
-                Real mVecX = boxPtr[0] * mx + boxPtr[1] * my + boxPtr[2] * mz;
-                Real mVecY = boxPtr[3] * mx + boxPtr[4] * my + boxPtr[5] * mz;
-                Real mVecZ = boxPtr[6] * mx + boxPtr[7] * my + boxPtr[8] * mz;
-                Real mNormSq = mVecX * mVecX + mVecY * mVecY + mVecZ * mVecZ;
-                Real mTerm = raiseNormToIntegerPower<Real, rPower - 3>::compute(mNormSq);
-                Real bSquared = bPrefac * mNormSq;
-                auto gammas = incompleteGammaVirialComputer<Real, 3 - rPower>::compute(bSquared);
-                Real eGamma = std::get<0>(gammas);
-                Real vGamma = std::get<1>(gammas);
-                Complex &gridVal = yPtr[kx * nz + kz];
-                Real structFacNorm = std::norm(gridVal);
-                Real totalPrefac = volPrefac * mTerm * yMod * xMods[kx + startX] * zMods[kz];
-                Real influenceFunction = totalPrefac * eGamma;
-                gridVal *= influenceFunction;
-                Real eTerm = permPrefac * influenceFunction * structFacNorm;
-                Real vTerm = permPrefac * vGamma * totalPrefac / mNormSq * structFacNorm;
-                energy += eTerm;
-                Vxx += vTerm * mVecX * mVecX;
-                Vxy += vTerm * mVecX * mVecY;
-                Vyy += vTerm * mVecY * mVecY;
-                Vxz += vTerm * mVecX * mVecZ;
-                Vyz += vTerm * mVecY * mVecZ;
-                Vzz += vTerm * mVecZ * mVecZ;
-            }
+        const Real *xMPtr = xMVals.data();
+        const Real *yMPtr = yMVals.data();
+        const Real *zMPtr = zMVals.data();
+        size_t nyxz = myNy * nxz;
+        // Exclude m=0 cell.
+        int start = (nodeZero ? 1 : 0);
+        // Writing the three nested loops in one allows for better load balancing in parallel.
+#pragma omp parallel for reduction(+ : energy, Vxx, Vxy, Vyy, Vxz, Vyz, Vzz) num_threads(nThreads)
+        for (size_t yxz = start; yxz < nyxz; ++yxz) {
+            size_t xz = yxz % nxz;
+            short ky = yxz / nxz;
+            short kx = xz / nz;
+            short kz = xz % nz;
+            // We only loop over the first nx/2+1 x values; this
+            // accounts for the "missing" complex conjugate values.
+            Real permPrefac = kx + startX != 0 && kx + startX != halfNx - 1 ? 2 : 1;
+            const Real &mx = xMPtr[kx];
+            const Real &my = yMPtr[ky];
+            const Real &mz = zMPtr[kz];
+            Real mVecX = boxPtr[0] * mx + boxPtr[1] * my + boxPtr[2] * mz;
+            Real mVecY = boxPtr[3] * mx + boxPtr[4] * my + boxPtr[5] * mz;
+            Real mVecZ = boxPtr[6] * mx + boxPtr[7] * my + boxPtr[8] * mz;
+            Real mNormSq = mVecX * mVecX + mVecY * mVecY + mVecZ * mVecZ;
+            Real mTerm = raiseNormToIntegerPower<Real, rPower - 3>::compute(mNormSq);
+            Real bSquared = bPrefac * mNormSq;
+            auto gammas = incompleteGammaVirialComputer<Real, 3 - rPower>::compute(bSquared);
+            Real eGamma = std::get<0>(gammas);
+            Real vGamma = std::get<1>(gammas);
+            Complex &gridVal = gridPtr[ky * nxz + kx * nz + kz];
+            Real structFacNorm = std::norm(gridVal);
+            Real totalPrefac = volPrefac * mTerm * yMods[ky + startY] * xMods[kx + startX] * zMods[kz];
+            Real influenceFunction = totalPrefac * eGamma;
+            gridVal *= influenceFunction;
+            Real eTerm = permPrefac * influenceFunction * structFacNorm;
+            Real vTerm = permPrefac * vGamma * totalPrefac / mNormSq * structFacNorm;
+            energy += eTerm;
+            Vxx += vTerm * mVecX * mVecX;
+            Vxy += vTerm * mVecX * mVecY;
+            Vyy += vTerm * mVecY * mVecY;
+            Vxz += vTerm * mVecX * mVecZ;
+            Vyz += vTerm * mVecY * mVecZ;
+            Vzz += vTerm * mVecZ * mVecZ;
         }
+
         energy /= 2;
 
         virial[0][0] -= Vxx - energy;
@@ -874,9 +890,14 @@ class PMEInstance {
             complexDimA_ = dimA / 2 + 1;
             myComplexDimA_ = myDimA_ / 2 + 1;
             splineOrder_ = splineOrder;
-            nThreads_ = nThreads;
+#ifdef _OPENMP
+            nThreads_ = nThreads ? nThreads : omp_get_max_threads();
+#else
+            nThreads_ = 1;
+#endif
             scaleFactor_ = scaleFactor;
             kappa_ = kappa;
+            cacheLineSizeInReals_ = static_cast<Real>(sysconf(_SC_PAGESIZE) / sizeof(Real));
 
             // Helpers to perform 1D FFTs along each dimension.
             fftHelperA_ = FFTWWrapper<Real>(dimA_);
@@ -1043,7 +1064,7 @@ class PMEInstance {
         // and
         // numNodesA (dimA-1)/2 + numNodesA = complexDimA + numNodesA/2-1 if dimA is odd
         // We just allocate the larger size here, remembering that the final padding values on the last node
-        // will all be alllocated to zero and will not contribute to the final answer.
+        // will all be allocated to zero and will not contribute to the final answer.
         helpme::vector<Complex> buffer(complexDimA_ + numNodesA_ - 1);
 
         // A transform, with instant sort to CAB ordering for each local block
@@ -1120,6 +1141,7 @@ class PMEInstance {
                 }
             }
         }
+
 #if HAVE_MPI == 1
         if (numNodesC_ > 1) {
             // Communicate C along columns
@@ -1297,7 +1319,7 @@ class PMEInstance {
     Real convolveE(Complex *transformedGrid) {
         return convolveEFxn_(dimA_, dimB_, dimC_, myComplexDimA_, myDimB_ / numNodesC_, rankA_ * myComplexDimA_,
                              rankB_ * myDimB_ + rankC_ * myDimB_ / numNodesC_, scaleFactor_, transformedGrid, recVecs_,
-                             cellVolume(), kappa_, splineModA_, splineModB_, splineModC_);
+                             cellVolume(), kappa_, &splineModA_[0], &splineModB_[0], &splineModC_[0], nThreads_);
     }
 
     /*!
@@ -1310,7 +1332,8 @@ class PMEInstance {
     Real convolveEV(Complex *transformedGrid, RealMat &virial) {
         return convolveEVFxn_(dimA_, dimB_, dimC_, myComplexDimA_, myDimB_ / numNodesC_, rankA_ * myComplexDimA_,
                               rankB_ * myDimB_ + rankC_ * myDimB_ / numNodesC_, scaleFactor_, transformedGrid, recVecs_,
-                              cellVolume(), kappa_, splineModA_, splineModB_, splineModC_, virial);
+                              cellVolume(), kappa_, &splineModA_[0], &splineModB_[0], &splineModC_[0], virial,
+                              nThreads_);
     }
 
     /*!
@@ -1423,14 +1446,12 @@ class PMEInstance {
         RealMat fractionalPhis(1, nForceComponents);
         size_t nAtoms = parameters.nRows();
         for (size_t atom = 0; atom < nAtoms; ++atom) {
-            fractionalPhis.setZero();
-
             auto bSplines = makeBSplines(coordinates[atom], parameterAngMom + 1);
             auto splineA = std::get<0>(bSplines);
             auto splineB = std::get<1>(bSplines);
             auto splineC = std::get<2>(bSplines);
-            probeGridImpl(atom, potentialGrid, nComponents, nForceComponents, splineA, splineB, splineC, fractionalPhis,
-                          parameters, forces[atom]);
+            probeGridImpl(atom, potentialGrid, nComponents, nForceComponents, splineA, splineB, splineC,
+                          fractionalPhis[0], parameters, forces[atom]);
         }
     }
 
@@ -1463,18 +1484,27 @@ class PMEInstance {
         int nComponents = nCartesian(parameterAngMom);
         int nForceComponents = nCartesian(parameterAngMom + 1);
         const Real *paramPtr = parameters[0];
-        RealMat fractionalPhis(1, nForceComponents);
+        // Find how many multiples of the cache line size are needed
+        // to ensure that each thread hits a unique page.
+        size_t rowSize = std::ceil(nForceComponents / cacheLineSizeInReals_) * cacheLineSizeInReals_;
+        RealMat fractionalPhis(nThreads_, rowSize);
         size_t nAtoms = atomList_.size();
+#pragma omp parallel for num_threads(nThreads_)
         for (size_t relativeAtomNumber = 0; relativeAtomNumber < nAtoms; ++relativeAtomNumber) {
             const auto &entry = splineCache_[relativeAtomNumber];
-            fractionalPhis.setZero();
             const int &atom = entry.absoluteAtomNumber;
             const auto &splineA = entry.aSpline;
             const auto &splineB = entry.bSpline;
             const auto &splineC = entry.cSpline;
             if (parameterAngMom) {
-                probeGridImpl(atom, potentialGrid, nComponents, nForceComponents, splineA, splineB, splineC,
-                              fractionalPhis, parameters, forces[atom]);
+#ifdef _OPENMP
+                int threadID = omp_get_thread_num();
+#else
+                int threadID = 1;
+#endif
+                Real *myScratch = fractionalPhis[threadID % nThreads_];
+                probeGridImpl(atom, potentialGrid, nComponents, nForceComponents, splineA, splineB, splineC, myScratch,
+                              parameters, forces[atom]);
             } else {
                 probeGridImpl(potentialGrid, splineA, splineB, splineC, paramPtr[atom], forces[atom]);
             }

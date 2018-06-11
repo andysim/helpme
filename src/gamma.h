@@ -11,7 +11,6 @@
 
 #include <cmath>
 #include <limits>
-#include <tuple>
 
 /*!
  * \file gamma.h
@@ -280,13 +279,13 @@ struct gammaRecursion<Real, 1, false> {
 /// Specific value of the Gamma function.
 template <typename Real>
 struct gammaRecursion<Real, 2, true> {
-    static constexpr Real value = 1.0;
+    static constexpr Real value = 1;
 };
 
 /// Specific value of the Gamma function.
 template <typename Real>
 struct gammaRecursion<Real, 2, false> {
-    static constexpr Real value = 1.0;
+    static constexpr Real value = 1;
 };
 
 /*!
@@ -313,9 +312,9 @@ struct incompleteGammaComputer {
  */
 template <typename Real, int twoS, bool isPositive>
 struct incompleteVirialGammaRecursion {
-    static std::tuple<Real, Real> compute(Real x) {
+    static std::pair<Real, Real> compute(Real x) {
         Real gamma = incompleteGammaComputer<Real, twoS>::compute(x);
-        return std::make_tuple(gamma, (0.5f * twoS) * gamma + pow(x, (0.5f * twoS)) * exp(-x));
+        return {gamma, (0.5f * twoS) * gamma + pow(x, (0.5f * twoS)) * exp(-x)};
     }
 };
 
@@ -326,9 +325,9 @@ struct incompleteVirialGammaRecursion {
  */
 template <typename Real, int twoS>
 struct incompleteVirialGammaRecursion<Real, twoS, false> {
-    static std::tuple<Real, Real> compute(Real x) {
+    static std::pair<Real, Real> compute(Real x) {
         Real gamma = incompleteGammaComputer<Real, twoS + 2>::compute(x);
-        return std::make_tuple((gamma - pow(x, 0.5f * twoS) * exp(-x)) / (0.5f * twoS), gamma);
+        return {(gamma - pow(x, 0.5f * twoS) * exp(-x)) / (0.5f * twoS), gamma};
     }
 };
 
@@ -347,7 +346,7 @@ struct incompleteGammaVirialComputer {
      * \param x value required.
      * \return \f$\Gamma[\frac{\mathrm{twoS}}{2}, x]\f$ and \f$\Gamma[\frac{\mathrm{twoS+2}}{2}, x]\f$.
      */
-    static std::tuple<Real, Real> compute(Real x) {
+    static std::pair<Real, Real> compute(Real x) {
         return incompleteVirialGammaRecursion<Real, twoS, (twoS >= 0)>::compute(x);
     }
 };
