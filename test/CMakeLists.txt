@@ -2,16 +2,19 @@ add_subdirectory(unittests)
 
 # Add any new sources here
 set(SOURCES_HELPME
+    cartesiantransform.h
     fftw_wrapper.h
     gamma.h
-    lapack_wrapper.h
+    gridsize.h
     helpme.h
+    lapack_wrapper.h
     matrix.h
     memory.h
+    mpi_wrapper.h
     powers.h
     splines.h
+    string_utils.h
 )
-
 
 foreach(SOURCE_FILE ${SOURCES_HELPME})
     list (APPEND HELPME_INPUT_SOURCES "${PROJECT_SOURCE_DIR}/src/${SOURCE_FILE}")

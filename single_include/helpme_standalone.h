@@ -2484,7 +2484,7 @@ class PMEInstance {
         size_t nyxz = myNy * nxz;
         // Exclude m=0 cell.
         int start = (nodeZero ? 1 : 0);
-        // Writing the three nested loops in one allows for better load balancing in parallel.
+// Writing the three nested loops in one allows for better load balancing in parallel.
 #pragma omp parallel for reduction(+ : energy) num_threads(nThreads)
         for (size_t yxz = start; yxz < nyxz; ++yxz) {
             size_t xz = yxz % nxz;
@@ -2575,7 +2575,7 @@ class PMEInstance {
         size_t nyxz = myNy * nxz;
         // Exclude m=0 cell.
         int start = (nodeZero ? 1 : 0);
-        // Writing the three nested loops in one allows for better load balancing in parallel.
+// Writing the three nested loops in one allows for better load balancing in parallel.
 #pragma omp parallel for reduction(+ : energy, Vxx, Vxy, Vyy, Vxz, Vyz, Vzz) num_threads(nThreads)
         for (size_t yxz = start; yxz < nyxz; ++yxz) {
             size_t xz = yxz % nxz;
