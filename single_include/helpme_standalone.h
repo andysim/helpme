@@ -1958,6 +1958,21 @@ class BSpline {
         dArray[n - 1] = array[n - 2];
     }
 
+    /*!
+     * \brief assertSplineIsSufficient ensures that the spline is large enough to be differentiable.
+     *        An mth order B-Spline is differentiable m-2 times.
+     */
+    void assertSplineIsSufficient(int splineOrder, int derivativeLevel) const {
+        if (splineOrder - derivativeLevel < 2) {
+            std::string msg(
+                "The spline order used is not sufficient for the derivative level requested."
+                "Set the spline order to at least ");
+            msg += std::to_string(derivativeLevel + 2);
+            msg += " to run this calculation.";
+            throw std::runtime_error(msg);
+        }
+    }
+
    public:
     /// The B-splines and their derivatives.  See update() for argument details.
     BSpline(short start, Real value, short order, short derivativeLevel) : splines_(derivativeLevel + 1, order) {
@@ -1972,6 +1987,7 @@ class BSpline {
      * \param derivativeLevel the maximum level of derivative needed for this BSpline.
      */
     void update(short start, Real value, short order, short derivativeLevel) {
+        assertSplineIsSufficient(order, derivativeLevel);
         startingGridPoint_ = start;
         order_ = order;
         derivativeLevel_ = derivativeLevel;
@@ -2451,8 +2467,8 @@ class PMEInstance {
      * N.B. Make sure that updateAngMomIterator() has been called first with the appropriate derivative
      * level for the requested potential derivatives.
      */
-    void probeGridImpl(const Real *potentialGrid, const int &nPotentialComponents,
-                       const Spline &splineA, const Spline &splineB, const Spline &splineC, Real *phiPtr) {
+    void probeGridImpl(const Real *potentialGrid, const int &nPotentialComponents, const Spline &splineA,
+                       const Spline &splineB, const Spline &splineC, Real *phiPtr) {
         const auto &aGridIterator = gridIteratorA_[splineA.startingGridPoint()];
         const auto &bGridIterator = gridIteratorB_[splineB.startingGridPoint()];
         const auto &cGridIterator = gridIteratorC_[splineC.startingGridPoint()];
@@ -3888,13 +3904,14 @@ class PMEInstance {
      * \param coordinates the cartesian coordinates, ordered in memory as {x1,y1,z1,x2,y2,z2,....xN,yN,zN}.
      * \param energy pointer to the variable holding the energy; this is incremented, not assigned.
      * \param gridPoints the list of grid points at which the potential is needed; can be the same as the coordinates.
-     * \param derivativeLevel the order of the potential derivatives required; 0 is the potential, 1 is (minus) the field, etc.
-     * \param potential the array holding the potential.  This is a matrix of dimensions nAtoms x nD, where nD is the derivative
-     *        level requested.  See the details fo the parameters argument for information about ordering of derivative components.
-     *        N.B. this array is incremented with the potential, not assigned, so take care
-     *        to zero it first if only the current results are desired.
+     * \param derivativeLevel the order of the potential derivatives required; 0 is the potential, 1 is (minus) the
+     * field, etc. \param potential the array holding the potential.  This is a matrix of dimensions nAtoms x nD, where
+     * nD is the derivative level requested.  See the details fo the parameters argument for information about ordering
+     * of derivative components. N.B. this array is incremented with the potential, not assigned, so take care to
+     * zero it first if only the current results are desired.
      */
-    void computePRec(int parameterAngMom, const RealMat &parameters, const RealMat &coordinates, const RealMat &gridPoints, int derivativeLevel, RealMat &potential) {
+    void computePRec(int parameterAngMom, const RealMat &parameters, const RealMat &coordinates,
+                     const RealMat &gridPoints, int derivativeLevel, RealMat &potential) {
         sanityChecks(parameterAngMom, parameters, coordinates);
         updateAngMomIterator(std::max(parameterAngMom, derivativeLevel));
 

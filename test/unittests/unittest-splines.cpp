@@ -25,6 +25,8 @@ TEST_CASE("make sure B-Splines and their derivatives are created correctly.") {
     helpme::Matrix<double> refMod8(
         {1.0, 1.2280943573293, 2.25, 5.3841505406298, 9.0, 5.3841505406299, 2.25, 1.2280943573293});
 
+    SECTION("check spline differentiability") { REQUIRE_THROWS(helpme::BSpline<double>(1, 0.66, 6, 5)); }
+
     SECTION("double precision tests") {
         auto spline = helpme::BSpline<double>(1, 0.66, order, deriv);
         auto splineData = spline.splineData();

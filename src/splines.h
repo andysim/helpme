@@ -53,6 +53,21 @@ class BSpline {
         dArray[n - 1] = array[n - 2];
     }
 
+    /*!
+     * \brief assertSplineIsSufficient ensures that the spline is large enough to be differentiable.
+     *        An mth order B-Spline is differentiable m-2 times.
+     */
+    void assertSplineIsSufficient(int splineOrder, int derivativeLevel) const {
+        if (splineOrder - derivativeLevel < 2) {
+            std::string msg(
+                "The spline order used is not sufficient for the derivative level requested."
+                "Set the spline order to at least ");
+            msg += std::to_string(derivativeLevel + 2);
+            msg += " to run this calculation.";
+            throw std::runtime_error(msg);
+        }
+    }
+
    public:
     /// The B-splines and their derivatives.  See update() for argument details.
     BSpline(short start, Real value, short order, short derivativeLevel) : splines_(derivativeLevel + 1, order) {
@@ -67,6 +82,7 @@ class BSpline {
      * \param derivativeLevel the maximum level of derivative needed for this BSpline.
      */
     void update(short start, Real value, short order, short derivativeLevel) {
+        assertSplineIsSufficient(order, derivativeLevel);
         startingGridPoint_ = start;
         order_ = order;
         derivativeLevel_ = derivativeLevel;
