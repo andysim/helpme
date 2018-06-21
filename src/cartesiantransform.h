@@ -44,9 +44,6 @@ Matrix<Real> makeCartesianRotationMatrix(int angularMomentum, const Matrix<Real>
     auto factorial = std::vector<int>(2 * angularMomentum + 1);
     factorial[0] = 1;
     for (int l = 1; l <= 2 * angularMomentum; ++l) factorial[l] = l * factorial[l - 1];
-    int doubleFactorial = 1;
-    for (int l = 1; l < 2 * angularMomentum; l += 2) doubleFactorial *= l;
-    Real prefac = (Real)factorial[angularMomentum] / doubleFactorial;
     Matrix<Real> R(nComponents, nComponents);
     for (int nz = 0; nz <= angularMomentum; ++nz) {
         for (int ny = 0; ny <= angularMomentum - nz; ++ny) {
@@ -68,13 +65,10 @@ Matrix<Real> makeCartesianRotationMatrix(int angularMomentum, const Matrix<Real>
                                         Real normx = factorial[mx] / (factorial[px] * factorial[qx] * factorial[rx]);
                                         Real normy = factorial[my] / (factorial[py] * factorial[qy] * factorial[ry]);
                                         Real normz = factorial[mz] / (factorial[pz] * factorial[qz] * factorial[rz]);
-                                        normx = (Real)1 / (factorial[px] * factorial[qx] * factorial[rx]);
-                                        normy = (Real)1 / (factorial[py] * factorial[qy] * factorial[ry]);
-                                        normz = (Real)1 / (factorial[pz] * factorial[qz] * factorial[rz]);
                                         Real Rx = std::pow(R00, px) * std::pow(R10, py) * std::pow(R20, pz);
                                         Real Ry = std::pow(R01, qx) * std::pow(R11, qy) * std::pow(R21, qz);
                                         Real Rz = std::pow(R02, rx) * std::pow(R12, ry) * std::pow(R22, rz);
-                                        Real term = prefac * normx * normy * normz * Rx * Ry * Rz;
+                                        Real term = normx * normy * normz * Rx * Ry * Rz;
                                         R[cartesianAddress(mx, my, mz)][cartesianAddress(nx, ny, nz)] += term;
                                     }
                                 }

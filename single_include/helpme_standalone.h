@@ -38,7 +38,7 @@
 #include <unistd.h>
 #include <vector>
 
-// original file: ../src/fftw_wrapper.h
+// original file: ../src/cartesiantransform.h
 
 // BEGINLICENSE
 //
@@ -48,15 +48,230 @@
 // Author: Andrew C. Simmonett
 //
 // ENDLICENSE
-#ifndef _HELPME_FFTW_WRAPPER_H_
-#define _HELPME_FFTW_WRAPPER_H_
+#ifndef _HELPME_CARTESIANTRANSFORM_H_
+#define _HELPME_CARTESIANTRANSFORM_H_
+
+// original file: ../src/matrix.h
+
+// BEGINLICENSE
+//
+// This file is part of helPME, which is distributed under the BSD 3-clause license,
+// as described in the LICENSE file in the top level directory of this project.
+//
+// Author: Andrew C. Simmonett
+//
+// ENDLICENSE
+#ifndef _HELPME_MATRIX_H_
+#define _HELPME_MATRIX_H_
+
+#include <algorithm>
+#include <complex>
+#include <exception>
+#include <fstream>
+#include <initializer_list>
+#include <iostream>
+#include <iomanip>
+#include <numeric>
+#include <tuple>
+
+// original file: ../src/lapack_wrapper.h
+
+// BEGINLICENSE
+//
+// This file is part of helPME, which is distributed under the BSD 3-clause license,
+// as described in the LICENSE file in the top level directory of this project.
+//
+// Author: Andrew C. Simmonett
+//
+// ENDLICENSE
+#ifndef _HELPME_LAPACK_WRAPPER_H_
+#define _HELPME_LAPACK_WRAPPER_H_
 
 #include <exception>
-#include <iostream>
-#include <limits>
-#include <type_traits>
+#include <functional>
+#include <complex>
 
-#include <fftw3.h>
+#if FC_SYMBOL == 2
+#define F_SGEEV sgeev_
+#define F_SGESV sgesv_
+#define F_DGEEV dgeev_
+#define F_DGESV dgesv_
+#define F_CGEEV cgeev_
+#define F_CGESV cgesv_
+#define F_ZGEEV zgeev_
+#define F_ZGESV zgesv_
+#elif FC_SYMBOL == 1
+#define F_SGEEV sgeev
+#define F_SGESV sgesv
+#define F_DGEEV dgeev
+#define F_DGESV dgesv
+#define F_CGEEV cgeev
+#define F_CGESV cgesv
+#define F_ZGEEV zgeev
+#define F_ZGESV zgesv
+#elif FC_SYMBOL == 3
+#define F_SGEEV SGEEV
+#define F_SGESV SGESV
+#define F_DGEEV DGEEV
+#define F_DGESV DGESV
+#define F_CGEEV CGEEV
+#define F_CGESV CGESV
+#define F_ZGEEV ZGEEV
+#define F_ZGESV ZGESV
+#elif FC_SYMBOL == 4
+#define F_SGEEV SGEEV_
+#define F_SGESV SGESV_
+#define F_DGEEV DGEEV_
+#define F_DGESV DGESV_
+#define F_CGEEV CGEEV_
+#define F_CGESV CGESV_
+#define F_ZGEEV ZGEEV_
+#define F_ZGESV ZGESV_
+#endif
+
+extern "C" {
+extern void F_SGEEV(char *, char *, int *, float *, int *, float *, float *, float *, int *, float *, int *, float *,
+                    int *, int *);
+extern void F_DGEEV(char *, char *, int *, double *, int *, double *, double *, double *, int *, double *, int *,
+                    double *, int *, int *);
+extern void F_CGEEV(char *, char *, int *, std::complex<float> *, int *, std::complex<float> *, std::complex<float> *,
+                    std::complex<float> *, int *, std::complex<float> *, int *, std::complex<float> *, int *, int *);
+extern void F_ZGEEV(char *, char *, int *, std::complex<double> *, int *, std::complex<double> *,
+                    std::complex<double> *, std::complex<double> *, int *, std::complex<double> *, int *,
+                    std::complex<double> *, int *, int *);
+}
+
+namespace helpme {
+
+static void C_SGEEV(char jobvl, char jobvr, int n, float *a, int lda, float *wr, float *wi, float *vl, int ldvl,
+                    float *vr, int ldvr, float *work, int lwork, int *info) {
+    ::F_SGEEV(&jobvl, &jobvr, &n, a, &lda, wr, wi, vl, &ldvl, vr, &ldvr, work, &lwork, info);
+}
+
+static void C_DGEEV(char jobvl, char jobvr, int n, double *a, int lda, double *wr, double *wi, double *vl, int ldvl,
+                    double *vr, int ldvr, double *work, int lwork, int *info) {
+    ::F_DGEEV(&jobvl, &jobvr, &n, a, &lda, wr, wi, vl, &ldvl, vr, &ldvr, work, &lwork, info);
+}
+
+static void C_CGEEV(char jobvl, char jobvr, int n, std::complex<float> *a, int lda, std::complex<float> *wr,
+                    std::complex<float> *wi, std::complex<float> *vl, int ldvl, std::complex<float> *vr, int ldvr,
+                    std::complex<float> *work, int lwork, int *info) {
+    ::F_CGEEV(&jobvl, &jobvr, &n, a, &lda, wr, wi, vl, &ldvl, vr, &ldvr, work, &lwork, info);
+}
+
+static void C_ZGEEV(char jobvl, char jobvr, int n, std::complex<double> *a, int lda, std::complex<double> *wr,
+                    std::complex<double> *wi, std::complex<double> *vl, int ldvl, std::complex<double> *vr, int ldvr,
+                    std::complex<double> *work, int lwork, int *info) {
+    ::F_ZGEEV(&jobvl, &jobvr, &n, a, &lda, wr, wi, vl, &ldvl, vr, &ldvr, work, &lwork, info);
+}
+
+template <typename Real>
+using diagonalizerType =
+    std::function<void(char, char, int, Real *, int, Real *, Real *, Real *, int, Real *, int, Real *, int, int *)>;
+
+template <typename Real>
+class LapackWrapper {
+   public:
+    static diagonalizerType<Real> diagonalizer() {
+        throw std::runtime_error("Diagonalization is not implemented for the requested data type");
+        return diagonalizerType<Real>();
+    }
+};
+
+template <>
+inline diagonalizerType<float> LapackWrapper<float>::diagonalizer() {
+    return &C_SGEEV;
+}
+template <>
+inline diagonalizerType<double> LapackWrapper<double>::diagonalizer() {
+    return &C_DGEEV;
+}
+template <>
+inline diagonalizerType<std::complex<float>> LapackWrapper<std::complex<float>>::diagonalizer() {
+    return &C_CGEEV;
+}
+template <>
+inline diagonalizerType<std::complex<double>> LapackWrapper<std::complex<double>>::diagonalizer() {
+    return &C_ZGEEV;
+}
+
+}  // Namespace helpme
+#endif  // Header guard
+// original file: ../src/string_utils.h
+
+// BEGINLICENSE
+//
+// This file is part of helPME, which is distributed under the BSD 3-clause license,
+// as described in the LICENSE file in the top level directory of this project.
+//
+// Author: Andrew C. Simmonett
+//
+// ENDLICENSE
+#ifndef _HELPME_STRING_UTIL_H_
+#define _HELPME_STRING_UTIL_H_
+
+#include <complex>
+#include <iomanip>
+#include <iostream>
+#include <sstream>
+#include <string>
+
+namespace helpme {
+
+/*!
+ * \brief makes a string representation of a floating point number.
+ * \param width the width used to display the number.
+ * \param precision the precision used to display the number.
+ * \return the string representation of the floating point number.
+ */
+template <typename T, typename std::enable_if<std::is_floating_point<T>::value, int>::type = 0>
+std::string formatNumber(const T &number, int width, int precision) {
+    std::stringstream stream;
+    stream.setf(std::ios::fixed, std::ios::floatfield);
+    stream << std::setw(width) << std::setprecision(precision) << number;
+    return stream.str();
+}
+
+/*!
+ * \brief makes a string representation of a complex number.
+ * \param width the width used to display the real and the imaginary components.
+ * \param precision the precision used to display the real and the imaginary components.
+ * \return the string representation of the complex number.
+ */
+template <typename T, typename std::enable_if<!std::is_floating_point<T>::value, int>::type = 0>
+std::string formatNumber(const T &number, int width, int precision) {
+    std::stringstream stream;
+    stream.setf(std::ios::fixed, std::ios::floatfield);
+    stream << "(" << std::setw(width) << std::setprecision(precision) << number.real() << ", " << std::setw(width)
+           << std::setprecision(precision) << number.imag() << ")";
+    return stream.str();
+}
+
+/*!
+ * \brief makes a string representation of a multdimensional tensor, stored in a flat array.
+ * \param data pointer to the start of the array holding the tensor information.
+ * \param size the length of the array holding the tensor information.
+ * \param rowDim the dimension of the fastest running index.
+ * \param width the width of each individual floating point number.
+ * \param precision used to display each floating point number.
+ * \return the string representation of the tensor.
+ */
+template <typename T>
+std::string stringify(T *data, size_t size, size_t rowDim, int width = 14, int precision = 8) {
+    std::stringstream stream;
+    for (size_t ind = 0; ind < size; ++ind) {
+        stream << formatNumber(data[ind], width, precision);
+        if (ind % rowDim == rowDim - 1)
+            stream << std::endl;
+        else
+            stream << "  ";
+    }
+    return stream.str();
+}
+
+}  // Namespace helpme
+
+#endif  // Header guard
 // original file: ../src/memory.h
 
 // BEGINLICENSE
@@ -147,6 +362,686 @@ using vector = std::vector<Real, FFTWAllocator<Real>>;
 }  // Namespace helpme
 
 #endif  // Header guard
+
+namespace helpme {
+
+/*!
+ * A helper function to transpose a dense matrix in place, gratuitously stolen from
+ * https://stackoverflow.com/questions/9227747/in-place-transposition-of-a-matrix
+ */
+template <class RandomIterator>
+void transposeMemoryInPlace(RandomIterator first, RandomIterator last, int m) {
+    const int mn1 = (last - first - 1);
+    const int n = (last - first) / m;
+    std::vector<bool> visited(last - first);
+    RandomIterator cycle = first;
+    while (++cycle != last) {
+        if (visited[cycle - first]) continue;
+        int a = cycle - first;
+        do {
+            a = a == mn1 ? mn1 : (n * a) % mn1;
+            std::swap(*(first + a), *cycle);
+            visited[a] = true;
+        } while ((first + a) != cycle);
+    }
+}
+
+/*!
+ * \brief The Matrix class is designed to serve as a convenient wrapper to simplify 2D matrix operations.
+ *        It assumes dense matrices with contiguious data and the fast running index being the right
+ *        (column) index.  The underlying memory may have already been allocated elsewhere by C, Fortran
+ *        or Python, and is directly manipulated in place, saving an expensive copy operation.  To provide
+ *        read-only access to such memory address, use a const template type.
+ */
+template <typename Real>
+class Matrix {
+   protected:
+    /// The number of rows in the matrix.
+    size_t nRows_;
+    /// The number of columns in the matrix.
+    size_t nCols_;
+    /// A vector to conveniently allocate data, if we really need to.
+    helpme::vector<Real> allocatedData_;
+    /// Pointer to the raw data, whose allocation may not be controlled by us.
+    Real* data_;
+
+   public:
+    enum class SortOrder { Ascending, Descending };
+
+    inline const Real& operator()(int row, int col) const { return *(data_ + row * nCols_ + col); }
+    inline Real& operator()(int row, int col) { return *(data_ + row * nCols_ + col); }
+    inline const Real* operator[](int row) const { return data_ + row * nCols_; }
+    inline Real* operator[](int row) { return data_ + row * nCols_; }
+
+    Real* begin() const { return data_; }
+    Real* end() const { return data_ + nRows_ * nCols_; }
+    const Real* cbegin() const { return data_; }
+    const Real* cend() const { return data_ + nRows_ * nCols_; }
+
+    /*!
+     * \brief The sliceIterator struct provides a read-only view of a sub-block of a matrix, with arbitrary size.
+     */
+    struct sliceIterator {
+        Real *begin_, *end_, *ptr_;
+        size_t stride_;
+        sliceIterator(Real* start, Real* end, size_t stride) : begin_(start), end_(end), ptr_(start), stride_(stride) {}
+        sliceIterator begin() const { return sliceIterator(begin_, end_, stride_); }
+        sliceIterator end() const { return sliceIterator(end_, end_, 0); }
+        sliceIterator cbegin() const { return sliceIterator(begin_, end_, stride_); }
+        sliceIterator cend() const { return sliceIterator(end_, end_, 0); }
+        bool operator!=(const sliceIterator& other) { return ptr_ != other.ptr_; }
+        sliceIterator operator*=(Real val) {
+            for (auto& element : *this) element *= val;
+            return *this;
+        }
+        sliceIterator operator/=(Real val) {
+            Real invVal = 1 / val;
+            for (auto& element : *this) element *= invVal;
+            return *this;
+        }
+        sliceIterator operator-=(Real val) {
+            for (auto& element : *this) element -= val;
+            return *this;
+        }
+        sliceIterator operator+=(Real val) {
+            for (auto& element : *this) element += val;
+            return *this;
+        }
+        sliceIterator operator++() {
+            ptr_ += stride_;
+            return *this;
+        }
+        const Real& operator[](size_t index) { return *(begin_ + index); }
+        size_t size() const { return std::distance(begin_, end_) / stride_; }
+        void assertSameSize(const sliceIterator& other) const {
+            if (size() != other.size())
+                throw std::runtime_error("Slice operations only supported for slices of the same size.");
+        }
+        void assertContiguous(const sliceIterator& iter) const {
+            if (iter.stride_ != 1)
+                throw std::runtime_error(
+                    "Slice operations called on operation that is only allowed for contiguous data.");
+        }
+        Matrix<Real> operator-(const sliceIterator& other) const {
+            assertSameSize(other);
+            assertContiguous(*this);
+            assertContiguous(other);
+            Matrix ret(1, size());
+            std::transform(begin_, end_, other.begin_, ret[0],
+                           [](const Real& a, const Real& b) -> Real { return a - b; });
+            return ret;
+        }
+        sliceIterator operator-=(const sliceIterator& other) const {
+            assertSameSize(other);
+            assertContiguous(*this);
+            assertContiguous(other);
+            std::transform(begin_, end_, other.begin_, begin_,
+                           [](const Real& a, const Real& b) -> Real { return a - b; });
+            return *this;
+        }
+        sliceIterator operator+=(const sliceIterator& other) const {
+            assertSameSize(other);
+            assertContiguous(*this);
+            assertContiguous(other);
+            std::transform(begin_, end_, other.begin_, begin_,
+                           [](const Real& a, const Real& b) -> Real { return a + b; });
+            return *this;
+        }
+        Real& operator*() { return *ptr_; }
+    };
+
+    /*!
+     * \brief row returns a read-only iterator over a given row.
+     * \param r the row to return.
+     * \return the slice in memory corresponding to the rth row.
+     */
+    sliceIterator row(size_t r) const { return sliceIterator(data_ + r * nCols_, data_ + (r + 1) * nCols_, 1); }
+
+    /*!
+     * \brief col returns a read-only iterator over a given column.
+     * \param c the column to return.
+     * \return the slice in memory corresponding to the cth column.
+     */
+    sliceIterator col(size_t c) const { return sliceIterator(data_ + c, data_ + nRows_ * nCols_ + c, nCols_); }
+
+    /*!
+     * \return the number of rows in this matrix.
+     */
+    size_t nRows() const { return nRows_; }
+
+    /*!
+     * \return the number of columns in this matrix.
+     */
+    size_t nCols() const { return nCols_; }
+
+    /*!
+     * \brief Matrix Constructs an empty matrix.
+     */
+    Matrix() : nRows_(0), nCols_(0) {}
+
+    /*!
+     * \brief Matrix Constructs a new matrix, allocating memory.
+     * \param nRows the number of rows in the matrix.
+     * \param nCols the number of columns in the matrix.
+     */
+    Matrix(size_t nRows, size_t nCols)
+        : nRows_(nRows), nCols_(nCols), allocatedData_(nRows * nCols, 0), data_(allocatedData_.data()) {}
+
+    /*!
+     * \brief Matrix Constructs a new matrix, allocating memory.
+     * \param filename the ASCII file from which to read this matrix
+     */
+    Matrix(const std::string& filename) {
+        Real tmp;
+        std::ifstream inFile(filename);
+
+        if (!inFile) {
+            std::string msg("Unable to open file ");
+            msg += filename;
+            throw std::runtime_error(msg);
+        }
+
+        inFile >> nRows_;
+        inFile >> nCols_;
+        while (inFile >> tmp) allocatedData_.push_back(tmp);
+        inFile.close();
+        if (nRows_ * nCols_ != allocatedData_.size()) {
+            allocatedData_.clear();
+            std::string msg("Inconsistent dimensions in ");
+            msg += filename;
+            msg += ".  Amount of data inconsitent with declared size.";
+            throw std::runtime_error(msg);
+        }
+        allocatedData_.shrink_to_fit();
+        data_ = allocatedData_.data();
+    }
+
+    /*!
+     * \brief Matrix Constructs a new matrix, allocating memory and initializing values using the braced initializer.
+     * \param data a braced initializer list of braced initializer lists containing the values to be stored in the
+     * matrix.
+     */
+    Matrix(std::initializer_list<std::initializer_list<Real>> data) {
+        nRows_ = data.size();
+        nCols_ = nRows_ ? data.begin()->size() : 0;
+        allocatedData_.reserve(nRows_ * nCols_);
+        for (auto& row : data) {
+            if (row.size() != nCols_) throw std::runtime_error("Inconsistent row dimensions in matrix specification.");
+            allocatedData_.insert(allocatedData_.end(), row.begin(), row.end());
+        }
+        data_ = allocatedData_.data();
+    }
+
+    /*!
+     * \brief Matrix Constructs a new column vector, allocating memory and initializing values using the braced
+     * initializer. \param data a braced initializer list of braced initializer lists containing the values to be stored
+     * in the matrix.
+     */
+    Matrix(std::initializer_list<Real> data) : allocatedData_(data), data_(allocatedData_.data()) {
+        nRows_ = data.size();
+        nCols_ = 1;
+    }
+
+    /*!
+     * \brief Matrix Constructs a new matrix using already allocated memory.
+     * \param ptr the already-allocated memory underlying this matrix.
+     * \param nRows the number of rows in the matrix.
+     * \param nCols the number of columns in the matrix.
+     */
+    Matrix(Real* ptr, size_t nRows, size_t nCols) : nRows_(nRows), nCols_(nCols), data_(ptr) {}
+
+    /*!
+     * \brief cast make a copy of this matrix, with its elements cast as a different type.
+     * \tparam NewReal the type to cast each element to.
+     * \return the copy of the matrix with the new type.
+     */
+    template <typename NewReal>
+    Matrix<NewReal> cast() const {
+        Matrix<NewReal> newMat(nRows_, nCols_);
+        NewReal* newPtr = newMat[0];
+        const Real* dataPtr = data_;
+        for (size_t addr = 0; addr < nRows_ * nCols_; ++addr) *newPtr++ = static_cast<NewReal>(*dataPtr++);
+        return newMat;
+    }
+
+    /*!
+     * \brief setConstant sets all elements of this matrix to a specified value.
+     * \param value the value to set each element to.
+     */
+    void setConstant(Real value) { std::fill(begin(), end(), value); }
+
+    /*!
+     * \brief setZero sets each element of this matrix to zero.
+     */
+    void setZero() { setConstant(0); }
+
+    /*!
+     * \brief isNearZero checks that each element in this matrix has an absolute value below some threshold.
+     * \param threshold the value below which an element is considered zero.
+     * \return whether all values are near zero or not.
+     */
+    bool isNearZero(Real threshold = 1e-10f) const {
+        return !std::any_of(cbegin(), cend(), [&](const Real& val) { return std::abs(val) > threshold; });
+    }
+
+    /*!
+     * \brief inverse inverts this matrix, leaving the original matrix untouched.
+     * \return the inverse of this matrix.
+     */
+    Matrix inverse() const {
+        assertSquare();
+
+        Matrix matrixInverse(nRows_, nRows_);
+
+        if (nRows() == 3) {
+            // 3x3 is a really common case, so treat it here as.
+            Real determinant = data_[0] * (data_[4] * data_[8] - data_[7] * data_[5]) -
+                               data_[1] * (data_[3] * data_[8] - data_[5] * data_[6]) +
+                               data_[2] * (data_[3] * data_[7] - data_[4] * data_[6]);
+
+            Real determinantInverse = 1 / determinant;
+
+            matrixInverse.data_[0] = (data_[4] * data_[8] - data_[7] * data_[5]) * determinantInverse;
+            matrixInverse.data_[1] = (data_[2] * data_[7] - data_[1] * data_[8]) * determinantInverse;
+            matrixInverse.data_[2] = (data_[1] * data_[5] - data_[2] * data_[4]) * determinantInverse;
+            matrixInverse.data_[3] = (data_[5] * data_[6] - data_[3] * data_[8]) * determinantInverse;
+            matrixInverse.data_[4] = (data_[0] * data_[8] - data_[2] * data_[6]) * determinantInverse;
+            matrixInverse.data_[5] = (data_[3] * data_[2] - data_[0] * data_[5]) * determinantInverse;
+            matrixInverse.data_[6] = (data_[3] * data_[7] - data_[6] * data_[4]) * determinantInverse;
+            matrixInverse.data_[7] = (data_[6] * data_[1] - data_[0] * data_[7]) * determinantInverse;
+            matrixInverse.data_[8] = (data_[0] * data_[4] - data_[3] * data_[1]) * determinantInverse;
+        } else {
+            // Generic case; just use spectral decomposition, invert the eigenvalues, and stitch back together.
+            // Note that this only works for symmetric matrices.  Need to hook into Lapack for a general
+            // inversion routine if this becomes a limitation.
+            return this->applyOperation([](Real& element) { element = 1 / element; });
+        }
+        return matrixInverse;
+    }
+
+    /*!
+     * \brief assertSymmetric checks that this matrix is symmetric within some threshold.
+     * \param threshold the value below which an pair's difference is considered zero.
+     */
+    void assertSymmetric(const Real& threshold = 1e-10f) const {
+        assertSquare();
+        for (int row = 0; row < nRows_; ++row) {
+            for (int col = 0; col < row; ++col) {
+                if (std::abs(data_[row * nCols_ + col] - data_[col * nCols_ + row]) > threshold)
+                    throw std::runtime_error("Unexpected non-symmetric matrix found.");
+            }
+        }
+    }
+
+    /*!
+     * \brief applyOperationToEachElement modifies every element in the matrix by applying an operation.
+     * \param function a unary operator describing the operation to perform.
+     */
+    void applyOperationToEachElement(const std::function<void(Real&)>& function) {
+        std::for_each(begin(), end(), function);
+    }
+
+    /*!
+     * \brief applyOperation applies an operation to this matrix using the spectral decomposition,
+     *        leaving the original untouched.  Only for symmetric matrices, as coded.
+     * \param function a undary operator describing the operation to perform.
+     * \return the matrix transformed by the operator.
+     */
+    Matrix applyOperation(const std::function<void(Real&)>& function) const {
+        assertSymmetric();
+
+        auto eigenPairs = this->diagonalize();
+        Matrix evalsReal = std::get<0>(eigenPairs);
+        Matrix evalsImag = std::get<1>(eigenPairs);
+        Matrix evecs = std::get<2>(eigenPairs);
+        if (!evalsImag.isNearZero())
+            throw std::runtime_error("Unexpected complex eigenvalues encountered when applying operator to Matrix.");
+        evalsReal.applyOperationToEachElement(function);
+        Matrix evecsT = evecs.transpose();
+        for (int row = 0; row < nRows_; ++row) {
+            Real transformedEigenvalue = evalsReal[row][0];
+            std::for_each(evecsT.data_ + row * nCols_, evecsT.data_ + (row + 1) * nCols_,
+                          [&](Real& val) { val *= transformedEigenvalue; });
+        }
+        return evecs * evecsT;
+    }
+
+    /*!
+     * \brief assertSameSize make sure that this Matrix has the same dimensions as another Matrix.
+     * \param other the matrix to compare to.
+     */
+    void assertSameSize(const Matrix& other) const {
+        if (nRows_ != other.nRows_ || nCols_ != other.nCols_)
+            throw std::runtime_error("Attepting to compare matrices of different sizes!");
+    }
+
+    /*!
+     * \brief assertSquare make sure that this Matrix is square.
+     */
+    void assertSquare() const {
+        if (nRows_ != nCols_)
+            throw std::runtime_error("Attepting to perform a square matrix operation on a non-square matrix!");
+    }
+
+    /*!
+     * \brief multiply this matrix with another, returning a new matrix containing the product.
+     * \param other the right hand side of the matrix product.
+     * \return the product of this matrix with the matrix other.
+     */
+    Matrix multiply(const Matrix& other) const {
+        // TODO one fine day this should be replaced by GEMM calls, if matrix multiplies actually get used much.
+        if (nCols_ != other.nRows_)
+            throw std::runtime_error("Attempting to multiply matrices with incompatible dimensions.");
+        Matrix product(nRows_, other.nCols_);
+        Real* output = product.data_;
+        for (int row = 0; row < nRows_; ++row) {
+            const Real* rowPtr = data_ + row * nCols_;
+            for (int col = 0; col < other.nCols_; ++col) {
+                for (int link = 0; link < nCols_; ++link) {
+                    *output += rowPtr[link] * other.data_[link * other.nCols_ + col];
+                }
+                ++output;
+            }
+        }
+        return product;
+    }
+
+    /*!
+     * \brief operator * a convenient wrapper for the multiply function.
+     * \param other the right hand side of the matrix product.
+     * \return the product of this matrix with the matrix other.
+     */
+    Matrix operator*(const Matrix& other) const { return this->multiply(other); }
+
+    /*!
+     * \brief increment this matrix with another, returning a new matrix containing the sum.
+     * \param other the right hand side of the matrix sum.
+     * \return the sum of this matrix and the matrix other.
+     */
+    Matrix incrementWith(const Matrix& other) {
+        assertSameSize(other);
+        std::transform(begin(), end(), other.begin(), begin(),
+                       [](const Real& a, const Real& b) -> Real { return a + b; });
+        return *this;
+    }
+
+    /*!
+     * \brief a wrapper around the incrementWith() function.
+     * \param other the right hand side of the matrix sum.
+     * \return the sum of this matrix and the matrix other.
+     */
+    Matrix operator+=(const Matrix& other) { return this->incrementWith(other); }
+
+    /*!
+     * \brief almostEquals checks that two matrices have all elements the same, within some specificied tolerance.
+     * \param other the matrix against which we're comparing.
+     * \param tol the amount that each element is allowed to deviate by.
+     * \return whether the two matrices are almost equal.
+     */
+    template <typename T = Real, typename std::enable_if<std::is_floating_point<T>::value, int>::type = 0>
+    bool almostEquals(const Matrix& other, Real tolerance = 1e-6) const {
+        // The floating point version
+        assertSameSize(other);
+
+        return std::equal(cbegin(), cend(), other.cbegin(), [&tolerance](Real a, Real b) -> bool {
+            return (((a - b) < std::real(tolerance)) && ((a - b) > -std::real(tolerance)));
+        });
+    }
+    template <typename T = Real, typename std::enable_if<!std::is_floating_point<T>::value, int>::type = 0>
+    bool almostEquals(const Matrix& other, Real tolerance = 1e-6) const {
+        // The complex version
+        assertSameSize(other);
+
+        auto tol = std::real(tolerance);
+        // This is a little confusing, but the type "Real" is actually some king of std::complex<...>.
+        return std::equal(cbegin(), cend(), other.cbegin(), [&tol](Real a, Real b) -> bool {
+            return (((a.real() - b.real()) < tol) && ((a.real() - b.real()) > -tol) && ((a.imag() - b.imag()) < tol) &&
+                    ((a.imag() - b.imag()) > -tol));
+        });
+    }
+
+    /*!
+     * \brief dot computes the inner product of this matrix with another.
+     * \param other the other matrix in the inner product, which must have the same dimensions.
+     * \return the inner product.
+     */
+    Real dot(const Matrix& other) const {
+        assertSameSize(other);
+
+        return std::inner_product(cbegin(), cend(), other.cbegin(), Real(0));
+    }
+
+    /*!
+     * \brief write formatted matrix to a stream object.
+     * \param os stream object to write to.
+     * \return modified stream object.
+     */
+    std::ostream& write(std::ostream& os) const {
+        for (int row = 0; row < nRows_; ++row) os << stringify(data_ + row * nCols_, nCols_, nCols_);
+        os << std::endl;
+        return os;
+    }
+
+    /*!
+     * \brief transposeInPlace transposes this matrix in place.
+     */
+    void transposeInPlace() {
+        transposeMemoryInPlace(begin(), end(), nCols_);
+        std::swap(nCols_, nRows_);
+    }
+
+    /*!
+     * \brief clone make a new copy of this matrix by deep copying the data.
+     * \return the copy of this matrix.
+     */
+    Matrix clone() const {
+        Matrix newMatrix = Matrix(nRows_, nCols_);
+        std::copy(cbegin(), cend(), newMatrix.begin());
+        return newMatrix;
+    }
+
+    /*!
+     * \brief transpose this matrix, leaving the original untouched.
+     * \return a transposed deep copy of this matrix.
+     */
+    Matrix transpose() const {
+        Matrix copy = this->clone();
+        copy.transposeInPlace();
+        return copy;
+    }
+
+    /*!
+     * \brief diagonalize diagonalize this matrix, leaving the original untouched.
+     * \param order how to order the (eigenvalue,eigenvector) pairs, where the sort key is the real part of the
+     * eigenvalue.
+     * \return a tuple of <real eigenvalue compnents, imaginary eigenvalue components, eigenvectors> sorted
+     * according to the order variable.  The eigenvectors are stored by column.
+     */
+    std::tuple<Matrix<Real>, Matrix<Real>, Matrix<Real>> diagonalize(SortOrder order = SortOrder::Ascending) const {
+        if (nRows_ != nCols_) throw std::runtime_error("Attempting to diagonalize a non-square matrix.");
+        Matrix evalsReal(nRows_, 1);
+        Matrix evalsImag(nRows_, 1);
+        Matrix evecs(nRows_, nRows_);
+        std::vector<Real> clone(data_, data_ + nRows_ * nCols_);
+
+        int info;
+        Real workDim;
+        LapackWrapper<Real>::diagonalizer()('V', 'N', nRows_, clone.data(), nCols_, evalsReal.data_, evalsImag.data_,
+                                            evecs.data_, nCols_, nullptr, 1, &workDim, -1, &info);
+        int scratchSize = static_cast<int>(workDim);
+        std::vector<Real> work(scratchSize);
+        LapackWrapper<Real>::diagonalizer()('V', 'N', nRows_, clone.data(), nCols_, evalsReal.data_, evalsImag.data_,
+                                            evecs.data_, nCols_, nullptr, 1, work.data(), scratchSize, &info);
+        if (info) throw std::runtime_error("Something went wrong during diagonalization!");
+
+        struct eigenInfo {
+            Real valueReal, valueImag, *vector;
+            eigenInfo(Real r, Real i, Real* v) : valueReal(r), valueImag(i), vector(v) {}
+            bool operator<(eigenInfo const& other) const { return valueReal < other.valueReal; }
+        };
+
+        std::vector<eigenInfo> eigenTuples;
+        for (int val = 0; val < nRows_; ++val)
+            eigenTuples.push_back(eigenInfo(evalsReal[val][0], evalsImag[val][0], evecs[val]));
+
+        std::sort(eigenTuples.begin(), eigenTuples.end());
+        if (order == SortOrder::Descending) std::reverse(eigenTuples.begin(), eigenTuples.end());
+        for (int val = 0; val < nRows_; ++val) {
+            const auto& e = eigenTuples[val];
+            evalsReal.data_[val] = e.valueReal;
+            evalsImag.data_[val] = e.valueImag;
+            std::copy(e.vector, e.vector + nCols_, clone.data() + val * nCols_);
+        }
+        std::copy(clone.begin(), clone.end(), evecs.begin());
+        evecs.transposeInPlace();
+        return std::make_tuple(std::move(evalsReal), std::move(evalsImag), std::move(evecs));
+    }
+};
+
+/*!
+ * A helper function to allow printing of Matrix objects to a stream.
+ */
+template <typename Real>
+std::ostream& operator<<(std::ostream& os, Matrix<Real> const& m) {
+    return m.write(os);
+}
+
+}  // Namespace helpme
+#endif  // Header guard
+
+#include <vector>
+
+namespace helpme {
+
+static inline int cartesianAddress(int lx, int ly, int lz) {
+    int l = lx + ly + lz;
+    return lz * (2 * l - lz + 3) / 2 + ly;
+}
+
+/*!
+ * \brief makeCartesianRotationMatrix builds a rotation matrix for unique Cartesian
+ *        components with a given angular momentum.  The algorithm used here is the simple
+ *        version (eq. 18) from D. M. Elking, J. Comp. Chem., 37 2067 (2016).  It's definitely
+ *        not the fastest way to do it, but will be revisited if profiling shows it to be an issue.
+ * \param angularMomentum the angular momentum of the rotation matrix desired.
+ * \param transformer the matrix R to do the transform defined for a dipole as µ_new = R . µ_old.
+ * \return the rotation matrix
+ */
+template <typename Real>
+Matrix<Real> makeCartesianRotationMatrix(int angularMomentum, const Matrix<Real> &transformer) {
+    Real R00 = transformer[0][0];
+    Real R01 = transformer[0][1];
+    Real R02 = transformer[0][2];
+    Real R10 = transformer[1][0];
+    Real R11 = transformer[1][1];
+    Real R12 = transformer[1][2];
+    Real R20 = transformer[2][0];
+    Real R21 = transformer[2][1];
+    Real R22 = transformer[2][2];
+    int nComponents = (angularMomentum + 1) * (angularMomentum + 2) / 2;
+    auto factorial = std::vector<int>(2 * angularMomentum + 1);
+    factorial[0] = 1;
+    for (int l = 1; l <= 2 * angularMomentum; ++l) factorial[l] = l * factorial[l - 1];
+    Matrix<Real> R(nComponents, nComponents);
+    for (int nz = 0; nz <= angularMomentum; ++nz) {
+        for (int ny = 0; ny <= angularMomentum - nz; ++ny) {
+            int nx = angularMomentum - ny - nz;
+            for (int pz = 0; pz <= nx; ++pz) {
+                for (int py = 0; py <= nx - pz; ++py) {
+                    int px = nx - py - pz;
+                    for (int qz = 0; qz <= ny; ++qz) {
+                        for (int qy = 0; qy <= ny - qz; ++qy) {
+                            int qx = ny - qy - qz;
+                            for (int rz = 0; rz <= nz; ++rz) {
+                                for (int ry = 0; ry <= nz - rz; ++ry) {
+                                    int rx = nz - ry - rz;
+                                    int mx = px + qx + rx;
+                                    int my = py + qy + ry;
+                                    int mz = pz + qz + rz;
+                                    int m = mx + my + mz;
+                                    if (m == angularMomentum) {
+                                        Real normx = factorial[mx] / (factorial[px] * factorial[qx] * factorial[rx]);
+                                        Real normy = factorial[my] / (factorial[py] * factorial[qy] * factorial[ry]);
+                                        Real normz = factorial[mz] / (factorial[pz] * factorial[qz] * factorial[rz]);
+                                        Real Rx = std::pow(R00, px) * std::pow(R10, py) * std::pow(R20, pz);
+                                        Real Ry = std::pow(R01, qx) * std::pow(R11, qy) * std::pow(R21, qz);
+                                        Real Rz = std::pow(R02, rx) * std::pow(R12, ry) * std::pow(R22, rz);
+                                        Real term = normx * normy * normz * Rx * Ry * Rz;
+                                        R[cartesianAddress(mx, my, mz)][cartesianAddress(nx, ny, nz)] += term;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return R;
+}
+
+/*!
+ * \brief matrixVectorProduct A naive implementation of matrix-vector products, avoiding BLAS requirements (for now).
+ * \param transformer the transformation matrix.
+ * \param inputVector the vector to be transformed.
+ * \param outputVector the transformed vector.
+ */
+template <typename Real>
+void matrixVectorProduct(const Matrix<Real> &transformer, const Real *inputVector, Real *outputVector) {
+    int dimension = transformer.nRows();
+    for (int row = 0; row < dimension; ++row) {
+        outputVector[row] = std::inner_product(inputVector, inputVector + dimension, transformer[row], Real(0));
+    }
+}
+
+/*!
+ * \brief cartesianTransform transforms a list of a cartesian quantities to a different basis.
+ *        Assumes a list of quantities are to be transformed (in place) and all angular momentum
+ *        components up to and including the specified maximum are present in ascending A.M. order.
+ * \param maxAngularMomentum the maximum angular momentum of the incoming quantity.
+ * \param transformer the matrix R to do the transform defined for a dipole as µ_new = R . µ_old.
+ * \param transformee the quantity to be transformed, stored as nAtoms X nComponents, with
+ *        components being the fast running index.
+ */
+template <typename Real>
+Matrix<Real> cartesianTransform(int maxAngularMomentum, const Matrix<Real> &transformer, Matrix<Real> &transformee) {
+    Matrix<Real> transformed = transformee.clone();
+    int offset = 1;
+    int nAtoms = transformee.nRows();
+    for (int angularMomentum = 1; angularMomentum <= maxAngularMomentum; ++angularMomentum) {
+        auto rotationMatrix = makeCartesianRotationMatrix(angularMomentum, transformer);
+        for (int atom = 0; atom < nAtoms; ++atom) {
+            const Real *inputData = transformee[atom];
+            Real *outputData = transformed[atom];
+            matrixVectorProduct(rotationMatrix, inputData + offset, outputData + offset);
+        }
+        offset += (angularMomentum + 1) * (angularMomentum + 2) / 2;
+    }
+    return transformed;
+}
+
+}  // Namespace helpme
+#endif  // Header guard
+// original file: ../src/fftw_wrapper.h
+
+// BEGINLICENSE
+//
+// This file is part of helPME, which is distributed under the BSD 3-clause license,
+// as described in the LICENSE file in the top level directory of this project.
+//
+// Author: Andrew C. Simmonett
+//
+// ENDLICENSE
+#ifndef _HELPME_FFTW_WRAPPER_H_
+#define _HELPME_FFTW_WRAPPER_H_
+
+#include <exception>
+#include <iostream>
+#include <limits>
+#include <type_traits>
+
+#include <fftw3.h>
+// #include "memory.h"
 
 namespace helpme {
 
@@ -750,755 +1645,7 @@ int findGridSize(T inputSize, const std::initializer_list<T> &requiredDivisors) 
 }  // Namespace helpme
 
 #endif  // Header guard
-// original file: ../src/matrix.h
-
-// BEGINLICENSE
-//
-// This file is part of helPME, which is distributed under the BSD 3-clause license,
-// as described in the LICENSE file in the top level directory of this project.
-//
-// Author: Andrew C. Simmonett
-//
-// ENDLICENSE
-#ifndef _HELPME_MATRIX_H_
-#define _HELPME_MATRIX_H_
-
-#include <algorithm>
-#include <complex>
-#include <exception>
-#include <fstream>
-#include <initializer_list>
-#include <iostream>
-#include <iomanip>
-#include <numeric>
-#include <tuple>
-
-// original file: ../src/lapack_wrapper.h
-
-// BEGINLICENSE
-//
-// This file is part of helPME, which is distributed under the BSD 3-clause license,
-// as described in the LICENSE file in the top level directory of this project.
-//
-// Author: Andrew C. Simmonett
-//
-// ENDLICENSE
-#ifndef _HELPME_LAPACK_WRAPPER_H_
-#define _HELPME_LAPACK_WRAPPER_H_
-
-#include <exception>
-#include <functional>
-#include <complex>
-
-#if FC_SYMBOL == 2
-#define F_SGEEV sgeev_
-#define F_SGESV sgesv_
-#define F_DGEEV dgeev_
-#define F_DGESV dgesv_
-#define F_CGEEV cgeev_
-#define F_CGESV cgesv_
-#define F_ZGEEV zgeev_
-#define F_ZGESV zgesv_
-#elif FC_SYMBOL == 1
-#define F_SGEEV sgeev
-#define F_SGESV sgesv
-#define F_DGEEV dgeev
-#define F_DGESV dgesv
-#define F_CGEEV cgeev
-#define F_CGESV cgesv
-#define F_ZGEEV zgeev
-#define F_ZGESV zgesv
-#elif FC_SYMBOL == 3
-#define F_SGEEV SGEEV
-#define F_SGESV SGESV
-#define F_DGEEV DGEEV
-#define F_DGESV DGESV
-#define F_CGEEV CGEEV
-#define F_CGESV CGESV
-#define F_ZGEEV ZGEEV
-#define F_ZGESV ZGESV
-#elif FC_SYMBOL == 4
-#define F_SGEEV SGEEV_
-#define F_SGESV SGESV_
-#define F_DGEEV DGEEV_
-#define F_DGESV DGESV_
-#define F_CGEEV CGEEV_
-#define F_CGESV CGESV_
-#define F_ZGEEV ZGEEV_
-#define F_ZGESV ZGESV_
-#endif
-
-extern "C" {
-extern void F_SGEEV(char *, char *, int *, float *, int *, float *, float *, float *, int *, float *, int *, float *,
-                    int *, int *);
-extern void F_DGEEV(char *, char *, int *, double *, int *, double *, double *, double *, int *, double *, int *,
-                    double *, int *, int *);
-extern void F_CGEEV(char *, char *, int *, std::complex<float> *, int *, std::complex<float> *, std::complex<float> *,
-                    std::complex<float> *, int *, std::complex<float> *, int *, std::complex<float> *, int *, int *);
-extern void F_ZGEEV(char *, char *, int *, std::complex<double> *, int *, std::complex<double> *,
-                    std::complex<double> *, std::complex<double> *, int *, std::complex<double> *, int *,
-                    std::complex<double> *, int *, int *);
-}
-
-namespace helpme {
-
-static void C_SGEEV(char jobvl, char jobvr, int n, float *a, int lda, float *wr, float *wi, float *vl, int ldvl,
-                    float *vr, int ldvr, float *work, int lwork, int *info) {
-    ::F_SGEEV(&jobvl, &jobvr, &n, a, &lda, wr, wi, vl, &ldvl, vr, &ldvr, work, &lwork, info);
-}
-
-static void C_DGEEV(char jobvl, char jobvr, int n, double *a, int lda, double *wr, double *wi, double *vl, int ldvl,
-                    double *vr, int ldvr, double *work, int lwork, int *info) {
-    ::F_DGEEV(&jobvl, &jobvr, &n, a, &lda, wr, wi, vl, &ldvl, vr, &ldvr, work, &lwork, info);
-}
-
-static void C_CGEEV(char jobvl, char jobvr, int n, std::complex<float> *a, int lda, std::complex<float> *wr,
-                    std::complex<float> *wi, std::complex<float> *vl, int ldvl, std::complex<float> *vr, int ldvr,
-                    std::complex<float> *work, int lwork, int *info) {
-    ::F_CGEEV(&jobvl, &jobvr, &n, a, &lda, wr, wi, vl, &ldvl, vr, &ldvr, work, &lwork, info);
-}
-
-static void C_ZGEEV(char jobvl, char jobvr, int n, std::complex<double> *a, int lda, std::complex<double> *wr,
-                    std::complex<double> *wi, std::complex<double> *vl, int ldvl, std::complex<double> *vr, int ldvr,
-                    std::complex<double> *work, int lwork, int *info) {
-    ::F_ZGEEV(&jobvl, &jobvr, &n, a, &lda, wr, wi, vl, &ldvl, vr, &ldvr, work, &lwork, info);
-}
-
-template <typename Real>
-using diagonalizerType =
-    std::function<void(char, char, int, Real *, int, Real *, Real *, Real *, int, Real *, int, Real *, int, int *)>;
-
-template <typename Real>
-class LapackWrapper {
-   public:
-    static diagonalizerType<Real> diagonalizer() {
-        throw std::runtime_error("Diagonalization is not implemented for the requested data type");
-        return diagonalizerType<Real>();
-    }
-};
-
-template <>
-inline diagonalizerType<float> LapackWrapper<float>::diagonalizer() {
-    return &C_SGEEV;
-}
-template <>
-inline diagonalizerType<double> LapackWrapper<double>::diagonalizer() {
-    return &C_DGEEV;
-}
-template <>
-inline diagonalizerType<std::complex<float>> LapackWrapper<std::complex<float>>::diagonalizer() {
-    return &C_CGEEV;
-}
-template <>
-inline diagonalizerType<std::complex<double>> LapackWrapper<std::complex<double>>::diagonalizer() {
-    return &C_ZGEEV;
-}
-
-}  // Namespace helpme
-#endif  // Header guard
-// original file: ../src/string_utils.h
-
-// BEGINLICENSE
-//
-// This file is part of helPME, which is distributed under the BSD 3-clause license,
-// as described in the LICENSE file in the top level directory of this project.
-//
-// Author: Andrew C. Simmonett
-//
-// ENDLICENSE
-#ifndef _HELPME_STRING_UTIL_H_
-#define _HELPME_STRING_UTIL_H_
-
-#include <complex>
-#include <iomanip>
-#include <iostream>
-#include <sstream>
-#include <string>
-
-namespace helpme {
-
-/*!
- * \brief makes a string representation of a floating point number.
- * \param width the width used to display the number.
- * \param precision the precision used to display the number.
- * \return the string representation of the floating point number.
- */
-template <typename T, typename std::enable_if<std::is_floating_point<T>::value, int>::type = 0>
-std::string formatNumber(const T &number, int width, int precision) {
-    std::stringstream stream;
-    stream.setf(std::ios::fixed, std::ios::floatfield);
-    stream << std::setw(width) << std::setprecision(precision) << number;
-    return stream.str();
-}
-
-/*!
- * \brief makes a string representation of a complex number.
- * \param width the width used to display the real and the imaginary components.
- * \param precision the precision used to display the real and the imaginary components.
- * \return the string representation of the complex number.
- */
-template <typename T, typename std::enable_if<!std::is_floating_point<T>::value, int>::type = 0>
-std::string formatNumber(const T &number, int width, int precision) {
-    std::stringstream stream;
-    stream.setf(std::ios::fixed, std::ios::floatfield);
-    stream << "(" << std::setw(width) << std::setprecision(precision) << number.real() << ", " << std::setw(width)
-           << std::setprecision(precision) << number.imag() << ")";
-    return stream.str();
-}
-
-/*!
- * \brief makes a string representation of a multdimensional tensor, stored in a flat array.
- * \param data pointer to the start of the array holding the tensor information.
- * \param size the length of the array holding the tensor information.
- * \param rowDim the dimension of the fastest running index.
- * \param width the width of each individual floating point number.
- * \param precision used to display each floating point number.
- * \return the string representation of the tensor.
- */
-template <typename T>
-std::string stringify(T *data, size_t size, size_t rowDim, int width = 14, int precision = 8) {
-    std::stringstream stream;
-    for (size_t ind = 0; ind < size; ++ind) {
-        stream << formatNumber(data[ind], width, precision);
-        if (ind % rowDim == rowDim - 1)
-            stream << std::endl;
-        else
-            stream << "  ";
-    }
-    return stream.str();
-}
-
-}  // Namespace helpme
-
-#endif  // Header guard
-// #include "memory.h"
-
-namespace helpme {
-
-/*!
- * A helper function to transpose a dense matrix in place, gratuitously stolen from
- * https://stackoverflow.com/questions/9227747/in-place-transposition-of-a-matrix
- */
-template <class RandomIterator>
-void transposeMemoryInPlace(RandomIterator first, RandomIterator last, int m) {
-    const int mn1 = (last - first - 1);
-    const int n = (last - first) / m;
-    std::vector<bool> visited(last - first);
-    RandomIterator cycle = first;
-    while (++cycle != last) {
-        if (visited[cycle - first]) continue;
-        int a = cycle - first;
-        do {
-            a = a == mn1 ? mn1 : (n * a) % mn1;
-            std::swap(*(first + a), *cycle);
-            visited[a] = true;
-        } while ((first + a) != cycle);
-    }
-}
-
-/*!
- * \brief The Matrix class is designed to serve as a convenient wrapper to simplify 2D matrix operations.
- *        It assumes dense matrices with contiguious data and the fast running index being the right
- *        (column) index.  The underlying memory may have already been allocated elsewhere by C, Fortran
- *        or Python, and is directly manipulated in place, saving an expensive copy operation.  To provide
- *        read-only access to such memory address, use a const template type.
- */
-template <typename Real>
-class Matrix {
-   protected:
-    /// The number of rows in the matrix.
-    size_t nRows_;
-    /// The number of columns in the matrix.
-    size_t nCols_;
-    /// A vector to conveniently allocate data, if we really need to.
-    helpme::vector<Real> allocatedData_;
-    /// Pointer to the raw data, whose allocation may not be controlled by us.
-    Real* data_;
-
-   public:
-    enum class SortOrder { Ascending, Descending };
-
-    inline const Real& operator()(int row, int col) const { return *(data_ + row * nCols_ + col); }
-    inline Real& operator()(int row, int col) { return *(data_ + row * nCols_ + col); }
-    inline const Real* operator[](int row) const { return data_ + row * nCols_; }
-    inline Real* operator[](int row) { return data_ + row * nCols_; }
-
-    Real* begin() const { return data_; }
-    Real* end() const { return data_ + nRows_ * nCols_; }
-    const Real* cbegin() const { return data_; }
-    const Real* cend() const { return data_ + nRows_ * nCols_; }
-
-    /*!
-     * \brief The sliceIterator struct provides a read-only view of a sub-block of a matrix, with arbitrary size.
-     */
-    struct sliceIterator {
-        Real *begin_, *end_, *ptr_;
-        size_t stride_;
-        sliceIterator(Real* start, Real* end, size_t stride) : begin_(start), end_(end), ptr_(start), stride_(stride) {}
-        sliceIterator begin() const { return sliceIterator(begin_, end_, stride_); }
-        sliceIterator end() const { return sliceIterator(end_, end_, 0); }
-        sliceIterator cbegin() const { return sliceIterator(begin_, end_, stride_); }
-        sliceIterator cend() const { return sliceIterator(end_, end_, 0); }
-        bool operator!=(const sliceIterator& other) { return ptr_ != other.ptr_; }
-        sliceIterator operator*=(Real val) {
-            for (auto& element : *this) element *= val;
-            return *this;
-        }
-        sliceIterator operator/=(Real val) {
-            Real invVal = 1 / val;
-            for (auto& element : *this) element *= invVal;
-            return *this;
-        }
-        sliceIterator operator-=(Real val) {
-            for (auto& element : *this) element -= val;
-            return *this;
-        }
-        sliceIterator operator+=(Real val) {
-            for (auto& element : *this) element += val;
-            return *this;
-        }
-        sliceIterator operator++() {
-            ptr_ += stride_;
-            return *this;
-        }
-        const Real& operator[](size_t index) { return *(begin_ + index); }
-        size_t size() const { return std::distance(begin_, end_) / stride_; }
-        void assertSameSize(const sliceIterator& other) const {
-            if (size() != other.size())
-                throw std::runtime_error("Slice operations only supported for slices of the same size.");
-        }
-        void assertContiguous(const sliceIterator& iter) const {
-            if (iter.stride_ != 1)
-                throw std::runtime_error(
-                    "Slice operations called on operation that is only allowed for contiguous data.");
-        }
-        Matrix<Real> operator-(const sliceIterator& other) const {
-            assertSameSize(other);
-            assertContiguous(*this);
-            assertContiguous(other);
-            Matrix ret(1, size());
-            std::transform(begin_, end_, other.begin_, ret[0],
-                           [](const Real& a, const Real& b) -> Real { return a - b; });
-            return ret;
-        }
-        sliceIterator operator-=(const sliceIterator& other) const {
-            assertSameSize(other);
-            assertContiguous(*this);
-            assertContiguous(other);
-            std::transform(begin_, end_, other.begin_, begin_,
-                           [](const Real& a, const Real& b) -> Real { return a - b; });
-            return *this;
-        }
-        sliceIterator operator+=(const sliceIterator& other) const {
-            assertSameSize(other);
-            assertContiguous(*this);
-            assertContiguous(other);
-            std::transform(begin_, end_, other.begin_, begin_,
-                           [](const Real& a, const Real& b) -> Real { return a + b; });
-            return *this;
-        }
-        Real& operator*() { return *ptr_; }
-    };
-
-    /*!
-     * \brief row returns a read-only iterator over a given row.
-     * \param r the row to return.
-     * \return the slice in memory corresponding to the rth row.
-     */
-    sliceIterator row(size_t r) const { return sliceIterator(data_ + r * nCols_, data_ + (r + 1) * nCols_, 1); }
-
-    /*!
-     * \brief col returns a read-only iterator over a given column.
-     * \param c the column to return.
-     * \return the slice in memory corresponding to the cth column.
-     */
-    sliceIterator col(size_t c) const { return sliceIterator(data_ + c, data_ + nRows_ * nCols_ + c, nCols_); }
-
-    /*!
-     * \return the number of rows in this matrix.
-     */
-    size_t nRows() const { return nRows_; }
-
-    /*!
-     * \return the number of columns in this matrix.
-     */
-    size_t nCols() const { return nCols_; }
-
-    /*!
-     * \brief Matrix Constructs an empty matrix.
-     */
-    Matrix() : nRows_(0), nCols_(0) {}
-
-    /*!
-     * \brief Matrix Constructs a new matrix, allocating memory.
-     * \param nRows the number of rows in the matrix.
-     * \param nCols the number of columns in the matrix.
-     */
-    Matrix(size_t nRows, size_t nCols)
-        : nRows_(nRows), nCols_(nCols), allocatedData_(nRows * nCols, 0), data_(allocatedData_.data()) {}
-
-    /*!
-     * \brief Matrix Constructs a new matrix, allocating memory.
-     * \param filename the ASCII file from which to read this matrix
-     */
-    Matrix(const std::string& filename) {
-        Real tmp;
-        std::ifstream inFile(filename);
-
-        if (!inFile) {
-            std::string msg("Unable to open file ");
-            msg += filename;
-            throw std::runtime_error(msg);
-        }
-
-        inFile >> nRows_;
-        inFile >> nCols_;
-        while (inFile >> tmp) allocatedData_.push_back(tmp);
-        inFile.close();
-        if (nRows_ * nCols_ != allocatedData_.size()) {
-            allocatedData_.clear();
-            std::string msg("Inconsistent dimensions in ");
-            msg += filename;
-            msg += ".  Amount of data inconsitent with declared size.";
-            throw std::runtime_error(msg);
-        }
-        allocatedData_.shrink_to_fit();
-        data_ = allocatedData_.data();
-    }
-
-    /*!
-     * \brief Matrix Constructs a new matrix, allocating memory and initializing values using the braced initializer.
-     * \param data a braced initializer list of braced initializer lists containing the values to be stored in the
-     * matrix.
-     */
-    Matrix(std::initializer_list<std::initializer_list<Real>> data) {
-        nRows_ = data.size();
-        nCols_ = nRows_ ? data.begin()->size() : 0;
-        allocatedData_.reserve(nRows_ * nCols_);
-        for (auto& row : data) {
-            if (row.size() != nCols_) throw std::runtime_error("Inconsistent row dimensions in matrix specification.");
-            allocatedData_.insert(allocatedData_.end(), row.begin(), row.end());
-        }
-        data_ = allocatedData_.data();
-    }
-
-    /*!
-     * \brief Matrix Constructs a new column vector, allocating memory and initializing values using the braced
-     * initializer. \param data a braced initializer list of braced initializer lists containing the values to be stored
-     * in the matrix.
-     */
-    Matrix(std::initializer_list<Real> data) : allocatedData_(data), data_(allocatedData_.data()) {
-        nRows_ = data.size();
-        nCols_ = 1;
-    }
-
-    /*!
-     * \brief Matrix Constructs a new matrix using already allocated memory.
-     * \param ptr the already-allocated memory underlying this matrix.
-     * \param nRows the number of rows in the matrix.
-     * \param nCols the number of columns in the matrix.
-     */
-    Matrix(Real* ptr, size_t nRows, size_t nCols) : nRows_(nRows), nCols_(nCols), data_(ptr) {}
-
-    /*!
-     * \brief cast make a copy of this matrix, with its elements cast as a different type.
-     * \tparam NewReal the type to cast each element to.
-     * \return the copy of the matrix with the new type.
-     */
-    template <typename NewReal>
-    Matrix<NewReal> cast() const {
-        Matrix<NewReal> newMat(nRows_, nCols_);
-        NewReal* newPtr = newMat[0];
-        const Real* dataPtr = data_;
-        for (size_t addr = 0; addr < nRows_ * nCols_; ++addr) *newPtr++ = static_cast<NewReal>(*dataPtr++);
-        return newMat;
-    }
-
-    /*!
-     * \brief setConstant sets all elements of this matrix to a specified value.
-     * \param value the value to set each element to.
-     */
-    void setConstant(Real value) { std::fill(begin(), end(), value); }
-
-    /*!
-     * \brief setZero sets each element of this matrix to zero.
-     */
-    void setZero() { setConstant(0); }
-
-    /*!
-     * \brief isNearZero checks that each element in this matrix has an absolute value below some threshold.
-     * \param threshold the value below which an element is considered zero.
-     * \return whether all values are near zero or not.
-     */
-    bool isNearZero(Real threshold = 1e-10f) const {
-        return !std::any_of(cbegin(), cend(), [&](const Real& val) { return std::abs(val) > threshold; });
-    }
-
-    /*!
-     * \brief inverse inverts this matrix, leaving the original matrix untouched.
-     * \return the inverse of this matrix.
-     */
-    Matrix inverse() const {
-        assertSquare();
-
-        Matrix matrixInverse(nRows_, nRows_);
-
-        if (nRows() == 3) {
-            // 3x3 is a really common case, so treat it here as.
-            Real determinant = data_[0] * (data_[4] * data_[8] - data_[7] * data_[5]) -
-                               data_[1] * (data_[3] * data_[8] - data_[5] * data_[6]) +
-                               data_[2] * (data_[3] * data_[7] - data_[4] * data_[6]);
-
-            Real determinantInverse = 1 / determinant;
-
-            matrixInverse.data_[0] = (data_[4] * data_[8] - data_[7] * data_[5]) * determinantInverse;
-            matrixInverse.data_[1] = (data_[2] * data_[7] - data_[1] * data_[8]) * determinantInverse;
-            matrixInverse.data_[2] = (data_[1] * data_[5] - data_[2] * data_[4]) * determinantInverse;
-            matrixInverse.data_[3] = (data_[5] * data_[6] - data_[3] * data_[8]) * determinantInverse;
-            matrixInverse.data_[4] = (data_[0] * data_[8] - data_[2] * data_[6]) * determinantInverse;
-            matrixInverse.data_[5] = (data_[3] * data_[2] - data_[0] * data_[5]) * determinantInverse;
-            matrixInverse.data_[6] = (data_[3] * data_[7] - data_[6] * data_[4]) * determinantInverse;
-            matrixInverse.data_[7] = (data_[6] * data_[1] - data_[0] * data_[7]) * determinantInverse;
-            matrixInverse.data_[8] = (data_[0] * data_[4] - data_[3] * data_[1]) * determinantInverse;
-        } else {
-            // Generic case; just use spectral decomposition, invert the eigenvalues, and stitch back together.
-            // Note that this only works for symmetric matrices.  Need to hook into Lapack for a general
-            // inversion routine if this becomes a limitation.
-            return this->applyOperation([](Real& element) { element = 1 / element; });
-        }
-        return matrixInverse;
-    }
-
-    /*!
-     * \brief assertSymmetric checks that this matrix is symmetric within some threshold.
-     * \param threshold the value below which an pair's difference is considered zero.
-     */
-    void assertSymmetric(const Real& threshold = 1e-10f) const {
-        assertSquare();
-        for (int row = 0; row < nRows_; ++row) {
-            for (int col = 0; col < row; ++col) {
-                if (std::abs(data_[row * nCols_ + col] - data_[col * nCols_ + row]) > threshold)
-                    throw std::runtime_error("Unexpected non-symmetric matrix found.");
-            }
-        }
-    }
-
-    /*!
-     * \brief applyOperationToEachElement modifies every element in the matrix by applying an operation.
-     * \param function a unary operator describing the operation to perform.
-     */
-    void applyOperationToEachElement(const std::function<void(Real&)>& function) {
-        std::for_each(begin(), end(), function);
-    }
-
-    /*!
-     * \brief applyOperation applies an operation to this matrix using the spectral decomposition,
-     *        leaving the original untouched.  Only for symmetric matrices, as coded.
-     * \param function a undary operator describing the operation to perform.
-     * \return the matrix transformed by the operator.
-     */
-    Matrix applyOperation(const std::function<void(Real&)>& function) const {
-        assertSymmetric();
-
-        auto eigenPairs = this->diagonalize();
-        Matrix evalsReal = std::get<0>(eigenPairs);
-        Matrix evalsImag = std::get<1>(eigenPairs);
-        Matrix evecs = std::get<2>(eigenPairs);
-        if (!evalsImag.isNearZero())
-            throw std::runtime_error("Unexpected complex eigenvalues encountered when applying operator to Matrix.");
-        evalsReal.applyOperationToEachElement(function);
-        Matrix evecsT = evecs.transpose();
-        for (int row = 0; row < nRows_; ++row) {
-            Real transformedEigenvalue = evalsReal[row][0];
-            std::for_each(evecsT.data_ + row * nCols_, evecsT.data_ + (row + 1) * nCols_,
-                          [&](Real& val) { val *= transformedEigenvalue; });
-        }
-        return evecs * evecsT;
-    }
-
-    /*!
-     * \brief assertSameSize make sure that this Matrix has the same dimensions as another Matrix.
-     * \param other the matrix to compare to.
-     */
-    void assertSameSize(const Matrix& other) const {
-        if (nRows_ != other.nRows_ || nCols_ != other.nCols_)
-            throw std::runtime_error("Attepting to compare matrices of different sizes!");
-    }
-
-    /*!
-     * \brief assertSquare make sure that this Matrix is square.
-     */
-    void assertSquare() const {
-        if (nRows_ != nCols_)
-            throw std::runtime_error("Attepting to perform a square matrix operation on a non-square matrix!");
-    }
-
-    /*!
-     * \brief multiply this matrix with another, returning a new matrix containing the product.
-     * \param other the right hand side of the matrix product.
-     * \return the product of this matrix with the matrix other.
-     */
-    Matrix multiply(const Matrix& other) const {
-        // TODO one fine day this should be replaced by GEMM calls, if matrix multiplies actually get used much.
-        if (nCols_ != other.nRows_)
-            throw std::runtime_error("Attempting to multiply matrices with incompatible dimensions.");
-        Matrix product(nRows_, other.nCols_);
-        Real* output = product.data_;
-        for (int row = 0; row < nRows_; ++row) {
-            const Real* rowPtr = data_ + row * nCols_;
-            for (int col = 0; col < other.nCols_; ++col) {
-                for (int link = 0; link < nCols_; ++link) {
-                    *output += rowPtr[link] * other.data_[link * other.nCols_ + col];
-                }
-                ++output;
-            }
-        }
-        return product;
-    }
-
-    /*!
-     * \brief operator * a convenient wrapper for the multiply function.
-     * \param other the right hand side of the matrix product.
-     * \return the product of this matrix with the matrix other.
-     */
-    Matrix operator*(const Matrix& other) const { return this->multiply(other); }
-
-    /*!
-     * \brief almostEquals checks that two matrices have all elements the same, within some specificied tolerance.
-     * \param other the matrix against which we're comparing.
-     * \param tol the amount that each element is allowed to deviate by.
-     * \return whether the two matrices are almost equal.
-     */
-    template <typename T = Real, typename std::enable_if<std::is_floating_point<T>::value, int>::type = 0>
-    bool almostEquals(const Matrix& other, Real tolerance = 1e-6) const {
-        // The floating point version
-        assertSameSize(other);
-
-        return std::equal(cbegin(), cend(), other.cbegin(), [&tolerance](Real a, Real b) -> bool {
-            return (((a - b) < std::real(tolerance)) && ((a - b) > -std::real(tolerance)));
-        });
-    }
-    template <typename T = Real, typename std::enable_if<!std::is_floating_point<T>::value, int>::type = 0>
-    bool almostEquals(const Matrix& other, Real tolerance = 1e-6) const {
-        // The complex version
-        assertSameSize(other);
-
-        auto tol = std::real(tolerance);
-        // This is a little confusing, but the type "Real" is actually some king of std::complex<...>.
-        return std::equal(cbegin(), cend(), other.cbegin(), [&tol](Real a, Real b) -> bool {
-            return (((a.real() - b.real()) < tol) && ((a.real() - b.real()) > -tol) && ((a.imag() - b.imag()) < tol) &&
-                    ((a.imag() - b.imag()) > -tol));
-        });
-    }
-
-    /*!
-     * \brief dot computes the inner product of this matrix with another.
-     * \param other the other matrix in the inner product, which must have the same dimensions.
-     * \return the inner product.
-     */
-    Real dot(const Matrix& other) const {
-        assertSameSize(other);
-
-        return std::inner_product(cbegin(), cend(), other.cbegin(), Real(0));
-    }
-
-    /*!
-     * \brief write formatted matrix to a stream object.
-     * \param os stream object to write to.
-     * \return modified stream object.
-     */
-    std::ostream& write(std::ostream& os) const {
-        for (int row = 0; row < nRows_; ++row) os << stringify(data_ + row * nCols_, nCols_, nCols_);
-        os << std::endl;
-        return os;
-    }
-
-    /*!
-     * \brief transposeInPlace transposes this matrix in place.
-     */
-    void transposeInPlace() {
-        transposeMemoryInPlace(begin(), end(), nCols_);
-        std::swap(nCols_, nRows_);
-    }
-
-    /*!
-     * \brief clone make a new copy of this matrix by deep copying the data.
-     * \return the copy of this matrix.
-     */
-    Matrix clone() const {
-        Matrix newMatrix = Matrix(nRows_, nCols_);
-        std::copy(cbegin(), cend(), newMatrix.begin());
-        return newMatrix;
-    }
-
-    /*!
-     * \brief transpose this matrix, leaving the original untouched.
-     * \return a transposed deep copy of this matrix.
-     */
-    Matrix transpose() const {
-        Matrix copy = this->clone();
-        copy.transposeInPlace();
-        return copy;
-    }
-
-    /*!
-     * \brief diagonalize diagonalize this matrix, leaving the original untouched.
-     * \param order how to order the (eigenvalue,eigenvector) pairs, where the sort key is the real part of the
-     * eigenvalue.
-     * \return a tuple of <real eigenvalue compnents, imaginary eigenvalue components, eigenvectors> sorted
-     * according to the order variable.  The eigenvectors are stored by column.
-     */
-    std::tuple<Matrix<Real>, Matrix<Real>, Matrix<Real>> diagonalize(SortOrder order = SortOrder::Ascending) const {
-        if (nRows_ != nCols_) throw std::runtime_error("Attempting to diagonalize a non-square matrix.");
-        Matrix evalsReal(nRows_, 1);
-        Matrix evalsImag(nRows_, 1);
-        Matrix evecs(nRows_, nRows_);
-        std::vector<Real> clone(data_, data_ + nRows_ * nCols_);
-
-        int info;
-        Real workDim;
-        LapackWrapper<Real>::diagonalizer()('V', 'N', nRows_, clone.data(), nCols_, evalsReal.data_, evalsImag.data_,
-                                            evecs.data_, nCols_, nullptr, 1, &workDim, -1, &info);
-        int scratchSize = static_cast<int>(workDim);
-        std::vector<Real> work(scratchSize);
-        LapackWrapper<Real>::diagonalizer()('V', 'N', nRows_, clone.data(), nCols_, evalsReal.data_, evalsImag.data_,
-                                            evecs.data_, nCols_, nullptr, 1, work.data(), scratchSize, &info);
-        if (info) throw std::runtime_error("Something went wrong during diagonalization!");
-
-        struct eigenInfo {
-            Real valueReal, valueImag, *vector;
-            eigenInfo(Real r, Real i, Real* v) : valueReal(r), valueImag(i), vector(v) {}
-            bool operator<(eigenInfo const& other) const { return valueReal < other.valueReal; }
-        };
-
-        std::vector<eigenInfo> eigenTuples;
-        for (int val = 0; val < nRows_; ++val)
-            eigenTuples.push_back(eigenInfo(evalsReal[val][0], evalsImag[val][0], evecs[val]));
-
-        std::sort(eigenTuples.begin(), eigenTuples.end());
-        if (order == SortOrder::Descending) std::reverse(eigenTuples.begin(), eigenTuples.end());
-        for (int val = 0; val < nRows_; ++val) {
-            const auto& e = eigenTuples[val];
-            evalsReal.data_[val] = e.valueReal;
-            evalsImag.data_[val] = e.valueImag;
-            std::copy(e.vector, e.vector + nCols_, clone.data() + val * nCols_);
-        }
-        std::copy(clone.begin(), clone.end(), evecs.begin());
-        evecs.transposeInPlace();
-        return std::make_tuple(std::move(evalsReal), std::move(evalsImag), std::move(evecs));
-    }
-};
-
-/*!
- * A helper function to allow printing of Matrix objects to a stream.
- */
-template <typename Real>
-std::ostream& operator<<(std::ostream& os, Matrix<Real> const& m) {
-    return m.write(os);
-}
-
-}  // Namespace helpme
-#endif  // Header guard
+// #include "matrix.h"
 // #include "memory.h"
 #if HAVE_MPI == 1
 // original file: ../src/mpi_wrapper.h
@@ -2294,6 +2441,44 @@ class PMEInstance {
 
     /*!
      * \brief Probes the grid and computes the force for a single atom, for arbitrary parameter angular momentum.
+     * \param potentialGrid pointer to the array containing the potential, in ZYX order.
+     * \param nPotentialComponents the number of components in the potential and its derivatives with one extra
+     *        level of angular momentum to permit evaluation of forces.
+     * \param splineA the BSpline object for the A direction.
+     * \param splineB the BSpline object for the B direction.
+     * \param splineC the BSpline object for the C direction.
+     * \param phiPtr a scratch array of length nPotentialComponents, to store the fractional potential.
+     * N.B. Make sure that updateAngMomIterator() has been called first with the appropriate derivative
+     * level for the requested potential derivatives.
+     */
+    void probeGridImpl(const Real *potentialGrid, const int &nPotentialComponents,
+                       const Spline &splineA, const Spline &splineB, const Spline &splineC, Real *phiPtr) {
+        const auto &aGridIterator = gridIteratorA_[splineA.startingGridPoint()];
+        const auto &bGridIterator = gridIteratorB_[splineB.startingGridPoint()];
+        const auto &cGridIterator = gridIteratorC_[splineC.startingGridPoint()];
+        const Real *splineStartA = splineA[0];
+        const Real *splineStartB = splineB[0];
+        const Real *splineStartC = splineC[0];
+        for (const auto &cPoint : cGridIterator) {
+            for (const auto &bPoint : bGridIterator) {
+                const Real *cbRow = potentialGrid + cPoint.first * myDimA_ * myDimB_ + bPoint.first * myDimA_;
+                for (const auto &aPoint : aGridIterator) {
+                    Real gridVal = cbRow[aPoint.first];
+                    for (int component = 0; component < nPotentialComponents; ++component) {
+                        const auto &quanta = angMomIterator_[component];
+                        const Real *splineValsA = splineStartA + quanta[0] * splineOrder_;
+                        const Real *splineValsB = splineStartB + quanta[1] * splineOrder_;
+                        const Real *splineValsC = splineStartC + quanta[2] * splineOrder_;
+                        phiPtr[component] += gridVal * splineValsA[aPoint.second] * splineValsB[bPoint.second] *
+                                             splineValsC[cPoint.second];
+                    }
+                }
+            }
+        }
+    }
+
+    /*!
+     * \brief Probes the grid and computes the force for a single atom, for arbitrary parameter angular momentum.
      * \param atom the absolute atom number.
      * \param potentialGrid pointer to the array containing the potential, in ZYX order.
      * \param nComponents the number of angular momentum components in the parameters.
@@ -2322,28 +2507,7 @@ class PMEInstance {
                        const Spline &splineA, const Spline &splineB, const Spline &splineC, Real *phiPtr,
                        const RealMat &parameters, Real *forces) {
         std::fill(phiPtr, phiPtr + nForceComponents, 0);
-        const auto &aGridIterator = gridIteratorA_[splineA.startingGridPoint()];
-        const auto &bGridIterator = gridIteratorB_[splineB.startingGridPoint()];
-        const auto &cGridIterator = gridIteratorC_[splineC.startingGridPoint()];
-        const Real *splineStartA = splineA[0];
-        const Real *splineStartB = splineB[0];
-        const Real *splineStartC = splineC[0];
-        for (const auto &cPoint : cGridIterator) {
-            for (const auto &bPoint : bGridIterator) {
-                const Real *cbRow = potentialGrid + cPoint.first * myDimA_ * myDimB_ + bPoint.first * myDimA_;
-                for (const auto &aPoint : aGridIterator) {
-                    Real gridVal = cbRow[aPoint.first];
-                    for (int component = 0; component < nForceComponents; ++component) {
-                        const auto &quanta = angMomIterator_[component];
-                        const Real *splineValsA = splineStartA + quanta[0] * splineOrder_;
-                        const Real *splineValsB = splineStartB + quanta[1] * splineOrder_;
-                        const Real *splineValsC = splineStartC + quanta[2] * splineOrder_;
-                        phiPtr[component] += gridVal * splineValsA[aPoint.second] * splineValsB[bPoint.second] *
-                                             splineValsC[cPoint.second];
-                    }
-                }
-            }
-        }
+        probeGridImpl(potentialGrid, nForceComponents, splineA, splineB, splineC, phiPtr);
 
         Real fracForce[3] = {0, 0, 0};
         for (int component = 0; component < nComponents; ++component) {
@@ -3702,6 +3866,58 @@ class PMEInstance {
             virial[0][5] -= force[2] * deltaR[0][2];
         }
         return energy;
+    }
+
+    /*!
+     * \brief Runs a PME reciprocal space calculation, computing the potential and, optionally, its derivatives.
+     * \param parameterAngMom the angular momentum of the parameters (0 for charges, C6 coefficients, 2 for quadrupoles,
+     * etc.).
+     * \param parameters the list of parameters associated with each atom (charges, C6 coefficients, multipoles,
+     * etc...). For a parameter with angular momentum L, a matrix of dimension nAtoms x nL is expected, where nL =
+     * (L+1)*(L+2)*(L+3)/6 and the fast running index nL has the ordering
+     *
+     * 0 X Y Z XX XY YY XZ YZ ZZ XXX XXY XYY YYY XXZ XYZ YYZ XZZ YZZ ZZZ ...
+     *
+     * i.e. generated by the python loops
+     * \code{.py}
+     * for L in range(maxAM+1):
+     *     for Lz in range(0,L+1):
+     *         for Ly in range(0, L - Lz + 1):
+     *              Lx  = L - Ly - Lz
+     * \endcode
+     * \param coordinates the cartesian coordinates, ordered in memory as {x1,y1,z1,x2,y2,z2,....xN,yN,zN}.
+     * \param energy pointer to the variable holding the energy; this is incremented, not assigned.
+     * \param gridPoints the list of grid points at which the potential is needed; can be the same as the coordinates.
+     * \param derivativeLevel the order of the potential derivatives required; 0 is the potential, 1 is (minus) the field, etc.
+     * \param potential the array holding the potential.  This is a matrix of dimensions nAtoms x nD, where nD is the derivative
+     *        level requested.  See the details fo the parameters argument for information about ordering of derivative components.
+     *        N.B. this array is incremented with the potential, not assigned, so take care
+     *        to zero it first if only the current results are desired.
+     */
+    void computePRec(int parameterAngMom, const RealMat &parameters, const RealMat &coordinates, const RealMat &gridPoints, int derivativeLevel, RealMat &potential) {
+        sanityChecks(parameterAngMom, parameters, coordinates);
+        updateAngMomIterator(std::max(parameterAngMom, derivativeLevel));
+
+        // Note: we're calling the version of spread parameters that computes its own splines here.
+        // This is quite inefficient, but allow the potential to be computed at arbitrary locations by
+        // simply regenerating splines on demand in the probing stage.  If this becomes too slow, it's
+        // easy to write some logic to check whether gridPoints and coordinates are the same, and
+        // handle that special case using spline cacheing machinery for efficiency.
+        auto realGrid = spreadParameters(parameterAngMom, parameters, coordinates);
+        auto gridAddress = forwardTransform(realGrid);
+        convolveE(gridAddress);
+        const auto potentialGrid = inverseTransform(gridAddress);
+        auto fracPotential = potential.clone();
+        int nPotentialComponents = nCartesian(derivativeLevel);
+        size_t nPoints = parameters.nRows();
+        for (size_t point = 0; point < nPoints; ++point) {
+            auto bSplines = makeBSplines(gridPoints[point], derivativeLevel);
+            auto splineA = std::get<0>(bSplines);
+            auto splineB = std::get<1>(bSplines);
+            auto splineC = std::get<2>(bSplines);
+            probeGridImpl(potentialGrid, nPotentialComponents, splineA, splineB, splineC, fracPotential[point]);
+        }
+        potential += cartesianTransform(derivativeLevel, scaledRecVecs_, fracPotential);
     }
 
     /*!

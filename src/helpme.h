@@ -29,6 +29,7 @@
 #include <unistd.h>
 #include <vector>
 
+#include "cartesiantransform.h"
 #include "fftw_wrapper.h"
 #include "gamma.h"
 #include "gridsize.h"
@@ -434,6 +435,44 @@ class PMEInstance {
 
     /*!
      * \brief Probes the grid and computes the force for a single atom, for arbitrary parameter angular momentum.
+     * \param potentialGrid pointer to the array containing the potential, in ZYX order.
+     * \param nPotentialComponents the number of components in the potential and its derivatives with one extra
+     *        level of angular momentum to permit evaluation of forces.
+     * \param splineA the BSpline object for the A direction.
+     * \param splineB the BSpline object for the B direction.
+     * \param splineC the BSpline object for the C direction.
+     * \param phiPtr a scratch array of length nPotentialComponents, to store the fractional potential.
+     * N.B. Make sure that updateAngMomIterator() has been called first with the appropriate derivative
+     * level for the requested potential derivatives.
+     */
+    void probeGridImpl(const Real *potentialGrid, const int &nPotentialComponents, const Spline &splineA,
+                       const Spline &splineB, const Spline &splineC, Real *phiPtr) {
+        const auto &aGridIterator = gridIteratorA_[splineA.startingGridPoint()];
+        const auto &bGridIterator = gridIteratorB_[splineB.startingGridPoint()];
+        const auto &cGridIterator = gridIteratorC_[splineC.startingGridPoint()];
+        const Real *splineStartA = splineA[0];
+        const Real *splineStartB = splineB[0];
+        const Real *splineStartC = splineC[0];
+        for (const auto &cPoint : cGridIterator) {
+            for (const auto &bPoint : bGridIterator) {
+                const Real *cbRow = potentialGrid + cPoint.first * myDimA_ * myDimB_ + bPoint.first * myDimA_;
+                for (const auto &aPoint : aGridIterator) {
+                    Real gridVal = cbRow[aPoint.first];
+                    for (int component = 0; component < nPotentialComponents; ++component) {
+                        const auto &quanta = angMomIterator_[component];
+                        const Real *splineValsA = splineStartA + quanta[0] * splineOrder_;
+                        const Real *splineValsB = splineStartB + quanta[1] * splineOrder_;
+                        const Real *splineValsC = splineStartC + quanta[2] * splineOrder_;
+                        phiPtr[component] += gridVal * splineValsA[aPoint.second] * splineValsB[bPoint.second] *
+                                             splineValsC[cPoint.second];
+                    }
+                }
+            }
+        }
+    }
+
+    /*!
+     * \brief Probes the grid and computes the force for a single atom, for arbitrary parameter angular momentum.
      * \param atom the absolute atom number.
      * \param potentialGrid pointer to the array containing the potential, in ZYX order.
      * \param nComponents the number of angular momentum components in the parameters.
@@ -462,28 +501,7 @@ class PMEInstance {
                        const Spline &splineA, const Spline &splineB, const Spline &splineC, Real *phiPtr,
                        const RealMat &parameters, Real *forces) {
         std::fill(phiPtr, phiPtr + nForceComponents, 0);
-        const auto &aGridIterator = gridIteratorA_[splineA.startingGridPoint()];
-        const auto &bGridIterator = gridIteratorB_[splineB.startingGridPoint()];
-        const auto &cGridIterator = gridIteratorC_[splineC.startingGridPoint()];
-        const Real *splineStartA = splineA[0];
-        const Real *splineStartB = splineB[0];
-        const Real *splineStartC = splineC[0];
-        for (const auto &cPoint : cGridIterator) {
-            for (const auto &bPoint : bGridIterator) {
-                const Real *cbRow = potentialGrid + cPoint.first * myDimA_ * myDimB_ + bPoint.first * myDimA_;
-                for (const auto &aPoint : aGridIterator) {
-                    Real gridVal = cbRow[aPoint.first];
-                    for (int component = 0; component < nForceComponents; ++component) {
-                        const auto &quanta = angMomIterator_[component];
-                        const Real *splineValsA = splineStartA + quanta[0] * splineOrder_;
-                        const Real *splineValsB = splineStartB + quanta[1] * splineOrder_;
-                        const Real *splineValsC = splineStartC + quanta[2] * splineOrder_;
-                        phiPtr[component] += gridVal * splineValsA[aPoint.second] * splineValsB[bPoint.second] *
-                                             splineValsC[cPoint.second];
-                    }
-                }
-            }
-        }
+        probeGridImpl(potentialGrid, nForceComponents, splineA, splineB, splineC, phiPtr);
 
         Real fracForce[3] = {0, 0, 0};
         for (int component = 0; component < nComponents; ++component) {
@@ -1842,6 +1860,59 @@ class PMEInstance {
             virial[0][5] -= force[2] * deltaR[0][2];
         }
         return energy;
+    }
+
+    /*!
+     * \brief Runs a PME reciprocal space calculation, computing the potential and, optionally, its derivatives.
+     * \param parameterAngMom the angular momentum of the parameters (0 for charges, C6 coefficients, 2 for quadrupoles,
+     * etc.).
+     * \param parameters the list of parameters associated with each atom (charges, C6 coefficients, multipoles,
+     * etc...). For a parameter with angular momentum L, a matrix of dimension nAtoms x nL is expected, where nL =
+     * (L+1)*(L+2)*(L+3)/6 and the fast running index nL has the ordering
+     *
+     * 0 X Y Z XX XY YY XZ YZ ZZ XXX XXY XYY YYY XXZ XYZ YYZ XZZ YZZ ZZZ ...
+     *
+     * i.e. generated by the python loops
+     * \code{.py}
+     * for L in range(maxAM+1):
+     *     for Lz in range(0,L+1):
+     *         for Ly in range(0, L - Lz + 1):
+     *              Lx  = L - Ly - Lz
+     * \endcode
+     * \param coordinates the cartesian coordinates, ordered in memory as {x1,y1,z1,x2,y2,z2,....xN,yN,zN}.
+     * \param energy pointer to the variable holding the energy; this is incremented, not assigned.
+     * \param gridPoints the list of grid points at which the potential is needed; can be the same as the coordinates.
+     * \param derivativeLevel the order of the potential derivatives required; 0 is the potential, 1 is (minus) the
+     * field, etc. \param potential the array holding the potential.  This is a matrix of dimensions nAtoms x nD, where
+     * nD is the derivative level requested.  See the details fo the parameters argument for information about ordering
+     * of derivative components. N.B. this array is incremented with the potential, not assigned, so take care to
+     * zero it first if only the current results are desired.
+     */
+    void computePRec(int parameterAngMom, const RealMat &parameters, const RealMat &coordinates,
+                     const RealMat &gridPoints, int derivativeLevel, RealMat &potential) {
+        sanityChecks(parameterAngMom, parameters, coordinates);
+        updateAngMomIterator(std::max(parameterAngMom, derivativeLevel));
+
+        // Note: we're calling the version of spread parameters that computes its own splines here.
+        // This is quite inefficient, but allow the potential to be computed at arbitrary locations by
+        // simply regenerating splines on demand in the probing stage.  If this becomes too slow, it's
+        // easy to write some logic to check whether gridPoints and coordinates are the same, and
+        // handle that special case using spline cacheing machinery for efficiency.
+        auto realGrid = spreadParameters(parameterAngMom, parameters, coordinates);
+        auto gridAddress = forwardTransform(realGrid);
+        convolveE(gridAddress);
+        const auto potentialGrid = inverseTransform(gridAddress);
+        auto fracPotential = potential.clone();
+        int nPotentialComponents = nCartesian(derivativeLevel);
+        size_t nPoints = parameters.nRows();
+        for (size_t point = 0; point < nPoints; ++point) {
+            auto bSplines = makeBSplines(gridPoints[point], derivativeLevel);
+            auto splineA = std::get<0>(bSplines);
+            auto splineB = std::get<1>(bSplines);
+            auto splineC = std::get<2>(bSplines);
+            probeGridImpl(potentialGrid, nPotentialComponents, splineA, splineB, splineC, fracPotential[point]);
+        }
+        potential += cartesianTransform(derivativeLevel, scaledRecVecs_, fracPotential);
     }
 
     /*!

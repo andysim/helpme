@@ -9,6 +9,7 @@ set( SOURCES_UNITTESTS_TESTS
     unittest-lattice.cpp
     unittest-matrix.cpp
     unittest-powers.cpp
+    unittest-potential.cpp
     unittest-splines.cpp
     unittest-string.cpp
 )

@@ -23,12 +23,12 @@ Bibliography
    *J. Chem. Phys.*, **103**, 8577 (1995).
 
 .. [Jung:2016:57]
-    `Parallel implementation of 3D FFT with volumetric decomposition schemes for efficient molecular dynamics simulations <http://dx.doi.org/10.1016/j.cpc.2015.10.024>`_,
+   `Parallel implementation of 3D FFT with volumetric decomposition schemes for efficient molecular dynamics simulations <http://dx.doi.org/10.1016/j.cpc.2015.10.024>`_,
    J. Jung, C. Kobayashi, T. Imamura and Y. Sugita,
    *Comp. Phys. Comm.*, **200**, 57 (2016).
 
 .. [Perram:1988:875]
-    `An algorithm for the simulation of condensed matter which grows as the 3/2 power of the number of particles <http://dx.doi.org/10.1080/00268978800101471>`_,
+   `An algorithm for the simulation of condensed matter which grows as the 3/2 power of the number of particles <http://dx.doi.org/10.1080/00268978800101471>`_,
     J. W. Perram , H. G. Petersen, and S. W. De Leeuw,
     *Mol. Phys.*, **65**, 875 (1988).
 
