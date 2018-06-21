@@ -29,6 +29,7 @@ int main(int argc, char *argv[]) {
     double energyD = 0;
     double forcesD[18] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
     double virialD[6] = {0, 0, 0, 0, 0, 0};
+    double potentialAndFieldD[24] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
     PMEInstance *pmeD = helpme_createD();
     helpme_setupD(pmeD, 1, 0.3, 5, 32, 32, 32, scaleFactorD, 1);
@@ -43,6 +44,12 @@ int main(int argc, char *argv[]) {
     // Compute the energy, forces, and virial
     energyD = helpme_compute_EFV_recD(pmeD, 6, 0, &chargesD[0], &coordsD[0], &forcesD[0], &virialD[0]);
     print_resultsD(6, "After EFV_recD", energyD, forcesD, virialD);
+    // Compute the reciprocal space potential and field at the atoms' coordinates
+    helpme_compute_P_recD(pmeD, 6, 0, &chargesD[0], &coordsD[0], 6, &coordsD[0], 1, &potentialAndFieldD[0]);
+    printf("Potential and field:\n");
+    for(int atom = 0; atom < 6; ++atom)
+        printf("%16.10f %16.10f %16.10f %16.10f\n", potentialAndFieldD[4*atom+0], potentialAndFieldD[4*atom+1], potentialAndFieldD[4*atom+2], potentialAndFieldD[4*atom+3]);
+    printf("\n");
     helpme_destroyD(pmeD);
 
     /*
@@ -62,6 +69,7 @@ int main(int argc, char *argv[]) {
     float energyF = 0;
     float forcesF[18] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
     float virialF[6] = {0, 0, 0, 0, 0, 0};
+    float potentialAndFieldF[24] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
     PMEInstance *pmeF = helpme_createF();
     helpme_setupF(pmeF, 1, 0.3, 5, 32, 32, 32, scaleFactorF, 1);
@@ -76,6 +84,12 @@ int main(int argc, char *argv[]) {
     // Compute the energy, forces, and virial
     energyF = helpme_compute_EFV_recF(pmeF, 6, 0, &chargesF[0], &coordsF[0], &forcesF[0], &virialF[0]);
     print_resultsF(6, "After EFV_recF", energyF, forcesF, virialF);
+    // Compute the reciprocal space potential and field at the atoms' coordinates
+    helpme_compute_P_recF(pmeF, 6, 0, &chargesF[0], &coordsF[0], 6, &coordsF[0], 1, &potentialAndFieldF[0]);
+    printf("Potential and field:\n");
+    for(int atom = 0; atom < 6; ++atom)
+        printf("%16.10f %16.10f %16.10f %16.10f\n", potentialAndFieldF[4*atom+0], potentialAndFieldF[4*atom+1], potentialAndFieldF[4*atom+2], potentialAndFieldF[4*atom+3]);
+    printf("\n");
     helpme_destroyF(pmeF);
 
     return 0;

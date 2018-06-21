@@ -155,6 +155,24 @@ module helpme
             integer(c_int),  value :: parameterAngMom
         end function
 
+        subroutine helpme_compute_P_recD(pme, nAtoms, parameterAngMom, parameters, coordinates, nGridPoints,&
+                                         gridPoints, derivativeLevel, potential)&
+                            bind(C, name="helpme_compute_P_recD")
+            use iso_c_binding
+            type(c_ptr), value :: pme, parameters, coordinates, gridPoints, potential
+            integer(c_int), value :: parameterAngMom, derivativeLevel
+            integer(c_size_t), value :: nAtoms, nGridPoints
+        end subroutine
+
+        subroutine helpme_compute_P_recF(pme, nAtoms, parameterAngMom, parameters, coordinates, nGridPoints,&
+                                         gridPoints, derivativeLevel, potential)&
+                            bind(C, name="helpme_compute_P_recF")
+            use iso_c_binding
+            type(c_ptr), value :: pme, parameters, coordinates, gridPoints, potential
+            integer(c_int), value :: parameterAngMom, derivativeLevel
+            integer(c_size_t), value :: nAtoms, nGridPoints
+        end subroutine
+
     end interface
 
     contains

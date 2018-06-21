@@ -53,6 +53,11 @@ void declarePMEInstance(py::module& mod, std::string const& suffix) {
             py::arg("parameters").noconvert(),  // Force pb11 not to make a copy of the incoming numpy data.
             py::arg("coordinates").noconvert(), py::arg("forces").noconvert(), py::arg("virial").noconvert(),
             "Computes the PME reciprocal space energy, forces, and virial.");
+    pme.def("compute_P_rec", &PME::computePRec, py::arg("parameterAngMom"),
+            py::arg("parameters").noconvert(),  // Force pb11 not to make a copy of the incoming numpy data.
+            py::arg("coordinates").noconvert(), py::arg("gridPoints").noconvert(), py::arg("derivativeLevel"),
+            py::arg("potential").noconvert(),
+            "Computes the PME reciprocal space potential and, optionally, its derivatives.");
     py::enum_<typename PME::LatticeType>(pme, "LatticeType")
         .value("ShapeMatrix", PME::LatticeType::ShapeMatrix)
         .value("XAligned", PME::LatticeType::XAligned);

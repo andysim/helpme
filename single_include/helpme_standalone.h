@@ -4301,5 +4301,11 @@ extern double helpme_compute_EFV_recD(struct PMEInstance *pme, size_t nAtoms, in
                                       double *coordinates, double *forces, double *virial);
 extern float helpme_compute_EFV_recF(struct PMEInstance *pme, size_t nAtoms, int parameterAngMom, float *parameters,
                                      float *coordinates, float *forces, float *virial);
+extern void helpme_compute_P_recD(struct PMEInstance *pme, size_t nAtoms, int parameterAngMom, double *parameters,
+                                  double *coordinates, size_t nGridPoints, double *gridPoints, int derivativeLevel,
+                                  double *potential);
+extern void helpme_compute_P_recF(struct PMEInstance *pme, size_t nAtoms, int parameterAngMom, float *parameters,
+                                  float *coordinates, size_t nGridPoints, float *gridPoints, int derivativeLevel,
+                                  float *potential);
 #endif  // C++/C
 #endif  // Header guard

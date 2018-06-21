@@ -253,4 +253,45 @@ float helpme_compute_EFV_recF(PMEInstanceF* pme, int nAtoms, int parameterAngMom
         exit(1);
     }
 }
+
+void helpme_compute_P_recD(PMEInstanceD* pme, size_t nAtoms, int parameterAngMom, double* parameters,
+                           double* coordinates, size_t nGridPoints, double* gridPoints, int derivativeLevel,
+                           double* potential) {
+    try {
+        int nParam = helpme::nCartesian(parameterAngMom);
+        int nDeriv = helpme::nCartesian(derivativeLevel);
+        helpme::Matrix<double> paramMat(parameters, nAtoms, nParam);
+        helpme::Matrix<double> coordMat(coordinates, nAtoms, 3);
+        helpme::Matrix<double> gridMat(gridPoints, nGridPoints, 3);
+        helpme::Matrix<double> potentialMat(potential, nGridPoints, nDeriv);
+        pme->computePRec(parameterAngMom, paramMat, coordMat, gridMat, derivativeLevel, potentialMat);
+        return;
+    } catch (std::runtime_error& e) {
+        std::cerr << e.what() << std::endl;
+        exit(1);
+    } catch (...) {
+        std::cerr << "An unknown error occured in helpme_compute_P_recD" << std::endl;
+        exit(1);
+    }
+}
+
+void helpme_compute_P_recF(PMEInstanceF* pme, size_t nAtoms, int parameterAngMom, float* parameters, float* coordinates,
+                           size_t nGridPoints, float* gridPoints, int derivativeLevel, float* potential) {
+    try {
+        int nParam = helpme::nCartesian(parameterAngMom);
+        int nDeriv = helpme::nCartesian(derivativeLevel);
+        helpme::Matrix<float> paramMat(parameters, nAtoms, nParam);
+        helpme::Matrix<float> coordMat(coordinates, nAtoms, 3);
+        helpme::Matrix<float> gridMat(gridPoints, nGridPoints, 3);
+        helpme::Matrix<float> potentialMat(potential, nGridPoints, nDeriv);
+        pme->computePRec(parameterAngMom, paramMat, coordMat, gridMat, derivativeLevel, potentialMat);
+        return;
+    } catch (std::runtime_error& e) {
+        std::cerr << e.what() << std::endl;
+        exit(1);
+    } catch (...) {
+        std::cerr << "An unknown error occured in helpme_compute_P_recF" << std::endl;
+        exit(1);
+    }
+}
 }
