@@ -12,6 +12,7 @@
 #include "print_results.h"
 
 int main(int argc, char *argv[]) {
+    int atom;
     /*
      * Instantiate double precision PME object
      */
@@ -47,7 +48,7 @@ int main(int argc, char *argv[]) {
     // Compute the reciprocal space potential and field at the atoms' coordinates
     helpme_compute_P_recD(pmeD, 6, 0, &chargesD[0], &coordsD[0], 6, &coordsD[0], 1, &potentialAndFieldD[0]);
     printf("Potential and field:\n");
-    for(int atom = 0; atom < 6; ++atom)
+    for(atom = 0; atom < 6; ++atom)
         printf("%16.10f %16.10f %16.10f %16.10f\n", potentialAndFieldD[4*atom+0], potentialAndFieldD[4*atom+1], potentialAndFieldD[4*atom+2], potentialAndFieldD[4*atom+3]);
     printf("\n");
     helpme_destroyD(pmeD);
@@ -87,7 +88,7 @@ int main(int argc, char *argv[]) {
     // Compute the reciprocal space potential and field at the atoms' coordinates
     helpme_compute_P_recF(pmeF, 6, 0, &chargesF[0], &coordsF[0], 6, &coordsF[0], 1, &potentialAndFieldF[0]);
     printf("Potential and field:\n");
-    for(int atom = 0; atom < 6; ++atom)
+    for(atom = 0; atom < 6; ++atom)
         printf("%16.10f %16.10f %16.10f %16.10f\n", potentialAndFieldF[4*atom+0], potentialAndFieldF[4*atom+1], potentialAndFieldF[4*atom+2], potentialAndFieldF[4*atom+3]);
     printf("\n");
     helpme_destroyF(pmeF);
