@@ -414,6 +414,25 @@ class Matrix {
     Matrix operator*(const Matrix& other) const { return this->multiply(other); }
 
     /*!
+     * \brief increment this matrix with another, returning a new matrix containing the sum.
+     * \param other the right hand side of the matrix sum.
+     * \return the sum of this matrix and the matrix other.
+     */
+    Matrix incrementWith(const Matrix& other) {
+        assertSameSize(other);
+        std::transform(begin(), end(), other.begin(), begin(),
+                       [](const Real& a, const Real& b) -> Real { return a + b; });
+        return *this;
+    }
+
+    /*!
+     * \brief a wrapper around the incrementWith() function.
+     * \param other the right hand side of the matrix sum.
+     * \return the sum of this matrix and the matrix other.
+     */
+    Matrix operator+=(const Matrix& other) { return this->incrementWith(other); }
+
+    /*!
      * \brief almostEquals checks that two matrices have all elements the same, within some specificied tolerance.
      * \param other the matrix against which we're comparing.
      * \param tol the amount that each element is allowed to deviate by.
