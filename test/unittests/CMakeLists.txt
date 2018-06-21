@@ -1,5 +1,6 @@
 # Add any new tests to this list or the one below!
 set( SOURCES_UNITTESTS_TESTS
+    unittest-cartesiantransform.cpp
     unittest-coulombkappasweep.cpp
     unittest-dispersionkappasweep.cpp
     unittest-fullrun.cpp
@@ -8,6 +9,7 @@ set( SOURCES_UNITTESTS_TESTS
     unittest-lattice.cpp
     unittest-matrix.cpp
     unittest-powers.cpp
+    unittest-potential.cpp
     unittest-splines.cpp
     unittest-string.cpp
 )

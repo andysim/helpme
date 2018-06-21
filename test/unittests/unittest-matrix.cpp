@@ -84,6 +84,14 @@ TEST_CASE("test the matrix class.") {
         REQUIRE(matT.almostEquals(mat.transpose()));
     }
 
+    SECTION("Increment") {
+        helpme::Matrix<double> mat1({{1, 1, 1}, {2, 2, 2}, {3, 3, 3}});
+        helpme::Matrix<double> mat2({{1, 1, 1}, {1, 1, 1}, {1, 1, 1}});
+        helpme::Matrix<double> mat3({{2, 2, 2}, {3, 3, 3}, {4, 4, 4}});
+        mat1 += mat2;
+        REQUIRE(mat1.almostEquals(mat3));
+    }
+
     SECTION("Slicing") {
         helpme::Matrix<double> mat({{1, 1, 1}, {2, 2, 2}, {3, 3, 3}});
 
