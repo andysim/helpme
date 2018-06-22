@@ -3926,7 +3926,7 @@ class PMEInstance {
         const auto potentialGrid = inverseTransform(gridAddress);
         auto fracPotential = potential.clone();
         int nPotentialComponents = nCartesian(derivativeLevel);
-        size_t nPoints = parameters.nRows();
+        size_t nPoints = gridPoints.nRows();
         for (size_t point = 0; point < nPoints; ++point) {
             auto bSplines = makeBSplines(gridPoints[point], derivativeLevel);
             auto splineA = std::get<0>(bSplines);
