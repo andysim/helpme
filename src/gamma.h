@@ -366,5 +366,28 @@ struct gammaComputer {
     static constexpr Real value = gammaRecursion<Real, twoS, (twoS > 0)>::value;
 };
 
+/*!
+ * \brief Computes the Gamma function using recursion instead of template metaprogramming.
+ * \f$ \Gamma[s] = \int_0^\infty t^{s-1} e^{-t} \mathrm{d}t \f$
+ * In this code we only need half integral values for the \f$s\f$ argument, so the input
+ * argument \f$s\f$ will yield \f$\Gamma[\frac{s}{2}]\f$.
+ * \tparam Real the floating point type to use for arithmetic.
+ * \param twoS twice the s value required.
+ */
+template <typename Real>
+Real nonTemplateGammaComputer(int twoS) {
+    if (twoS == 1) {
+        return sqrtPi;
+    } else if (twoS == 2) {
+        return 1;
+    } else if (twoS <= 0 && twoS % 2 == 0) {
+        return std::numeric_limits<Real>::max();
+    } else if (twoS > 0) {
+        return nonTemplateGammaComputer<Real>(twoS - 2) * (0.5f * twoS - 1);
+    } else {
+        return nonTemplateGammaComputer<Real>(twoS + 2) / (0.5f * twoS);
+    }
+}
+
 }  // Namespace helpme
 #endif  // Header guard

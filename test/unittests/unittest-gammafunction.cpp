@@ -37,6 +37,25 @@ TEST_CASE("test the gamma function and incomplete gamma function.") {
         gamma = helpme::gammaComputer<double, 4>::value;
         REQUIRE(gamma == Approx(1.0).margin(TOL));
 
+        gamma = helpme::nonTemplateGammaComputer<double>(-4);
+        REQUIRE(gamma == Approx(std::numeric_limits<double>::max()).margin(TOL));
+        gamma = helpme::nonTemplateGammaComputer<double>(-3);
+        REQUIRE(gamma == Approx(2.363271801).margin(TOL));
+        gamma = helpme::nonTemplateGammaComputer<double>(-2);
+        REQUIRE(gamma == Approx(std::numeric_limits<double>::max()).margin(TOL));
+        gamma = helpme::nonTemplateGammaComputer<double>(-1);
+        REQUIRE(gamma == Approx(-3.544907702).margin(TOL));
+        gamma = helpme::nonTemplateGammaComputer<double>(0);
+        REQUIRE(gamma == Approx(std::numeric_limits<double>::max()).margin(TOL));
+        gamma = helpme::nonTemplateGammaComputer<double>(1);
+        REQUIRE(gamma == Approx(1.772453851).margin(TOL));
+        gamma = helpme::nonTemplateGammaComputer<double>(2);
+        REQUIRE(gamma == Approx(1.0).margin(TOL));
+        gamma = helpme::nonTemplateGammaComputer<double>(3);
+        REQUIRE(gamma == Approx(8.862269255e-1).margin(TOL));
+        gamma = helpme::nonTemplateGammaComputer<double>(4);
+        REQUIRE(gamma == Approx(1.0).margin(TOL));
+
         REQUIRE(helpme::incompleteGammaComputer<double, -4>::compute(0.1) == Approx(4.162914579e1).margin(TOL));
         REQUIRE(helpme::incompleteGammaComputer<double, -3>::compute(0.1) == Approx(1.680780146e1).margin(TOL));
         REQUIRE(helpme::incompleteGammaComputer<double, -2>::compute(0.1) == Approx(7.225450222).margin(TOL));
@@ -117,6 +136,25 @@ TEST_CASE("test the gamma function and incomplete gamma function.") {
         gamma = helpme::gammaComputer<float, 3>::value;
         REQUIRE(gamma == Approx(8.862269255e-1f).margin(TOL));
         gamma = helpme::gammaComputer<float, 4>::value;
+        REQUIRE(gamma == Approx(1.0f).margin(TOL));
+
+        gamma = helpme::nonTemplateGammaComputer<float>(-4);
+        REQUIRE(gamma == Approx(std::numeric_limits<float>::max()).margin(TOL));
+        gamma = helpme::nonTemplateGammaComputer<float>(-3);
+        REQUIRE(gamma == Approx(2.363271801f).margin(TOL));
+        gamma = helpme::nonTemplateGammaComputer<float>(-2);
+        REQUIRE(gamma == Approx(std::numeric_limits<float>::max()).margin(TOL));
+        gamma = helpme::nonTemplateGammaComputer<float>(-1);
+        REQUIRE(gamma == Approx(-3.544907702f).margin(TOL));
+        gamma = helpme::nonTemplateGammaComputer<float>(0);
+        REQUIRE(gamma == Approx(std::numeric_limits<float>::max()).margin(TOL));
+        gamma = helpme::nonTemplateGammaComputer<float>(1);
+        REQUIRE(gamma == Approx(1.772453851f).margin(TOL));
+        gamma = helpme::nonTemplateGammaComputer<float>(2);
+        REQUIRE(gamma == Approx(1.0f).margin(TOL));
+        gamma = helpme::nonTemplateGammaComputer<float>(3);
+        REQUIRE(gamma == Approx(8.862269255e-1f).margin(TOL));
+        gamma = helpme::nonTemplateGammaComputer<float>(4);
         REQUIRE(gamma == Approx(1.0f).margin(TOL));
 
         REQUIRE(helpme::incompleteGammaComputer<float, -4>::compute(0.1) == Approx(4.162914579e1f).margin(TOL));
