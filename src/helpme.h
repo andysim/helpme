@@ -73,7 +73,6 @@ static int cartAddress(int lx, int ly, int lz) {
 // This is used to define function pointers in the constructor, and makes it easy to add new kernels.
 #define ENABLE_KERNEL_WITH_INVERSE_R_EXPONENT_OF(n)                  \
     case n:                                                          \
-        convolveEFxn_ = &convolveEImpl<n>;                           \
         convolveEVFxn_ = &convolveEVImpl<n>;                         \
         cacheInfluenceFunctionFxn_ = &cacheInfluenceFunctionImpl<n>; \
         slfEFxn_ = &slfEImpl<n>;                                     \
@@ -160,10 +159,6 @@ class PMEInstance {
     RealVec splineModA_, splineModB_, splineModC_;
     /// The cached influence function involved in the convolution.
     RealVec cachedInfluenceFunction_;
-    /// A function pointer to call the approprate function to implement convolution, templated to the rPower value.
-    std::function<Real(int, int, int, int, int, int, int, Real, Complex *, const RealMat &, Real, Real, const Real *,
-                       const Real *, const Real *, int)>
-        convolveEFxn_;
     /// A function pointer to call the approprate function to implement convolution with virial, templated to
     /// the rPower value.
     std::function<Real(int, int, int, int, int, int, int, Real, Complex *, const RealMat &, Real, Real, const Real *,
@@ -630,92 +625,9 @@ class PMEInstance {
     }
 
     /*!
-     * \brief convolveEImpl performs the reciprocal space convolution, returning the energy
-     * \tparam rPower the exponent of the (inverse) distance kernel (e.g. 1 for Coulomb, 6 for attractive dispersion).
-     * \param nx the grid dimension in the x direction.
-     * \param ny the grid dimension in the y direction.
-     * \param nz the grid dimension in the z direction.
-     * \param myNx the subset of the grid in the x direction to be handled by this node.
-     * \param myNy the subset of the grid in the y direction to be handled by this node.
-     * \param startX the starting grid point handled by this node in the X direction.
-     * \param startY the starting grid point handled by this node in the Y direction.
-     * \param scaleFactor a scale factor to be applied to all computed energies and derivatives thereof (e.g. the
-     *        1 / [4 pi epslion0] for Coulomb calculations).
-     * \param gridPtr the Fourier space grid, with ordering YXZ.
-     * \param boxInv the reciprocal lattice vectors.
-     * \param volume the volume of the unit cell.
-     * \param kappa the attenuation parameter in units inverse of those used to specify coordinates.
-     * \param xMods the Fourier space norms of the x B-Splines.
-     * \param yMods the Fourier space norms of the y B-Splines.
-     * \param zMods the Fourier space norms of the z B-Splines.
-     * \param nThreads the number of OpenMP threads to use.
-     * \return the reciprocal space energy.
-     */
-    template <int rPower>
-    static Real convolveEImpl(int nx, int ny, int nz, int myNx, int myNy, int startX, int startY, Real scaleFactor,
-                              Complex *gridPtr, const RealMat &boxInv, Real volume, Real kappa, const Real *xMods,
-                              const Real *yMods, const Real *zMods, int nThreads) {
-        Real energy = 0;
-
-        bool nodeZero = startX == 0 && startY == 0;
-        if (rPower > 3 && nodeZero) {
-            // Kernels with rPower>3 are absolutely convergent and should have the m=0 term present.
-            // To compute it we need sum_ij c(i)c(j), which can be obtained from the structure factor norm.
-            Real prefac = 2 * scaleFactor * M_PI * sqrtPi * pow(kappa, rPower - 3) /
-                          ((rPower - 3) * gammaComputer<Real, rPower>::value * volume);
-            energy += prefac * std::norm(gridPtr[0]);
-        }
-        // Ensure the m=0 term convolution product is zeroed for the backtransform; it's been accounted for above.
-        if (nodeZero) gridPtr[0] = Complex(0, 0);
-
-        std::vector<short> xMVals(myNx), yMVals(myNy), zMVals(nz);
-        // Iterators to conveniently map {X,Y,Z} grid location to m_{X,Y,Z} value, where -1/2 << m/dim < 1/2.
-        for (int kx = 0; kx < myNx; ++kx) xMVals[kx] = startX + (kx + startX >= (nx + 1) / 2 ? kx - nx : kx);
-        for (int ky = 0; ky < myNy; ++ky) yMVals[ky] = startY + (ky + startY >= (ny + 1) / 2 ? ky - ny : ky);
-        for (int kz = 0; kz < nz; ++kz) zMVals[kz] = kz >= (nz + 1) / 2 ? kz - nz : kz;
-
-        Real bPrefac = M_PI * M_PI / (kappa * kappa);
-        Real volPrefac = scaleFactor * pow(M_PI, rPower - 1) / (sqrtPi * gammaComputer<Real, rPower>::value * volume);
-        int halfNx = nx / 2 + 1;
-        size_t nxz = myNx * nz;
-        const Real *boxPtr = boxInv[0];
-        size_t nyxz = myNy * nxz;
-        // Exclude m=0 cell.
-        int start = (nodeZero ? 1 : 0);
-// Writing the three nested loops in one allows for better load balancing in parallel.
-#pragma omp parallel for reduction(+ : energy) num_threads(nThreads)
-        for (size_t yxz = start; yxz < nyxz; ++yxz) {
-            size_t xz = yxz % nxz;
-            short ky = yxz / nxz;
-            short kx = xz / nz;
-            short kz = xz % nz;
-            // We only loop over the first nx/2+1 x values; this
-            // accounts for the "missing" complex conjugate values.
-            Real permPrefac = kx + startX != 0 && kx + startX != halfNx - 1 ? 2 : 1;
-            Real mx = (Real)xMVals[kx];
-            Real my = (Real)yMVals[ky];
-            Real mz = (Real)zMVals[kz];
-            Real mVecX = boxPtr[0] * mx + boxPtr[1] * my + boxPtr[2] * mz;
-            Real mVecY = boxPtr[3] * mx + boxPtr[4] * my + boxPtr[5] * mz;
-            Real mVecZ = boxPtr[6] * mx + boxPtr[7] * my + boxPtr[8] * mz;
-            Real mNormSq = mVecX * mVecX + mVecY * mVecY + mVecZ * mVecZ;
-            Real mTerm = raiseNormToIntegerPower<Real, rPower - 3>::compute(mNormSq);
-            Real bSquared = bPrefac * mNormSq;
-            Real incompleteGammaTerm = incompleteGammaComputer<Real, 3 - rPower>::compute(bSquared);
-            Complex &gridVal = gridPtr[ky * nxz + kx * nz + kz];
-            Real structFacNorm = std::norm(gridVal);
-            Real influenceFunction =
-                volPrefac * incompleteGammaTerm * mTerm * yMods[ky + startY] * xMods[kx + startX] * zMods[kz];
-            gridVal *= influenceFunction;
-            energy += permPrefac * influenceFunction * structFacNorm;
-        }
-        energy /= 2;
-
-        return energy;
-    }
-
-    /*!
-     * \brief convolveEVImpl performs the reciprocal space convolution, returning the energy
+     * \brief convolveEVImpl performs the reciprocal space convolution, returning the energy.  We opt to not cache
+     *        this the same way as the non-virial version because it's safe to assume that if the virial is requested
+     *        the box is likely to change, which renders the cache useless.
      * \tparam rPower the exponent of the (inverse) distance kernel (e.g. 1 for Coulomb, 6 for attractive dispersion).
      * \param nx the grid dimension in the x direction.
      * \param ny the grid dimension in the y direction.
