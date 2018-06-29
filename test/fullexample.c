@@ -6,13 +6,36 @@
 // Author: Andrew C. Simmonett
 //
 // ENDLICENSE
+#include <assert.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "helpme.h"
 #include "print_results.h"
 
 int main(int argc, char *argv[]) {
     int atom;
+
+    /*
+     * Set up reference data for testing
+     */
+    double toleranceD = 1e-8;
+    double toleranceF = 1e-4;
+    double expectedEnergy = 5.864957414;
+    double expectedForces[18] = {-1.20630693, -1.49522843, 12.65589187,
+                                  1.00695882,  0.88956328, -5.08428301,
+                                  0.69297661,  1.09547848, -5.22771480,
+                                 -2.28988057, -2.10832506, 10.18914165,
+                                  0.81915340,  0.92013663, -6.43738026,
+                                  0.97696467,  0.69833887, -6.09492437};
+    double expectedVirial[6] = {0.65613058, 0.49091167, 0.61109732, 2.26906257, 2.31925449, -10.04901641};
+    double expectedPotential[24] = { 1.18119329, -0.72320559, -0.89641992, 7.58746515,
+                                     7.69247982, -1.20738468, -1.06662264, 6.09626260,
+                                     8.73449635, -0.83090721, -1.31352336, 6.26824317,
+                                    -9.98483179, -1.37283008, -1.26398385, 6.10859811,
+                                    -3.50591589, -0.98219832, -1.10328133, 7.71868137,
+                                    -2.39904512, -1.17142047, -0.83733677, 7.30806279};
+
     /*
      * Instantiate double precision PME object
      */
@@ -30,7 +53,7 @@ int main(int argc, char *argv[]) {
     double energyD = 0;
     double forcesD[18] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
     double virialD[6] = {0, 0, 0, 0, 0, 0};
-    double potentialAndFieldD[24] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+    double potentialAndGradientD[24] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
     PMEInstance *pmeD = helpme_createD();
     helpme_setupD(pmeD, 1, 0.3, 5, 32, 32, 32, scaleFactorD, 1);
@@ -45,13 +68,18 @@ int main(int argc, char *argv[]) {
     // Compute the energy, forces, and virial
     energyD = helpme_compute_EFV_recD(pmeD, 6, 0, &chargesD[0], &coordsD[0], &forcesD[0], &virialD[0]);
     print_resultsD(6, "After EFV_recD", energyD, forcesD, virialD);
-    // Compute the reciprocal space potential and field at the atoms' coordinates
-    helpme_compute_P_recD(pmeD, 6, 0, &chargesD[0], &coordsD[0], 6, &coordsD[0], 1, &potentialAndFieldD[0]);
-    printf("Potential and field:\n");
+    // Compute the reciprocal space potential and its gradient at the atoms' coordinates
+    helpme_compute_P_recD(pmeD, 6, 0, &chargesD[0], &coordsD[0], 6, &coordsD[0], 1, &potentialAndGradientD[0]);
+    printf("Potential and its gradient:\n");
     for(atom = 0; atom < 6; ++atom)
-        printf("%16.10f %16.10f %16.10f %16.10f\n", potentialAndFieldD[4*atom+0], potentialAndFieldD[4*atom+1], potentialAndFieldD[4*atom+2], potentialAndFieldD[4*atom+3]);
+        printf("%16.10f %16.10f %16.10f %16.10f\n", potentialAndGradientD[4*atom+0], potentialAndGradientD[4*atom+1], potentialAndGradientD[4*atom+2], potentialAndGradientD[4*atom+3]);
     printf("\n");
     helpme_destroyD(pmeD);
+
+    assert_close(1, &expectedEnergy, (void*) &energyD, toleranceD, sizeof(double),  __FILE__, __LINE__);
+    assert_close(18, expectedForces, (void*) forcesD, toleranceD, sizeof(double),  __FILE__, __LINE__);
+    assert_close(6, expectedVirial, (void*) virialD, toleranceD, sizeof(double),  __FILE__, __LINE__);
+    assert_close(24, expectedPotential, (void*) potentialAndGradientD, toleranceD, sizeof(double),  __FILE__, __LINE__);
 
     /*
      * Instantiate single precision PME object
@@ -70,7 +98,7 @@ int main(int argc, char *argv[]) {
     float energyF = 0;
     float forcesF[18] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
     float virialF[6] = {0, 0, 0, 0, 0, 0};
-    float potentialAndFieldF[24] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+    float potentialAndGradientF[24] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
     PMEInstance *pmeF = helpme_createF();
     helpme_setupF(pmeF, 1, 0.3, 5, 32, 32, 32, scaleFactorF, 1);
@@ -85,13 +113,18 @@ int main(int argc, char *argv[]) {
     // Compute the energy, forces, and virial
     energyF = helpme_compute_EFV_recF(pmeF, 6, 0, &chargesF[0], &coordsF[0], &forcesF[0], &virialF[0]);
     print_resultsF(6, "After EFV_recF", energyF, forcesF, virialF);
-    // Compute the reciprocal space potential and field at the atoms' coordinates
-    helpme_compute_P_recF(pmeF, 6, 0, &chargesF[0], &coordsF[0], 6, &coordsF[0], 1, &potentialAndFieldF[0]);
-    printf("Potential and field:\n");
+    // Compute the reciprocal space potential and its gradient at the atoms' coordinates
+    helpme_compute_P_recF(pmeF, 6, 0, &chargesF[0], &coordsF[0], 6, &coordsF[0], 1, &potentialAndGradientF[0]);
+    printf("Potential and its gradient:\n");
     for(atom = 0; atom < 6; ++atom)
-        printf("%16.10f %16.10f %16.10f %16.10f\n", potentialAndFieldF[4*atom+0], potentialAndFieldF[4*atom+1], potentialAndFieldF[4*atom+2], potentialAndFieldF[4*atom+3]);
+        printf("%16.10f %16.10f %16.10f %16.10f\n", potentialAndGradientF[4*atom+0], potentialAndGradientF[4*atom+1], potentialAndGradientF[4*atom+2], potentialAndGradientF[4*atom+3]);
     printf("\n");
     helpme_destroyF(pmeF);
+
+    assert_close(1, &expectedEnergy, (void*) &energyF, toleranceF, sizeof(float),  __FILE__, __LINE__);
+    assert_close(18, expectedForces, (void*) forcesF, toleranceF, sizeof(float),  __FILE__, __LINE__);
+    assert_close(6, expectedVirial, (void*) virialF, toleranceF, sizeof(float),  __FILE__, __LINE__);
+    assert_close(24, expectedPotential, (void*) potentialAndGradientF, toleranceF, sizeof(float),  __FILE__, __LINE__);
 
     return 0;
 }
