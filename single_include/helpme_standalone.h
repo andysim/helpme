@@ -2519,9 +2519,9 @@ class PMEInstance {
             }
         }
 
-        forces[0] += parameter * (scaledRecVecs_[0][0] * Ex + scaledRecVecs_[0][1] * Ey + scaledRecVecs_[0][2] * Ez);
-        forces[1] += parameter * (scaledRecVecs_[1][0] * Ex + scaledRecVecs_[1][1] * Ey + scaledRecVecs_[1][2] * Ez);
-        forces[2] += parameter * (scaledRecVecs_[2][0] * Ex + scaledRecVecs_[2][1] * Ey + scaledRecVecs_[2][2] * Ez);
+        forces[0] -= parameter * (scaledRecVecs_[0][0] * Ex + scaledRecVecs_[0][1] * Ey + scaledRecVecs_[0][2] * Ez);
+        forces[1] -= parameter * (scaledRecVecs_[1][0] * Ex + scaledRecVecs_[1][1] * Ey + scaledRecVecs_[1][2] * Ez);
+        forces[2] -= parameter * (scaledRecVecs_[2][0] * Ex + scaledRecVecs_[2][1] * Ey + scaledRecVecs_[2][2] * Ez);
     }
 
     /*!
@@ -2601,9 +2601,9 @@ class PMEInstance {
             short lx = quanta[0];
             short ly = quanta[1];
             short lz = quanta[2];
-            fracForce[0] += param * phiPtr[cartAddress(lx + 1, ly, lz)];
-            fracForce[1] += param * phiPtr[cartAddress(lx, ly + 1, lz)];
-            fracForce[2] += param * phiPtr[cartAddress(lx, ly, lz + 1)];
+            fracForce[0] -= param * phiPtr[cartAddress(lx + 1, ly, lz)];
+            fracForce[1] -= param * phiPtr[cartAddress(lx, ly + 1, lz)];
+            fracForce[2] -= param * phiPtr[cartAddress(lx, ly, lz + 1)];
         }
         forces[0] += scaledRecVecs_[0][0] * fracForce[0] + scaledRecVecs_[0][1] * fracForce[1] +
                      scaledRecVecs_[0][2] * fracForce[2];
@@ -3761,7 +3761,7 @@ class PMEInstance {
             Real fKernel = std::get<1>(kernels);
             Real prefactor = scaleFactor_ * parameters(i, 0) * parameters(j, 0);
             energy += prefactor * eKernel;
-            Real f = prefactor * fKernel;
+            Real f = -prefactor * fKernel;
             auto force = deltaR.row(0);
             force *= f;
             forces.row(i) -= force;
@@ -3814,18 +3814,18 @@ class PMEInstance {
             Real fKernel = std::get<1>(kernels);
             Real prefactor = scaleFactor_ * parameters(i, 0) * parameters(j, 0);
             energy += prefactor * eKernel;
-            Real f = prefactor * fKernel;
+            Real f = -prefactor * fKernel;
             RealMat dRCopy = deltaR.clone();
             auto force = dRCopy.row(0);
             force *= f;
             forces.row(i) -= force;
             forces.row(j) += force;
-            virial[0][0] -= force[0] * deltaR[0][0];
-            virial[0][1] -= 0.5f * (force[0] * deltaR[0][1] + force[1] * deltaR[0][0]);
-            virial[0][2] -= force[1] * deltaR[0][1];
-            virial[0][3] -= 0.5f * (force[0] * deltaR[0][2] + force[2] * deltaR[0][0]);
-            virial[0][4] -= 0.5f * (force[1] * deltaR[0][2] + force[2] * deltaR[0][1]);
-            virial[0][5] -= force[2] * deltaR[0][2];
+            virial[0][0] += force[0] * deltaR[0][0];
+            virial[0][1] += 0.5f * (force[0] * deltaR[0][1] + force[1] * deltaR[0][0]);
+            virial[0][2] += force[1] * deltaR[0][1];
+            virial[0][3] += 0.5f * (force[0] * deltaR[0][2] + force[2] * deltaR[0][0]);
+            virial[0][4] += 0.5f * (force[1] * deltaR[0][2] + force[2] * deltaR[0][1]);
+            virial[0][5] += force[2] * deltaR[0][2];
         }
         return energy;
     }
@@ -3913,7 +3913,7 @@ class PMEInstance {
             Real fKernel = std::get<1>(kernels);
             Real prefactor = scaleFactor_ * parameters(i, 0) * parameters(j, 0);
             energy += prefactor * eKernel;
-            Real f = prefactor * fKernel;
+            Real f = -prefactor * fKernel;
             auto force = deltaR.row(0);
             force *= f;
             forces.row(i) -= force;
@@ -3966,18 +3966,18 @@ class PMEInstance {
             Real fKernel = std::get<1>(kernels);
             Real prefactor = scaleFactor_ * parameters(i, 0) * parameters(j, 0);
             energy += prefactor * eKernel;
-            Real f = prefactor * fKernel;
+            Real f = -prefactor * fKernel;
             RealMat dRCopy = deltaR.clone();
             auto force = dRCopy.row(0);
             force *= f;
             forces.row(i) -= force;
             forces.row(j) += force;
-            virial[0][0] -= force[0] * deltaR[0][0];
-            virial[0][1] -= 0.5f * (force[0] * deltaR[0][1] + force[1] * deltaR[0][0]);
-            virial[0][2] -= force[1] * deltaR[0][1];
-            virial[0][3] -= 0.5f * (force[0] * deltaR[0][2] + force[2] * deltaR[0][0]);
-            virial[0][4] -= 0.5f * (force[1] * deltaR[0][2] + force[2] * deltaR[0][1]);
-            virial[0][5] -= force[2] * deltaR[0][2];
+            virial[0][0] += force[0] * deltaR[0][0];
+            virial[0][1] += 0.5f * (force[0] * deltaR[0][1] + force[1] * deltaR[0][0]);
+            virial[0][2] += force[1] * deltaR[0][1];
+            virial[0][3] += 0.5f * (force[0] * deltaR[0][2] + force[2] * deltaR[0][0]);
+            virial[0][4] += 0.5f * (force[1] * deltaR[0][2] + force[2] * deltaR[0][1]);
+            virial[0][5] += force[2] * deltaR[0][2];
         }
         return energy;
     }
