@@ -1571,6 +1571,29 @@ struct gammaComputer {
     static constexpr Real value = gammaRecursion<Real, twoS, (twoS > 0)>::value;
 };
 
+/*!
+ * \brief Computes the Gamma function using recursion instead of template metaprogramming.
+ * \f$ \Gamma[s] = \int_0^\infty t^{s-1} e^{-t} \mathrm{d}t \f$
+ * In this code we only need half integral values for the \f$s\f$ argument, so the input
+ * argument \f$s\f$ will yield \f$\Gamma[\frac{s}{2}]\f$.
+ * \tparam Real the floating point type to use for arithmetic.
+ * \param twoS twice the s value required.
+ */
+template <typename Real>
+Real nonTemplateGammaComputer(int twoS) {
+    if (twoS == 1) {
+        return sqrtPi;
+    } else if (twoS == 2) {
+        return 1;
+    } else if (twoS <= 0 && twoS % 2 == 0) {
+        return std::numeric_limits<Real>::max();
+    } else if (twoS > 0) {
+        return nonTemplateGammaComputer<Real>(twoS - 2) * (0.5f * twoS - 1);
+    } else {
+        return nonTemplateGammaComputer<Real>(twoS + 2) / (0.5f * twoS);
+    }
+}
+
 }  // Namespace helpme
 #endif  // Header guard
 // original file: ../src/gridsize.h
@@ -2093,15 +2116,15 @@ static int cartAddress(int lx, int ly, int lz) {
 }
 
 // This is used to define function pointers in the constructor, and makes it easy to add new kernels.
-#define ENABLE_KERNEL_WITH_INVERSE_R_EXPONENT_OF(n) \
-    case n:                                         \
-        convolveEFxn_ = &convolveEImpl<n>;          \
-        convolveEVFxn_ = &convolveEVImpl<n>;        \
-        slfEFxn_ = &slfEImpl<n>;                    \
-        dirEFxn_ = &dirEImpl<n>;                    \
-        adjEFxn_ = &adjEImpl<n>;                    \
-        dirEFFxn_ = &dirEFImpl<n>;                  \
-        adjEFFxn_ = &adjEFImpl<n>;                  \
+#define ENABLE_KERNEL_WITH_INVERSE_R_EXPONENT_OF(n)                  \
+    case n:                                                          \
+        convolveEVFxn_ = &convolveEVImpl<n>;                         \
+        cacheInfluenceFunctionFxn_ = &cacheInfluenceFunctionImpl<n>; \
+        slfEFxn_ = &slfEImpl<n>;                                     \
+        dirEFxn_ = &dirEImpl<n>;                                     \
+        adjEFxn_ = &adjEImpl<n>;                                     \
+        dirEFFxn_ = &dirEFImpl<n>;                                   \
+        adjEFFxn_ = &adjEFImpl<n>;                                   \
         break;
 
 /*!
@@ -2136,6 +2159,17 @@ class PMEInstance {
     using RealMat = Matrix<Real>;
     using RealVec = helpme::vector<Real>;
 
+   public:
+    /*!
+     * \brief The different conventions for orienting a lattice constructed from input parameters.
+     */
+    enum class LatticeType : int { XAligned = 0, ShapeMatrix = 1 };
+
+    /*!
+     * \brief The different conventions for numbering nodes.
+     */
+    enum class NodeOrder : int { ZYX = 0 };
+
    protected:
     /// The FFT grid dimensions in the {A,B,C} grid dimensions.
     int dimA_, dimB_, dimC_;
@@ -2168,15 +2202,18 @@ class PMEInstance {
     GridIterator gridIteratorA_, gridIteratorB_, gridIteratorC_;
     /// The (inverse) bspline moduli to normalize the spreading / probing steps; these are folded into the convolution.
     RealVec splineModA_, splineModB_, splineModC_;
-    /// A function pointer to call the approprate function to implement convolution, templated to the rPower value.
-    std::function<Real(int, int, int, int, int, int, int, Real, Complex *, const RealMat &, Real, Real, const Real *,
-                       const Real *, const Real *, int)>
-        convolveEFxn_;
+    /// The cached influence function involved in the convolution.
+    RealVec cachedInfluenceFunction_;
     /// A function pointer to call the approprate function to implement convolution with virial, templated to
     /// the rPower value.
     std::function<Real(int, int, int, int, int, int, int, Real, Complex *, const RealMat &, Real, Real, const Real *,
                        const Real *, const Real *, RealMat &, int)>
         convolveEVFxn_;
+    /// A function pointer to call the approprate function to implement cacheing of the influence function that appears
+    //  in the convolution, templated to the rPower value.
+    std::function<void(int, int, int, int, int, int, int, Real, RealVec &, const RealMat &, Real, Real, const Real *,
+                       const Real *, const Real *, int)>
+        cacheInfluenceFunctionFxn_;
     /// A function pointer to call the approprate function to compute self energy, templated to the rPower value.
     std::function<Real(int, const RealMat &, Real, Real)> slfEFxn_;
     /// A function pointer to call the approprate function to compute the direct energy, templated to the rPower value.
@@ -2210,6 +2247,24 @@ class PMEInstance {
     int subsetOfCAlongA_, subsetOfCAlongB_, subsetOfBAlongC_;
     /// The size of a cache line, in units of the size of the Real type, to allow better memory allocation policies.
     Real cacheLineSizeInReals_;
+    /// The current unit cell parameters.
+    Real cellA_, cellB_, cellC_, cellAlpha_, cellBeta_, cellGamma_;
+    /// Whether the unit cell parameters have been changed, invalidating cached gF quantities.
+    bool unitCellHasChanged_;
+    /// Whether the kappa has been changed, invalidating kappa-dependent quantities.
+    bool kappaHasChanged_;
+    /// Whether any of the grid dimensions have changed.
+    bool gridDimensionHasChanged_;
+    /// Whether the spline order has changed.
+    bool splineOrderHasChanged_;
+    /// Whether the scale factor has changed.
+    bool scaleFactorHasChanged_;
+    /// Whether the power of R has changed.
+    bool rPowerHasChanged_;
+    /// Whether the parallel node setup has changed in any way.
+    bool numNodesHasChanged_;
+    /// The type of alignment scheme used for the lattice vectors.
+    LatticeType latticeType_;
     /// Communication buffers for MPI parallelism.
     helpme::vector<Complex> workSpace1_, workSpace2_;
     /// FFTW wrappers to help with transformations in the {A,B,C} dimensions.
@@ -2276,6 +2331,20 @@ class PMEInstance {
                     ++count;
                 }
             }
+        }
+    }
+
+    /*!
+     * \brief updateInfluenceFunction builds the gF array cache, if the lattice vector has changed since the last
+     *                                build of it.  If the cell is unchanged, this does nothing.
+     */
+    void updateInfluenceFunction() {
+        if (unitCellHasChanged_ || kappaHasChanged_ || gridDimensionHasChanged_ || splineOrderHasChanged_ ||
+            scaleFactorHasChanged_ || numNodesHasChanged_) {
+            cacheInfluenceFunctionFxn_(dimA_, dimB_, dimC_, myComplexDimA_, myDimB_ / numNodesC_,
+                                       rankA_ * myComplexDimA_, rankB_ * myDimB_ + rankC_ * myDimB_ / numNodesC_,
+                                       scaleFactor_, cachedInfluenceFunction_, recVecs_, cellVolume(), kappa_,
+                                       &splineModA_[0], &splineModB_[0], &splineModC_[0], nThreads_);
         }
     }
 
@@ -2612,92 +2681,9 @@ class PMEInstance {
     }
 
     /*!
-     * \brief convolveEImpl performs the reciprocal space convolution, returning the energy
-     * \tparam rPower the exponent of the (inverse) distance kernel (e.g. 1 for Coulomb, 6 for attractive dispersion).
-     * \param nx the grid dimension in the x direction.
-     * \param ny the grid dimension in the y direction.
-     * \param nz the grid dimension in the z direction.
-     * \param myNx the subset of the grid in the x direction to be handled by this node.
-     * \param myNy the subset of the grid in the y direction to be handled by this node.
-     * \param startX the starting grid point handled by this node in the X direction.
-     * \param startY the starting grid point handled by this node in the Y direction.
-     * \param scaleFactor a scale factor to be applied to all computed energies and derivatives thereof (e.g. the
-     *        1 / [4 pi epslion0] for Coulomb calculations).
-     * \param gridPtr the Fourier space grid, with ordering YXZ.
-     * \param boxInv the reciprocal lattice vectors.
-     * \param volume the volume of the unit cell.
-     * \param kappa the attenuation parameter in units inverse of those used to specify coordinates.
-     * \param xMods the Fourier space norms of the x B-Splines.
-     * \param yMods the Fourier space norms of the y B-Splines.
-     * \param zMods the Fourier space norms of the z B-Splines.
-     * \param nThreads the number of OpenMP threads to use.
-     * \return the reciprocal space energy.
-     */
-    template <int rPower>
-    static Real convolveEImpl(int nx, int ny, int nz, int myNx, int myNy, int startX, int startY, Real scaleFactor,
-                              Complex *gridPtr, const RealMat &boxInv, Real volume, Real kappa, const Real *xMods,
-                              const Real *yMods, const Real *zMods, int nThreads) {
-        Real energy = 0;
-
-        bool nodeZero = startX == 0 && startY == 0;
-        if (rPower > 3 && nodeZero) {
-            // Kernels with rPower>3 are absolutely convergent and should have the m=0 term present.
-            // To compute it we need sum_ij c(i)c(j), which can be obtained from the structure factor norm.
-            Real prefac = 2 * scaleFactor * M_PI * sqrtPi * pow(kappa, rPower - 3) /
-                          ((rPower - 3) * gammaComputer<Real, rPower>::value * volume);
-            energy += prefac * std::norm(gridPtr[0]);
-        }
-        // Ensure the m=0 term convolution product is zeroed for the backtransform; it's been accounted for above.
-        if (nodeZero) gridPtr[0] = Complex(0, 0);
-
-        std::vector<short> xMVals(myNx), yMVals(myNy), zMVals(nz);
-        // Iterators to conveniently map {X,Y,Z} grid location to m_{X,Y,Z} value, where -1/2 << m/dim < 1/2.
-        for (int kx = 0; kx < myNx; ++kx) xMVals[kx] = startX + (kx + startX >= (nx + 1) / 2 ? kx - nx : kx);
-        for (int ky = 0; ky < myNy; ++ky) yMVals[ky] = startY + (ky + startY >= (ny + 1) / 2 ? ky - ny : ky);
-        for (int kz = 0; kz < nz; ++kz) zMVals[kz] = kz >= (nz + 1) / 2 ? kz - nz : kz;
-
-        Real bPrefac = M_PI * M_PI / (kappa * kappa);
-        Real volPrefac = scaleFactor * pow(M_PI, rPower - 1) / (sqrtPi * gammaComputer<Real, rPower>::value * volume);
-        int halfNx = nx / 2 + 1;
-        size_t nxz = myNx * nz;
-        const Real *boxPtr = boxInv[0];
-        size_t nyxz = myNy * nxz;
-        // Exclude m=0 cell.
-        int start = (nodeZero ? 1 : 0);
-// Writing the three nested loops in one allows for better load balancing in parallel.
-#pragma omp parallel for reduction(+ : energy) num_threads(nThreads)
-        for (size_t yxz = start; yxz < nyxz; ++yxz) {
-            size_t xz = yxz % nxz;
-            short ky = yxz / nxz;
-            short kx = xz / nz;
-            short kz = xz % nz;
-            // We only loop over the first nx/2+1 x values; this
-            // accounts for the "missing" complex conjugate values.
-            Real permPrefac = kx + startX != 0 && kx + startX != halfNx - 1 ? 2 : 1;
-            Real mx = (Real)xMVals[kx];
-            Real my = (Real)yMVals[ky];
-            Real mz = (Real)zMVals[kz];
-            Real mVecX = boxPtr[0] * mx + boxPtr[1] * my + boxPtr[2] * mz;
-            Real mVecY = boxPtr[3] * mx + boxPtr[4] * my + boxPtr[5] * mz;
-            Real mVecZ = boxPtr[6] * mx + boxPtr[7] * my + boxPtr[8] * mz;
-            Real mNormSq = mVecX * mVecX + mVecY * mVecY + mVecZ * mVecZ;
-            Real mTerm = raiseNormToIntegerPower<Real, rPower - 3>::compute(mNormSq);
-            Real bSquared = bPrefac * mNormSq;
-            Real incompleteGammaTerm = incompleteGammaComputer<Real, 3 - rPower>::compute(bSquared);
-            Complex &gridVal = gridPtr[ky * nxz + kx * nz + kz];
-            Real structFacNorm = std::norm(gridVal);
-            Real influenceFunction =
-                volPrefac * incompleteGammaTerm * mTerm * yMods[ky + startY] * xMods[kx + startX] * zMods[kz];
-            gridVal *= influenceFunction;
-            energy += permPrefac * influenceFunction * structFacNorm;
-        }
-        energy /= 2;
-
-        return energy;
-    }
-
-    /*!
-     * \brief convolveEVImpl performs the reciprocal space convolution, returning the energy
+     * \brief convolveEVImpl performs the reciprocal space convolution, returning the energy.  We opt to not cache
+     *        this the same way as the non-virial version because it's safe to assume that if the virial is requested
+     *        the box is likely to change, which renders the cache useless.
      * \tparam rPower the exponent of the (inverse) distance kernel (e.g. 1 for Coulomb, 6 for attractive dispersion).
      * \param nx the grid dimension in the x direction.
      * \param ny the grid dimension in the y direction.
@@ -2777,7 +2763,7 @@ class PMEInstance {
             auto gammas = incompleteGammaVirialComputer<Real, 3 - rPower>::compute(bSquared);
             Real eGamma = std::get<0>(gammas);
             Real vGamma = std::get<1>(gammas);
-            Complex &gridVal = gridPtr[ky * nxz + kx * nz + kz];
+            Complex &gridVal = gridPtr[yxz];
             Real structFacNorm = std::norm(gridVal);
             Real totalPrefac = volPrefac * mTerm * yMods[ky + startY] * xMods[kx + startX] * zMods[kz];
             Real influenceFunction = totalPrefac * eGamma;
@@ -2803,6 +2789,77 @@ class PMEInstance {
         virial[0][5] -= Vzz - energy;
 
         return energy;
+    }
+    /*!
+     * \brief cacheInfluenceFunctionImpl computes the influence function used in convolution, for later use.
+     * \tparam rPower the exponent of the (inverse) distance kernel (e.g. 1 for Coulomb, 6 for attractive dispersion).
+     * \param nx the grid dimension in the x direction.
+     * \param ny the grid dimension in the y direction.
+     * \param nz the grid dimension in the z direction.
+     * \param myNx the subset of the grid in the x direction to be handled by this node.
+     * \param myNy the subset of the grid in the y direction to be handled by this node.
+     * \param startX the starting grid point handled by this node in the X direction.
+     * \param startY the starting grid point handled by this node in the Y direction.
+     * \param scaleFactor a scale factor to be applied to all computed energies and derivatives thereof (e.g. the
+     *        1 / [4 pi epslion0] for Coulomb calculations).
+     * \param gridPtr the Fourier space grid, with ordering YXZ.
+     * \param boxInv the reciprocal lattice vectors.
+     * \param volume the volume of the unit cell.
+     * \param kappa the attenuation parameter in units inverse of those used to specify coordinates.
+     * \param xMods the Fourier space norms of the x B-Splines.
+     * \param yMods the Fourier space norms of the y B-Splines.
+     * \param zMods the Fourier space norms of the z B-Splines.
+     *        This vector is incremented, not assigned.
+     * \param nThreads the number of OpenMP threads to use.
+     * \return the energy for the m=0 term.
+     */
+    template <int rPower>
+    static void cacheInfluenceFunctionImpl(int nx, int ny, int nz, int myNx, int myNy, int startX, int startY,
+                                           Real scaleFactor, RealVec &influenceFunction, const RealMat &boxInv,
+                                           Real volume, Real kappa, const Real *xMods, const Real *yMods,
+                                           const Real *zMods, int nThreads) {
+        bool nodeZero = startX == 0 && startY == 0;
+        size_t nxz = myNx * nz;
+        size_t nyxz = myNy * nxz;
+        influenceFunction.resize(nyxz);
+        Real *gridPtr = influenceFunction.data();
+        if (nodeZero) gridPtr[0] = 0;
+
+        std::vector<Real> xMVals(myNx), yMVals(myNy), zMVals(nz);
+        // Iterators to conveniently map {X,Y,Z} grid location to m_{X,Y,Z} value, where -1/2 << m/dim < 1/2.
+        for (int kx = 0; kx < myNx; ++kx) xMVals[kx] = startX + (kx + startX >= (nx + 1) / 2 ? kx - nx : kx);
+        for (int ky = 0; ky < myNy; ++ky) yMVals[ky] = startY + (ky + startY >= (ny + 1) / 2 ? ky - ny : ky);
+        for (int kz = 0; kz < nz; ++kz) zMVals[kz] = kz >= (nz + 1) / 2 ? kz - nz : kz;
+
+        Real bPrefac = M_PI * M_PI / (kappa * kappa);
+        Real volPrefac = scaleFactor * pow(M_PI, rPower - 1) / (sqrtPi * gammaComputer<Real, rPower>::value * volume);
+        int halfNx = nx / 2 + 1;
+        const Real *boxPtr = boxInv[0];
+        const Real *xMPtr = xMVals.data();
+        const Real *yMPtr = yMVals.data();
+        const Real *zMPtr = zMVals.data();
+        // Exclude m=0 cell.
+        int start = (nodeZero ? 1 : 0);
+// Writing the three nested loops in one allows for better load balancing in parallel.
+#pragma omp parallel for num_threads(nThreads)
+        for (size_t yxz = start; yxz < nyxz; ++yxz) {
+            size_t xz = yxz % nxz;
+            short ky = yxz / nxz;
+            short kx = xz / nz;
+            short kz = xz % nz;
+            Real mx = (Real)xMVals[kx];
+            Real my = (Real)yMVals[ky];
+            Real mz = (Real)zMVals[kz];
+            Real mVecX = boxPtr[0] * mx + boxPtr[1] * my + boxPtr[2] * mz;
+            Real mVecY = boxPtr[3] * mx + boxPtr[4] * my + boxPtr[5] * mz;
+            Real mVecZ = boxPtr[6] * mx + boxPtr[7] * my + boxPtr[8] * mz;
+            Real mNormSq = mVecX * mVecX + mVecY * mVecY + mVecZ * mVecZ;
+            Real mTerm = raiseNormToIntegerPower<Real, rPower - 3>::compute(mNormSq);
+            Real bSquared = bPrefac * mNormSq;
+            Real incompleteGammaTerm = incompleteGammaComputer<Real, 3 - rPower>::compute(bSquared);
+            gridPtr[yxz] =
+                volPrefac * incompleteGammaTerm * mTerm * yMods[ky + startY] * xMods[kx + startX] * zMods[kz];
+        }
     }
 
     /*!
@@ -2920,8 +2977,13 @@ class PMEInstance {
      */
     void common_init(int rPower, Real kappa, int splineOrder, int dimA, int dimB, int dimC, Real scaleFactor,
                      int nThreads) {
-        if (rPower_ != rPower || kappa_ != kappa || splineOrder_ != splineOrder || dimA_ != dimA || dimB_ != dimB ||
-            dimC_ != dimC || scaleFactor_ != scaleFactor || nThreads_ != nThreads) {
+        kappaHasChanged_ = kappa != kappa_;
+        rPowerHasChanged_ = rPower_ != rPower;
+        gridDimensionHasChanged_ = dimA_ != dimA || dimB_ != dimB || dimC_ != dimC;
+        splineOrderHasChanged_ = splineOrder_ != splineOrder;
+        scaleFactorHasChanged_ = scaleFactor_ != scaleFactor;
+        if (kappaHasChanged_ || rPowerHasChanged_ || gridDimensionHasChanged_ || splineOrderHasChanged_ ||
+            scaleFactorHasChanged_ || nThreads_ != nThreads) {
             rPower_ = rPower;
 
             dimA_ = dimA;
@@ -2980,17 +3042,26 @@ class PMEInstance {
     }
 
    public:
-    /*!
-     * \brief The different conventions for orienting a lattice constructed from input parameters.
-     */
-    enum class LatticeType : int { XAligned = 0, ShapeMatrix = 1 };
-
-    /*!
-     * \brief The different conventions for numbering nodes.
-     */
-    enum class NodeOrder : int { ZYX = 0 };
-
-    PMEInstance() : boxVecs_(3, 3), recVecs_(3, 3), scaledRecVecs_(3, 3), rPower_(0) {}
+    PMEInstance()
+        : boxVecs_(3, 3),
+          recVecs_(3, 3),
+          scaledRecVecs_(3, 3),
+          rPower_(0),
+          scaleFactor_(0),
+          dimA_(0),
+          dimB_(0),
+          dimC_(0),
+          splineOrder_(0),
+          kappa_(0),
+          cellA_(0),
+          cellB_(0),
+          cellC_(0),
+          numNodesA_(1),
+          numNodesB_(1),
+          numNodesC_(1),
+          cellAlpha_(0),
+          cellBeta_(0),
+          cellGamma_(0) {}
 
     /*!
      * \brief cellVolume Compute the volume of the unit cell.
@@ -3017,51 +3088,57 @@ class PMEInstance {
      *           take the appropriate alignment to completely define the system.
      */
     void setLatticeVectors(Real A, Real B, Real C, Real alpha, Real beta, Real gamma, LatticeType latticeType) {
-        if (latticeType == LatticeType::ShapeMatrix) {
-            RealMat HtH(3, 3);
-            HtH(0, 0) = A * A;
-            HtH(1, 1) = B * B;
-            HtH(2, 2) = C * C;
-            const float TOL = 1e-4f;
-            // Check for angles very close to 90, to avoid noise from the eigensolver later on.
-            HtH(0, 1) = HtH(1, 0) = std::abs(gamma - 90) < TOL ? 0 : A * B * cos(M_PI * gamma / 180);
-            HtH(0, 2) = HtH(2, 0) = std::abs(beta - 90) < TOL ? 0 : A * C * cos(M_PI * beta / 180);
-            HtH(1, 2) = HtH(2, 1) = std::abs(alpha - 90) < TOL ? 0 : B * C * cos(M_PI * alpha / 180);
+        if (A != cellA_ || B != cellB_ || C != cellC_ || alpha != cellAlpha_ || beta != cellBeta_ ||
+            gamma != cellGamma_ || latticeType != latticeType_) {
+            if (latticeType == LatticeType::ShapeMatrix) {
+                RealMat HtH(3, 3);
+                HtH(0, 0) = A * A;
+                HtH(1, 1) = B * B;
+                HtH(2, 2) = C * C;
+                const float TOL = 1e-4f;
+                // Check for angles very close to 90, to avoid noise from the eigensolver later on.
+                HtH(0, 1) = HtH(1, 0) = std::abs(gamma - 90) < TOL ? 0 : A * B * cos(M_PI * gamma / 180);
+                HtH(0, 2) = HtH(2, 0) = std::abs(beta - 90) < TOL ? 0 : A * C * cos(M_PI * beta / 180);
+                HtH(1, 2) = HtH(2, 1) = std::abs(alpha - 90) < TOL ? 0 : B * C * cos(M_PI * alpha / 180);
 
-            auto eigenTuple = HtH.diagonalize();
-            RealMat evalsReal = std::get<0>(eigenTuple);
-            RealMat evalsImag = std::get<1>(eigenTuple);
-            RealMat evecs = std::get<2>(eigenTuple);
-            if (!evalsImag.isNearZero())
-                throw std::runtime_error("Unexpected complex eigenvalues encountered while making shape matrix.");
-            for (int i = 0; i < 3; ++i) evalsReal(i, 0) = sqrt(evalsReal(i, 0));
-            boxVecs_.setZero();
-            for (int i = 0; i < 3; ++i) {
-                for (int j = 0; j < 3; ++j) {
-                    for (int k = 0; k < 3; ++k) {
-                        boxVecs_(i, j) += evecs(i, k) * evecs(j, k) * evalsReal(k, 0);
+                auto eigenTuple = HtH.diagonalize();
+                RealMat evalsReal = std::get<0>(eigenTuple);
+                RealMat evalsImag = std::get<1>(eigenTuple);
+                RealMat evecs = std::get<2>(eigenTuple);
+                if (!evalsImag.isNearZero())
+                    throw std::runtime_error("Unexpected complex eigenvalues encountered while making shape matrix.");
+                for (int i = 0; i < 3; ++i) evalsReal(i, 0) = sqrt(evalsReal(i, 0));
+                boxVecs_.setZero();
+                for (int i = 0; i < 3; ++i) {
+                    for (int j = 0; j < 3; ++j) {
+                        for (int k = 0; k < 3; ++k) {
+                            boxVecs_(i, j) += evecs(i, k) * evecs(j, k) * evalsReal(k, 0);
+                        }
                     }
                 }
+                recVecs_ = boxVecs_.inverse();
+            } else if (latticeType == LatticeType::XAligned) {
+                boxVecs_(0, 0) = A;
+                boxVecs_(0, 1) = 0;
+                boxVecs_(0, 2) = 0;
+                boxVecs_(1, 0) = B * cos(M_PI / 180 * gamma);
+                boxVecs_(1, 1) = B * sin(M_PI / 180 * gamma);
+                boxVecs_(1, 2) = 0;
+                boxVecs_(2, 0) = C * cos(M_PI / 180 * beta);
+                boxVecs_(2, 1) = (B * C * cos(M_PI / 180 * alpha) - boxVecs_(2, 0) * boxVecs_(1, 0)) / boxVecs_(1, 1);
+                boxVecs_(2, 2) = sqrt(C * C - boxVecs_(2, 0) * boxVecs_(2, 0) - boxVecs_(2, 1) * boxVecs_(2, 1));
+            } else {
+                throw std::runtime_error("Unknown lattice type in setLatticeVectors");
             }
             recVecs_ = boxVecs_.inverse();
-        } else if (latticeType == LatticeType::XAligned) {
-            boxVecs_(0, 0) = A;
-            boxVecs_(0, 1) = 0;
-            boxVecs_(0, 2) = 0;
-            boxVecs_(1, 0) = B * cos(M_PI / 180 * gamma);
-            boxVecs_(1, 1) = B * sin(M_PI / 180 * gamma);
-            boxVecs_(1, 2) = 0;
-            boxVecs_(2, 0) = C * cos(M_PI / 180 * beta);
-            boxVecs_(2, 1) = (B * C * cos(M_PI / 180 * alpha) - boxVecs_(2, 0) * boxVecs_(1, 0)) / boxVecs_(1, 1);
-            boxVecs_(2, 2) = sqrt(C * C - boxVecs_(2, 0) * boxVecs_(2, 0) - boxVecs_(2, 1) * boxVecs_(2, 1));
+            scaledRecVecs_ = recVecs_.clone();
+            scaledRecVecs_.row(0) *= dimA_;
+            scaledRecVecs_.row(1) *= dimB_;
+            scaledRecVecs_.row(2) *= dimC_;
+            unitCellHasChanged_ = true;
         } else {
-            throw std::runtime_error("Unknown lattice type in setLatticeVectors");
+            unitCellHasChanged_ = false;
         }
-        recVecs_ = boxVecs_.inverse();
-        scaledRecVecs_ = recVecs_.clone();
-        scaledRecVecs_.row(0) *= dimA_;
-        scaledRecVecs_.row(1) *= dimB_;
-        scaledRecVecs_.row(2) *= dimC_;
     }
 
     /*!
@@ -3357,9 +3434,40 @@ class PMEInstance {
      * \return the reciprocal space energy.
      */
     Real convolveE(Complex *transformedGrid) {
-        return convolveEFxn_(dimA_, dimB_, dimC_, myComplexDimA_, myDimB_ / numNodesC_, rankA_ * myComplexDimA_,
-                             rankB_ * myDimB_ + rankC_ * myDimB_ / numNodesC_, scaleFactor_, transformedGrid, recVecs_,
-                             cellVolume(), kappa_, &splineModA_[0], &splineModB_[0], &splineModC_[0], nThreads_);
+        updateInfluenceFunction();
+        size_t myNy = myDimB_ / numNodesC_;
+        size_t myNx = myComplexDimA_;
+        size_t nz = dimC_;
+        size_t nxz = myNx * nz;
+        size_t nyxz = myNy * nxz;
+        size_t halfNx = dimA_ / 2 + 1;
+        bool iAmNodeZero = (rankA_ == 0 && rankB_ == 0 && rankC_ == 0);
+        Real *influenceFunction = cachedInfluenceFunction_.data();
+        int startX = rankA_ * myComplexDimA_;
+        int startY = rankB_ * myDimB_ + rankC_ * myDimB_ / numNodesC_;
+
+        Real energy = 0;
+        if (rPower_ > 3 && iAmNodeZero) {
+            // Kernels with rPower>3 are absolutely convergent and should have the m=0 term present.
+            // To compute it we need sum_ij c(i)c(j), which can be obtained from the structure factor norm.
+            Real prefac = 2 * scaleFactor_ * M_PI * sqrtPi * pow(kappa_, rPower_ - 3) /
+                          ((rPower_ - 3) * nonTemplateGammaComputer<Real>(rPower_) * cellVolume());
+            energy += prefac * std::norm(transformedGrid[0]);
+        }
+
+        transformedGrid[0] = Complex(0, 0);
+#pragma omp parallel for reduction(+ : energy) num_threads(nThreads_)
+        for (size_t yxz = 0; yxz < nyxz; ++yxz) {
+            size_t xz = yxz % nxz;
+            int kx = startX + xz / nz;
+            // We only loop over the first nx/2+1 x values; this
+            // accounts for the "missing" complex conjugate values.
+            Real permPrefac = kx != 0 && kx != halfNx - 1 ? 2 : 1;
+            Real structFactorNorm = std::norm(transformedGrid[yxz]);
+            energy += permPrefac * structFactorNorm * influenceFunction[yxz];
+            transformedGrid[yxz] *= influenceFunction[yxz];
+        }
+        return energy / 2;
     }
 
     /*!
@@ -3381,11 +3489,10 @@ class PMEInstance {
      *        use the various computeE() methods instead. This the more efficient version that filters
      *        the atom list and uses pre-computed splines.  Therefore, the splineCache_
      *        member must have been updated via a call to filterAtomsAndBuildSplineCache() first.
-     * \param parameterAngMom the angular momentum of the parameters (0 for charges, C6 coefficients, 2 for quadrupoles,
-     * etc.).
-     * \param parameters the list of parameters associated with each atom (charges, C6 coefficients, multipoles,
-     * etc...). For a parameter with angular momentum L, a matrix of dimension nAtoms x nL is expected, where nL =
-     * (L+1)*(L+2)*(L+3)/6 and the fast running index nL has the ordering
+     * \param parameterAngMom the angular momentum of the parameters (0 for charges, C6 coefficients, 2 for
+     * quadrupoles, etc.). \param parameters the list of parameters associated with each atom (charges, C6
+     * coefficients, multipoles, etc...). For a parameter with angular momentum L, a matrix of dimension nAtoms x nL
+     * is expected, where nL = (L+1)*(L+2)*(L+3)/6 and the fast running index nL has the ordering
      *
      * 0 X Y Z XX XY YY XZ YZ ZZ XXX XXY XYY YYY XXZ XYZ YYZ XZZ YZZ ZZZ ...
      *
@@ -3460,11 +3567,10 @@ class PMEInstance {
      *        use the various computeE() methods instead.  This is the slower version of this call that recomputes
      *        splines on demand and makes no assumptions about the integrity of the spline cache.
      * \param potentialGrid pointer to the array containing the potential, in ZYX order.
-     * \param parameterAngMom the angular momentum of the parameters (0 for charges, C6 coefficients, 2 for quadrupoles,
-     * etc.).
-     * \param parameters the list of parameters associated with each atom (charges, C6 coefficients, multipoles,
-     * etc...). For a parameter with angular momentum L, a matrix of dimension nAtoms x nL is expected, where nL =
-     * (L+1)*(L+2)*(L+3)/6 and the fast running index nL has the ordering
+     * \param parameterAngMom the angular momentum of the parameters (0 for charges, C6 coefficients, 2 for
+     * quadrupoles, etc.). \param parameters the list of parameters associated with each atom (charges, C6
+     * coefficients, multipoles, etc...). For a parameter with angular momentum L, a matrix of dimension nAtoms x nL
+     * is expected, where nL = (L+1)*(L+2)*(L+3)/6 and the fast running index nL has the ordering
      *
      * 0 X Y Z XX XY YY XZ YZ ZZ XXX XXY XYY YYY XXZ XYZ YYZ XZZ YZZ ZZZ ...
      *
@@ -3502,11 +3608,10 @@ class PMEInstance {
      *        member must have been updated via a call to filterAtomsAndBuildSplineCache() first.
      *
      * \param potentialGrid pointer to the array containing the potential, in ZYX order.
-     * \param parameterAngMom the angular momentum of the parameters (0 for charges, C6 coefficients, 2 for quadrupoles,
-     * etc.).
-     * \param parameters the list of parameters associated with each atom (charges, C6 coefficients, multipoles,
-     * etc...). For a parameter with angular momentum L, a matrix of dimension nAtoms x nL is expected, where nL =
-     * (L+1)*(L+2)*(L+3)/6 and the fast running index nL has the ordering
+     * \param parameterAngMom the angular momentum of the parameters (0 for charges, C6 coefficients, 2 for
+     * quadrupoles, etc.). \param parameters the list of parameters associated with each atom (charges, C6
+     * coefficients, multipoles, etc...). For a parameter with angular momentum L, a matrix of dimension nAtoms x nL
+     * is expected, where nL = (L+1)*(L+2)*(L+3)/6 and the fast running index nL has the ordering
      *
      * 0 X Y Z XX XY YY XZ YZ ZZ XXX XXY XYY YYY XXZ XYZ YYZ XZZ YZZ ZZZ ...
      *
@@ -3553,11 +3658,10 @@ class PMEInstance {
 
     /*!
      * \brief computeESlf computes the Ewald self interaction energy.
-     * \param parameterAngMom the angular momentum of the parameters (0 for charges, C6 coefficients, 2 for quadrupoles,
-     * etc.).
-     * \param parameters the list of parameters associated with each atom (charges, C6 coefficients, multipoles,
-     * etc...). For a parameter with angular momentum L, a matrix of dimension nAtoms x nL is expected, where nL =
-     * (L+1)*(L+2)*(L+3)/6 and the fast running index nL has the ordering
+     * \param parameterAngMom the angular momentum of the parameters (0 for charges, C6 coefficients, 2 for
+     * quadrupoles, etc.). \param parameters the list of parameters associated with each atom (charges, C6
+     * coefficients, multipoles, etc...). For a parameter with angular momentum L, a matrix of dimension nAtoms x nL
+     * is expected, where nL = (L+1)*(L+2)*(L+3)/6 and the fast running index nL has the ordering
      *
      * 0 X Y Z XX XY YY XZ YZ ZZ XXX XXY XYY YYY XXZ XYZ YYZ XZZ YZZ ZZZ ...
      *
@@ -3576,14 +3680,13 @@ class PMEInstance {
     }
 
     /*!
-     * \brief computeEDir computes the direct space energy.  This is provided mostly for debugging and testing purposes;
-     *        generally the host program should provide the pairwise interactions.
-     * \param pairList dense list of atom pairs, ordered like i1, j1, i2, j2, i3, j3, ... iN, jN.
-     * \param parameterAngMom the angular momentum of the parameters (0 for charges, C6 coefficients, 2 for quadrupoles,
-     * etc.).
-     * \param parameters the list of parameters associated with each atom (charges, C6 coefficients, multipoles,
-     * etc...). For a parameter with angular momentum L, a matrix of dimension nAtoms x nL is expected, where nL =
-     * (L+1)*(L+2)*(L+3)/6 and the fast running index nL has the ordering
+     * \brief computeEDir computes the direct space energy.  This is provided mostly for debugging and testing
+     * purposes; generally the host program should provide the pairwise interactions. \param pairList dense list of
+     * atom pairs, ordered like i1, j1, i2, j2, i3, j3, ... iN, jN. \param parameterAngMom the angular momentum of
+     * the parameters (0 for charges, C6 coefficients, 2 for quadrupoles, etc.). \param parameters the list of
+     * parameters associated with each atom (charges, C6 coefficients, multipoles, etc...). For a parameter with
+     * angular momentum L, a matrix of dimension nAtoms x nL is expected, where nL = (L+1)*(L+2)*(L+3)/6 and the
+     * fast running index nL has the ordering
      *
      * 0 X Y Z XX XY YY XZ YZ ZZ XXX XXY XYY YYY XXZ XYZ YYZ XZZ YZZ ZZZ ...
      *
@@ -3620,11 +3723,10 @@ class PMEInstance {
      * \brief computeEFDir computes the direct space energy and force.  This is provided mostly for debugging and
      * testing purposes; generally the host program should provide the pairwise interactions.
      * \param pairList dense list of atom pairs, ordered like i1, j1, i2, j2, i3, j3, ... iN, jN.
-     * \param parameterAngMom the angular momentum of the parameters (0 for charges, C6 coefficients, 2 for quadrupoles,
-     * etc.).
-     * \param parameters the list of parameters associated with each atom (charges, C6 coefficients, multipoles,
-     * etc...). For a parameter with angular momentum L, a matrix of dimension nAtoms x nL is expected, where nL =
-     * (L+1)*(L+2)*(L+3)/6 and the fast running index nL has the ordering
+     * \param parameterAngMom the angular momentum of the parameters (0 for charges, C6 coefficients, 2 for
+     * quadrupoles, etc.). \param parameters the list of parameters associated with each atom (charges, C6
+     * coefficients, multipoles, etc...). For a parameter with angular momentum L, a matrix of dimension nAtoms x nL
+     * is expected, where nL = (L+1)*(L+2)*(L+3)/6 and the fast running index nL has the ordering
      *
      * 0 X Y Z XX XY YY XZ YZ ZZ XXX XXY XYY YYY XXZ XYZ YYZ XZZ YZZ ZZZ ...
      *
@@ -3669,13 +3771,12 @@ class PMEInstance {
     }
 
     /*!
-     * \brief computeEFVDir computes the direct space energy, force and virial.  This is provided mostly for debugging
-     *        and testing purposes; generally the host program should provide the pairwise interactions.
-     * \param pairList dense list of atom pairs, ordered like i1, j1, i2, j2, i3, j3, ... iN, jN.
-     * \param parameterAngMom the angular momentum of the parameters (0 for charges, C6 coefficients, 2 for quadrupoles,
-     * etc.).
-     * \param parameters the list of parameters associated with each atom (charges, C6 coefficients, multipoles,
-     * etc...). For a parameter with angular momentum L, a matrix of dimension nAtoms x nL is expected, where nL =
+     * \brief computeEFVDir computes the direct space energy, force and virial.  This is provided mostly for
+     * debugging and testing purposes; generally the host program should provide the pairwise interactions. \param
+     * pairList dense list of atom pairs, ordered like i1, j1, i2, j2, i3, j3, ... iN, jN. \param parameterAngMom
+     * the angular momentum of the parameters (0 for charges, C6 coefficients, 2 for quadrupoles, etc.). \param
+     * parameters the list of parameters associated with each atom (charges, C6 coefficients, multipoles, etc...).
+     * For a parameter with angular momentum L, a matrix of dimension nAtoms x nL is expected, where nL =
      * (L+1)*(L+2)*(L+3)/6 and the fast running index nL has the ordering
      *
      * 0 X Y Z XX XY YY XZ YZ ZZ XXX XXY XYY YYY XXZ XYZ YYZ XZZ YZZ ZZZ ...
@@ -3730,15 +3831,14 @@ class PMEInstance {
     }
 
     /*!
-     * \brief computeEAdj computes the adjusted real space energy which extracts the energy for excluded pairs that is
-     *        present in reciprocal space. This is provided mostly for debugging and testing purposes; generally the
+     * \brief computeEAdj computes the adjusted real space energy which extracts the energy for excluded pairs that
+     * is present in reciprocal space. This is provided mostly for debugging and testing purposes; generally the
      *        host program should provide the pairwise interactions.
      * \param pairList dense list of atom pairs, ordered like i1, j1, i2, j2, i3, j3, ... iN, jN.
-     * \param parameterAngMom the angular momentum of the parameters (0 for charges, C6 coefficients, 2 for quadrupoles,
-     * etc.).
-     * \param parameters the list of parameters associated with each atom (charges, C6 coefficients, multipoles,
-     * etc...). For a parameter with angular momentum L, a matrix of dimension nAtoms x nL is expected, where nL =
-     * (L+1)*(L+2)*(L+3)/6 and the fast running index nL has the ordering
+     * \param parameterAngMom the angular momentum of the parameters (0 for charges, C6 coefficients, 2 for
+     * quadrupoles, etc.). \param parameters the list of parameters associated with each atom (charges, C6
+     * coefficients, multipoles, etc...). For a parameter with angular momentum L, a matrix of dimension nAtoms x nL
+     * is expected, where nL = (L+1)*(L+2)*(L+3)/6 and the fast running index nL has the ordering
      *
      * 0 X Y Z XX XY YY XZ YZ ZZ XXX XXY XYY YYY XXZ XYZ YYZ XZZ YZZ ZZZ ...
      *
@@ -3772,14 +3872,13 @@ class PMEInstance {
     }
 
     /*!
-     * \brief computeEFAdj computes the adjusted energy and force.  This is provided mostly for debugging and testing
-     * purposes; generally the host program should provide the pairwise interactions.
-     * \param pairList dense list of atom pairs, ordered like i1, j1, i2, j2, i3, j3, ... iN, jN.
-     * \param parameterAngMom the angular momentum of the parameters (0 for charges, C6 coefficients, 2 for quadrupoles,
-     * etc.).
-     * \param parameters the list of parameters associated with each atom (charges, C6 coefficients, multipoles,
-     * etc...). For a parameter with angular momentum L, a matrix of dimension nAtoms x nL is expected, where nL =
-     * (L+1)*(L+2)*(L+3)/6 and the fast running index nL has the ordering
+     * \brief computeEFAdj computes the adjusted energy and force.  This is provided mostly for debugging and
+     * testing purposes; generally the host program should provide the pairwise interactions. \param pairList dense
+     * list of atom pairs, ordered like i1, j1, i2, j2, i3, j3, ... iN, jN. \param parameterAngMom the angular
+     * momentum of the parameters (0 for charges, C6 coefficients, 2 for quadrupoles, etc.). \param parameters the
+     * list of parameters associated with each atom (charges, C6 coefficients, multipoles, etc...). For a parameter
+     * with angular momentum L, a matrix of dimension nAtoms x nL is expected, where nL = (L+1)*(L+2)*(L+3)/6 and
+     * the fast running index nL has the ordering
      *
      * 0 X Y Z XX XY YY XZ YZ ZZ XXX XXY XYY YYY XXZ XYZ YYZ XZZ YZZ ZZZ ...
      *
@@ -3827,11 +3926,10 @@ class PMEInstance {
      * \brief computeEFVAdj computes the adjusted energy, forces and virial.  This is provided mostly for debugging
      *        and testing purposes; generally the host program should provide the pairwise interactions.
      * \param pairList dense list of atom pairs, ordered like i1, j1, i2, j2, i3, j3, ... iN, jN.
-     * \param parameterAngMom the angular momentum of the parameters (0 for charges, C6 coefficients, 2 for quadrupoles,
-     * etc.).
-     * \param parameters the list of parameters associated with each atom (charges, C6 coefficients, multipoles,
-     * etc...). For a parameter with angular momentum L, a matrix of dimension nAtoms x nL is expected, where nL =
-     * (L+1)*(L+2)*(L+3)/6 and the fast running index nL has the ordering
+     * \param parameterAngMom the angular momentum of the parameters (0 for charges, C6 coefficients, 2 for
+     * quadrupoles, etc.). \param parameters the list of parameters associated with each atom (charges, C6
+     * coefficients, multipoles, etc...). For a parameter with angular momentum L, a matrix of dimension nAtoms x nL
+     * is expected, where nL = (L+1)*(L+2)*(L+3)/6 and the fast running index nL has the ordering
      *
      * 0 X Y Z XX XY YY XZ YZ ZZ XXX XXY XYY YYY XXZ XYZ YYZ XZZ YZZ ZZZ ...
      *
@@ -3886,11 +3984,10 @@ class PMEInstance {
 
     /*!
      * \brief Runs a PME reciprocal space calculation, computing the potential and, optionally, its derivatives.
-     * \param parameterAngMom the angular momentum of the parameters (0 for charges, C6 coefficients, 2 for quadrupoles,
-     * etc.).
-     * \param parameters the list of parameters associated with each atom (charges, C6 coefficients, multipoles,
-     * etc...). For a parameter with angular momentum L, a matrix of dimension nAtoms x nL is expected, where nL =
-     * (L+1)*(L+2)*(L+3)/6 and the fast running index nL has the ordering
+     * \param parameterAngMom the angular momentum of the parameters (0 for charges, C6 coefficients, 2 for
+     * quadrupoles, etc.). \param parameters the list of parameters associated with each atom (charges, C6
+     * coefficients, multipoles, etc...). For a parameter with angular momentum L, a matrix of dimension nAtoms x nL
+     * is expected, where nL = (L+1)*(L+2)*(L+3)/6 and the fast running index nL has the ordering
      *
      * 0 X Y Z XX XY YY XZ YZ ZZ XXX XXY XYY YYY XXZ XYZ YYZ XZZ YZZ ZZZ ...
      *
@@ -3903,12 +4000,12 @@ class PMEInstance {
      * \endcode
      * \param coordinates the cartesian coordinates, ordered in memory as {x1,y1,z1,x2,y2,z2,....xN,yN,zN}.
      * \param energy pointer to the variable holding the energy; this is incremented, not assigned.
-     * \param gridPoints the list of grid points at which the potential is needed; can be the same as the coordinates.
-     * \param derivativeLevel the order of the potential derivatives required; 0 is the potential, 1 is (minus) the
-     * field, etc. \param potential the array holding the potential.  This is a matrix of dimensions nAtoms x nD, where
-     * nD is the derivative level requested.  See the details fo the parameters argument for information about ordering
-     * of derivative components. N.B. this array is incremented with the potential, not assigned, so take care to
-     * zero it first if only the current results are desired.
+     * \param gridPoints the list of grid points at which the potential is needed; can be the same as the
+     * coordinates. \param derivativeLevel the order of the potential derivatives required; 0 is the potential, 1 is
+     * (minus) the field, etc. \param potential the array holding the potential.  This is a matrix of dimensions
+     * nAtoms x nD, where nD is the derivative level requested.  See the details fo the parameters argument for
+     * information about ordering of derivative components. N.B. this array is incremented with the potential, not
+     * assigned, so take care to zero it first if only the current results are desired.
      */
     void computePRec(int parameterAngMom, const RealMat &parameters, const RealMat &coordinates,
                      const RealMat &gridPoints, int derivativeLevel, RealMat &potential) {
@@ -3939,11 +4036,10 @@ class PMEInstance {
 
     /*!
      * \brief Runs a PME reciprocal space calculation, computing energies.
-     * \param parameterAngMom the angular momentum of the parameters (0 for charges, C6 coefficients, 2 for quadrupoles,
-     * etc.).
-     * \param parameters the list of parameters associated with each atom (charges, C6 coefficients, multipoles,
-     * etc...). For a parameter with angular momentum L, a matrix of dimension nAtoms x nL is expected, where nL =
-     * (L+1)*(L+2)*(L+3)/6 and the fast running index nL has the ordering
+     * \param parameterAngMom the angular momentum of the parameters (0 for charges, C6 coefficients, 2 for
+     * quadrupoles, etc.). \param parameters the list of parameters associated with each atom (charges, C6
+     * coefficients, multipoles, etc...). For a parameter with angular momentum L, a matrix of dimension nAtoms x nL
+     * is expected, where nL = (L+1)*(L+2)*(L+3)/6 and the fast running index nL has the ordering
      *
      * 0 X Y Z XX XY YY XZ YZ ZZ XXX XXY XYY YYY XXZ XYZ YYZ XZZ YZZ ZZZ ...
      *
@@ -3969,11 +4065,10 @@ class PMEInstance {
 
     /*!
      * \brief Runs a PME reciprocal space calculation, computing energies and forces.
-     * \param parameterAngMom the angular momentum of the parameters (0 for charges, C6 coefficients, 2 for quadrupoles,
-     * etc.).
-     * \param parameters the list of parameters associated with each atom (charges, C6 coefficients, multipoles,
-     * etc...). For a parameter with angular momentum L, a matrix of dimension nAtoms x nL is expected, where nL =
-     * (L+1)*(L+2)*(L+3)/6 and the fast running index nL has the ordering
+     * \param parameterAngMom the angular momentum of the parameters (0 for charges, C6 coefficients, 2 for
+     * quadrupoles, etc.). \param parameters the list of parameters associated with each atom (charges, C6
+     * coefficients, multipoles, etc...). For a parameter with angular momentum L, a matrix of dimension nAtoms x nL
+     * is expected, where nL = (L+1)*(L+2)*(L+3)/6 and the fast running index nL has the ordering
      *
      * 0 X Y Z XX XY YY XZ YZ ZZ XXX XXY XYY YYY XXZ XYZ YYZ XZZ YZZ ZZZ ...
      *
@@ -4006,11 +4101,10 @@ class PMEInstance {
 
     /*!
      * \brief Runs a PME reciprocal space calculation, computing energies, forces and the virial.
-     * \param parameterAngMom the angular momentum of the parameters (0 for charges, C6 coefficients, 2 for quadrupoles,
-     * etc.).
-     * \param parameters the list of parameters associated with each atom (charges, C6 coefficients, multipoles,
-     * etc...). For a parameter with angular momentum L, a matrix of dimension nAtoms x nL is expected, where nL =
-     * (L+1)*(L+2)*(L+3)/6 and the fast running index nL has the ordering
+     * \param parameterAngMom the angular momentum of the parameters (0 for charges, C6 coefficients, 2 for
+     * quadrupoles, etc.). \param parameters the list of parameters associated with each atom (charges, C6
+     * coefficients, multipoles, etc...). For a parameter with angular momentum L, a matrix of dimension nAtoms x nL
+     * is expected, where nL = (L+1)*(L+2)*(L+3)/6 and the fast running index nL has the ordering
      *
      * 0 X Y Z XX XY YY XZ YZ ZZ XXX XXY XYY YYY XXZ XYZ YYZ XZZ YZZ ZZZ ...
      *
@@ -4051,11 +4145,10 @@ class PMEInstance {
      *        debugging.
      * \param includedList dense list of included atom pairs, ordered like i1, j1, i2, j2, i3, j3, ... iN,jN.
      * \param excludedList dense list of excluded atom pairs, ordered like i1, j1, i2, j2, i3, j3, ... iN, jN.
-     * \param parameterAngMom the angular momentum of the parameters (0 for charges, C6 coefficients, 2 for quadrupoles,
-     * etc.).
-     * \param parameters the list of parameters associated with each atom (charges, C6 coefficients, multipoles,
-     * etc...). For a parameter with angular momentum L, a matrix of dimension nAtoms x nL is expected, where nL =
-     * (L+1)*(L+2)*(L+3)/6 and the fast running index nL has the ordering
+     * \param parameterAngMom the angular momentum of the parameters (0 for charges, C6 coefficients, 2 for
+     * quadrupoles, etc.). \param parameters the list of parameters associated with each atom (charges, C6
+     * coefficients, multipoles, etc...). For a parameter with angular momentum L, a matrix of dimension nAtoms x nL
+     * is expected, where nL = (L+1)*(L+2)*(L+3)/6 and the fast running index nL has the ordering
      *
      * 0 X Y Z XX XY YY XZ YZ ZZ XXX XXY XYY YYY XXZ XYZ YYZ XZZ YZZ ZZZ ...
      *
@@ -4089,11 +4182,10 @@ class PMEInstance {
      *        and debugging.
      * \param includedList dense list of included atom pairs, ordered like i1, j1, i2, j2, i3, j3, ... iN, jN.
      * \param excludedList dense list of excluded atom pairs, ordered like i1, j1, i2, j2, i3, j3, ... iN, jN.
-     * \param parameterAngMom the angular momentum of the parameters (0 for charges, C6 coefficients, 2 for quadrupoles,
-     * etc.).
-     * \param parameters the list of parameters associated with each atom (charges, C6 coefficients, multipoles,
-     * etc...). For a parameter with angular momentum L, a matrix of dimension nAtoms x nL is expected, where nL =
-     * (L+1)*(L+2)*(L+3)/6 and the fast running index nL has the ordering
+     * \param parameterAngMom the angular momentum of the parameters (0 for charges, C6 coefficients, 2 for
+     * quadrupoles, etc.). \param parameters the list of parameters associated with each atom (charges, C6
+     * coefficients, multipoles, etc...). For a parameter with angular momentum L, a matrix of dimension nAtoms x nL
+     * is expected, where nL = (L+1)*(L+2)*(L+3)/6 and the fast running index nL has the ordering
      *
      * 0 X Y Z XX XY YY XZ YZ ZZ XXX XXY XYY YYY XXZ XYZ YYZ XZZ YZZ ZZZ ...
      *
@@ -4127,11 +4219,10 @@ class PMEInstance {
      *        be used for testing and debugging.
      * \param includedList dense list of included atom pairs, ordered like i1, j1, i2, j2, i3, j3, ... iN, jN.
      * \param excludedList dense list of excluded atom pairs, ordered like i1, j1, i2, j2, i3, j3, ... iN, jN.
-     * \param parameterAngMom the angular momentum of the parameters (0 for charges, C6 coefficients, 2 for quadrupoles,
-     * etc.).
-     * \param parameters the list of parameters associated with each atom (charges, C6 coefficients, multipoles,
-     * etc...). For a parameter with angular momentum L, a matrix of dimension nAtoms x nL is expected, where nL =
-     * (L+1)*(L+2)*(L+3)/6 and the fast running index nL has the ordering
+     * \param parameterAngMom the angular momentum of the parameters (0 for charges, C6 coefficients, 2 for
+     * quadrupoles, etc.). \param parameters the list of parameters associated with each atom (charges, C6
+     * coefficients, multipoles, etc...). For a parameter with angular momentum L, a matrix of dimension nAtoms x nL
+     * is expected, where nL = (L+1)*(L+2)*(L+3)/6 and the fast running index nL has the ordering
      *
      * 0 X Y Z XX XY YY XZ YZ ZZ XXX XXY XYY YYY XXZ XYZ YYZ XZZ YZZ ZZZ ...
      *
@@ -4164,18 +4255,19 @@ class PMEInstance {
     /*!
      * \brief setup initializes this object for a PME calculation using only threading.
      *        This may be called repeatedly without compromising performance.
-     * \param rPower the exponent of the (inverse) distance kernel (e.g. 1 for Coulomb, 6 for attractive dispersion).
-     * \param kappa the attenuation parameter in units inverse of those used to specify coordinates.
+     * \param rPower the exponent of the (inverse) distance kernel (e.g. 1 for Coulomb, 6 for attractive
+     * dispersion). \param kappa the attenuation parameter in units inverse of those used to specify coordinates.
      * \param splineOrder the order of B-spline; must be at least (2 + max. multipole order + deriv. level needed).
      * \param dimA the dimension of the FFT grid along the A axis.
      * \param dimB the dimension of the FFT grid along the B axis.
      * \param dimC the dimension of the FFT grid along the C axis.
      * \param scaleFactor a scale factor to be applied to all computed energies and derivatives thereof (e.g. the
      *        1 / [4 pi epslion0] for Coulomb calculations).
-     * \param nThreads the maximum number of threads to use for each MPI instance; if set to 0 all available threads are
-     *        used.
+     * \param nThreads the maximum number of threads to use for each MPI instance; if set to 0 all available threads
+     * are used.
      */
     void setup(int rPower, Real kappa, int splineOrder, int dimA, int dimB, int dimC, Real scaleFactor, int nThreads) {
+        numNodesHasChanged_ = numNodesA_ != 1 || numNodesB_ != 1 || numNodesC_ != 1;
         numNodesA_ = numNodesB_ = numNodesC_ = 1;
         rankA_ = rankB_ = rankC_ = 0;
         firstA_ = firstB_ = firstC_ = 0;
@@ -4194,16 +4286,16 @@ class PMEInstance {
     /*!
      * \brief setup initializes this object for a PME calculation using MPI parallism and threading.
      *        This may be called repeatedly without compromising performance.
-     * \param rPower the exponent of the (inverse) distance kernel (e.g. 1 for Coulomb, 6 for attractive dispersion).
-     * \param kappa the attenuation parameter in units inverse of those used to specify coordinates.
+     * \param rPower the exponent of the (inverse) distance kernel (e.g. 1 for Coulomb, 6 for attractive
+     * dispersion). \param kappa the attenuation parameter in units inverse of those used to specify coordinates.
      * \param splineOrder the order of B-spline; must be at least (2 + max. multipole order + deriv. level needed).
      * \param dimA the dimension of the FFT grid along the A axis.
      * \param dimB the dimension of the FFT grid along the B axis.
      * \param dimC the dimension of the FFT grid along the C axis.
      * \param scaleFactor a scale factor to be applied to all computed energies and derivatives thereof (e.g. the
      *        1 / [4 pi epslion0] for Coulomb calculations).
-     * \param nThreads the maximum number of threads to use for each MPI instance; if set to 0 all available threads are
-     * \param communicator the MPI communicator for the reciprocal space calcultion, which should already be
+     * \param nThreads the maximum number of threads to use for each MPI instance; if set to 0 all available threads
+     * are \param communicator the MPI communicator for the reciprocal space calcultion, which should already be
      *        initialized.
      * \param numNodesA the number of nodes to be used for the A dimension.
      * \param numNodesB the number of nodes to be used for the B dimension.
@@ -4212,6 +4304,7 @@ class PMEInstance {
     void setupParallel(int rPower, Real kappa, int splineOrder, int dimA, int dimB, int dimC, Real scaleFactor,
                        int nThreads, const MPI_Comm &communicator, NodeOrder nodeOrder, int numNodesA, int numNodesB,
                        int numNodesC) {
+        numNodesHasChanged_ = numNodesA_ != numNodesA || numNodesB_ != numNodesB || numNodesC_ != numNodesC;
 #if HAVE_MPI == 1
         mpiCommunicator_ =
             std::unique_ptr<MPIWrapper<Real>>(new MPIWrapper<Real>(communicator, numNodesA, numNodesB, numNodesC));
@@ -4247,7 +4340,8 @@ class PMEInstance {
 
 #else   // Have MPI
         throw std::runtime_error(
-            "setupParallel called, but helpme was not compiled with MPI.  Make sure you compile with -DHAVE_MPI=1 in "
+            "setupParallel called, but helpme was not compiled with MPI.  Make sure you compile with -DHAVE_MPI=1 "
+            "in "
             "the list of compiler definitions.");
 #endif  // Have MPI
     }

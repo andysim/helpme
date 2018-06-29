@@ -7,6 +7,7 @@ set( SOURCES_UNITTESTS_TESTS
     unittest-gammafunction.cpp
     unittest-gridsize.cpp
     unittest-lattice.cpp
+    unittest-latticeupdates.cpp
     unittest-matrix.cpp
     unittest-powers.cpp
     unittest-potential.cpp

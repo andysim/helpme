@@ -50,7 +50,7 @@ do
                 echo "****************************************************"
                 echo "Formatting problem detected.  Run"
                 echo
-                echo "clang-format --style=file -i $file"
+                echo "${CLANGFORMAT} --style=file -i $file"
                 echo
                 echo "from the top directory, or apply the following diff:"
                 echo "----------------------------------------------------"
