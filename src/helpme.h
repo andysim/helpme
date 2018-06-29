@@ -208,6 +208,16 @@ class PMEInstance {
     bool unitCellHasChanged_;
     /// Whether the kappa has been changed, invalidating kappa-dependent quantities.
     bool kappaHasChanged_;
+    /// Whether any of the grid dimensions have changed.
+    bool gridDimensionHasChanged_;
+    /// Whether the spline order has changed.
+    bool splineOrderHasChanged_;
+    /// Whether the scale factor has changed.
+    bool scaleFactorHasChanged_;
+    /// Whether the power of R has changed.
+    bool rPowerHasChanged_;
+    /// Whether the parallel node setup has changed in any way.
+    bool numNodesHasChanged_;
     /// The type of alignment scheme used for the lattice vectors.
     LatticeType latticeType_;
     /// Communication buffers for MPI parallelism.
@@ -284,7 +294,8 @@ class PMEInstance {
      *                                build of it.  If the cell is unchanged, this does nothing.
      */
     void updateInfluenceFunction() {
-        if (unitCellHasChanged_ || kappaHasChanged_) {
+        if (unitCellHasChanged_ || kappaHasChanged_ || gridDimensionHasChanged_ || splineOrderHasChanged_ ||
+            scaleFactorHasChanged_ || numNodesHasChanged_) {
             cacheInfluenceFunctionFxn_(dimA_, dimB_, dimC_, myComplexDimA_, myDimB_ / numNodesC_,
                                        rankA_ * myComplexDimA_, rankB_ * myDimB_ + rankC_ * myDimB_ / numNodesC_,
                                        scaleFactor_, cachedInfluenceFunction_, recVecs_, cellVolume(), kappa_,
@@ -921,10 +932,13 @@ class PMEInstance {
      */
     void common_init(int rPower, Real kappa, int splineOrder, int dimA, int dimB, int dimC, Real scaleFactor,
                      int nThreads) {
-        if (rPower_ != rPower || kappa_ != kappa || splineOrder_ != splineOrder || dimA_ != dimA || dimB_ != dimB ||
-            dimC_ != dimC || scaleFactor_ != scaleFactor || nThreads_ != nThreads) {
-            kappaHasChanged_ = kappa != kappa_;
-
+        kappaHasChanged_ = kappa != kappa_;
+        rPowerHasChanged_ = rPower_ != rPower;
+        gridDimensionHasChanged_ = dimA_ != dimA || dimB_ != dimB || dimC_ != dimC;
+        splineOrderHasChanged_ = splineOrder_ != splineOrder;
+        scaleFactorHasChanged_ = scaleFactor_ != scaleFactor;
+        if (kappaHasChanged_ || rPowerHasChanged_ || gridDimensionHasChanged_ || splineOrderHasChanged_ ||
+            scaleFactorHasChanged_ || nThreads_ != nThreads) {
             rPower_ = rPower;
 
             dimA_ = dimA;
@@ -979,9 +993,6 @@ class PMEInstance {
 
             workSpace1_ = helpme::vector<Complex>(myDimC_ * myComplexDimA_ * myDimB_);
             workSpace2_ = helpme::vector<Complex>(myDimC_ * myComplexDimA_ * myDimB_);
-
-        } else {
-            kappaHasChanged_ = false;
         }
     }
 
@@ -991,10 +1002,18 @@ class PMEInstance {
           recVecs_(3, 3),
           scaledRecVecs_(3, 3),
           rPower_(0),
+          scaleFactor_(0),
+          dimA_(0),
+          dimB_(0),
+          dimC_(0),
+          splineOrder_(0),
           kappa_(0),
           cellA_(0),
           cellB_(0),
           cellC_(0),
+          numNodesA_(1),
+          numNodesB_(1),
+          numNodesC_(1),
           cellAlpha_(0),
           cellBeta_(0),
           cellGamma_(0) {}
@@ -2203,6 +2222,7 @@ class PMEInstance {
      * are used.
      */
     void setup(int rPower, Real kappa, int splineOrder, int dimA, int dimB, int dimC, Real scaleFactor, int nThreads) {
+        numNodesHasChanged_ = numNodesA_ != 1 || numNodesB_ != 1 || numNodesC_ != 1;
         numNodesA_ = numNodesB_ = numNodesC_ = 1;
         rankA_ = rankB_ = rankC_ = 0;
         firstA_ = firstB_ = firstC_ = 0;
@@ -2239,6 +2259,7 @@ class PMEInstance {
     void setupParallel(int rPower, Real kappa, int splineOrder, int dimA, int dimB, int dimC, Real scaleFactor,
                        int nThreads, const MPI_Comm &communicator, NodeOrder nodeOrder, int numNodesA, int numNodesB,
                        int numNodesC) {
+        numNodesHasChanged_ = numNodesA_ != numNodesA || numNodesB_ != numNodesB || numNodesC_ != numNodesC;
 #if HAVE_MPI == 1
         mpiCommunicator_ =
             std::unique_ptr<MPIWrapper<Real>>(new MPIWrapper<Real>(communicator, numNodesA, numNodesB, numNodesC));
