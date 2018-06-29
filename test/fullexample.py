@@ -30,7 +30,7 @@ class TestHelpme(unittest.TestCase):
         energy = 0
         forces = np.zeros((6,3),dtype=np.float64)
         virial = np.zeros((1,6),dtype=np.float64)
-        potentialAndField = np.zeros((6,4),dtype=np.float64)
+        potentialAndGradient = np.zeros((6,4),dtype=np.float64)
 
         pmeD = pme.PMEInstanceD()
         pmeD.setup(1, 0.3, 5, 32, 32, 32, 332.0716, 1)
@@ -46,10 +46,10 @@ class TestHelpme(unittest.TestCase):
         # Compute the energy, forces and virial
         energy = pmeD.compute_EFV_rec(0, mat(charges), mat(coords), mat(forces), mat(virial))
         print_results("After pmeD.compute_EFV_rec", energy, forces, virial)
-        # Compute the reciprocal space potential and field
-        pmeD.compute_P_rec(0, mat(charges), mat(coords), mat(coords), 1, mat(potentialAndField))
-        print("Potential and field:")
-        print(potentialAndField, "\n")
+        # Compute the reciprocal space potential and its gradient
+        pmeD.compute_P_rec(0, mat(charges), mat(coords), mat(coords), 1, mat(potentialAndGradient))
+        print("Potential and its gradient:")
+        print(potentialAndGradient, "\n")
 
 
     def test_float(self):
@@ -67,7 +67,7 @@ class TestHelpme(unittest.TestCase):
         energy = 0
         forces = np.zeros((6,3),dtype=np.float32)
         virial = np.zeros((1,6),dtype=np.float32)
-        potentialAndField = np.zeros((6,4),dtype=np.float32)
+        potentialAndGradient = np.zeros((6,4),dtype=np.float32)
 
         pmeF = pme.PMEInstanceF()
         pmeF.setup(1, 0.3, 5, 32, 32, 32, 332.0716, 1)
@@ -83,10 +83,10 @@ class TestHelpme(unittest.TestCase):
         # Compute the energy, forces and virial
         energy = pmeF.compute_EFV_rec(0, mat(charges), mat(coords), mat(forces), mat(virial))
         print_results("After pmeF.compute_EFV_rec", energy, forces, virial)
-        # Compute the reciprocal space potential and field
-        pmeF.compute_P_rec(0, mat(charges), mat(coords), mat(coords), 1, mat(potentialAndField))
-        print("Potential and field:")
-        print(potentialAndField, "\n")
+        # Compute the reciprocal space potential and its gradient
+        pmeF.compute_P_rec(0, mat(charges), mat(coords), mat(coords), 1, mat(potentialAndGradient))
+        print("Potential and its gradient:")
+        print(potentialAndGradient, "\n")
 
 if __name__ == '__main__':
     unittest.main()

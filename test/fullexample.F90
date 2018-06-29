@@ -61,8 +61,8 @@ program testfortran
     real(c_double) :: alphaD
     integer(c_int) :: rPower, splineOrder, aDim, bDim, cDim, angMom
     integer(c_size_t) :: nAtoms, atom
-    real(c_float), allocatable, target :: coordsF(:,:), chargesF(:), forcesF(:,:), potentialAndFieldF(:,:)
-    real(c_double), allocatable, target :: coordsD(:,:), chargesD(:), forcesD(:,:), potentialAndFieldD(:,:)
+    real(c_float), allocatable, target :: coordsF(:,:), chargesF(:), forcesF(:,:), potentialAndGradientF(:,:)
+    real(c_double), allocatable, target :: coordsD(:,:), chargesD(:), forcesD(:,:), potentialAndGradientD(:,:)
     real(c_float), target :: scaleFactorF, energyF, virialF(6)
     real(c_double), target :: scaleFactorD, energyD, virialD(6)
 
@@ -77,7 +77,7 @@ program testfortran
     !
     ! Instantiate double precision PME object
     !
-    allocate(coordsD(3,nAtoms), chargesD(nAtoms), forcesD(3,nAtoms), potentialAndFieldD(4,nAtoms))
+    allocate(coordsD(3,nAtoms), chargesD(nAtoms), forcesD(3,nAtoms), potentialAndGradientD(4,nAtoms))
     scaleFactorD =  332.0716d0
     coordsD = reshape( [ 2.0d0, 2.0d0, 2.0d0, &
                          2.5d0, 2.0d0, 3.0d0, &
@@ -91,7 +91,7 @@ program testfortran
     energyD = 0d0
     forcesD = 0d0
     virialD = 0d0
-    potentialAndFieldD = 0d0
+    potentialAndGradientD = 0d0
 
     pmeD = helpme_createD()
     call helpme_setupD(pmeD, rPower, alphaD, splineOrder, aDim, bDim, cDim, scaleFactorD, 1)
@@ -104,10 +104,10 @@ program testfortran
     energyD = helpme_compute_EFV_recD(pmeD, nAtoms, angMom, c_loc(chargesD), c_loc(coordsD), c_loc(forcesD), c_loc(virialD))
     call print_results_D(nAtoms, "After helpme_compute_EFV_recD", energyD, forcesD, virialD)
     call helpme_compute_P_recD(pmeD, nAtoms, 0, c_loc(chargesD), c_loc(coordsD), nAtoms,&
-                               c_loc(coordsD), 1, c_loc(potentialAndFieldD));
-    write(*,*) "Potential and field:"
+                               c_loc(coordsD), 1, c_loc(potentialAndGradientD));
+    write(*,*) "Potential and its gradient:"
     do atom = 1,nAtoms
-        write(*,'(4F16.10)') potentialAndFieldD(:,atom)
+        write(*,'(4F16.10)') potentialAndGradientD(:,atom)
     enddo
     write(*,*)
     call helpme_destroyD(pmeD)
@@ -116,7 +116,7 @@ program testfortran
     !
     ! Instantiate single precision PME object
     !
-    allocate(coordsF(3,nAtoms), chargesF(nAtoms), forcesF(3,nAtoms), potentialAndFieldF(4,nAtoms))
+    allocate(coordsF(3,nAtoms), chargesF(nAtoms), forcesF(3,nAtoms), potentialAndGradientF(4,nAtoms))
     scaleFactorF =  332.0716
     coordsF = real(coordsD, c_float)
     chargesF = real(chargesD, c_float)
@@ -125,7 +125,7 @@ program testfortran
     energyF = 0.0
     forcesF = 0.0
     virialF = 0.0
-    potentialAndFieldF = 0.0
+    potentialAndGradientF = 0.0
 
     pmeF = helpme_createF()
     call helpme_setupF(pmeF, rPower, alphaF, splineOrder, aDim, bDim, cDim, scaleFactorF, 1)
@@ -138,15 +138,15 @@ program testfortran
     energyF = helpme_compute_EFV_recF(pmeF, nAtoms, angMom, c_loc(chargesF), c_loc(coordsF), c_loc(forcesF), c_loc(virialF))
     call print_results_F(nAtoms, "After helpme_compute_EFV_recF", energyF, forcesF, virialF)
     call helpme_compute_P_recF(pmeF, nAtoms, 0, c_loc(chargesF), c_loc(coordsF), nAtoms,&
-                               c_loc(coordsF), 1, c_loc(potentialAndFieldF));
-    write(*,*) "Potential and field:"
+                               c_loc(coordsF), 1, c_loc(potentialAndGradientF));
+    write(*,*) "Potential and its gradient:"
     do atom = 1,nAtoms
-        write(*,'(4F16.10)') potentialAndFieldF(:,atom)
+        write(*,'(4F16.10)') potentialAndGradientF(:,atom)
     enddo
     write(*,*)
     call helpme_destroyF(pmeF)
 
-    deallocate(coordsD, chargesD, forcesD, potentialAndFieldD)
-    deallocate(coordsF, chargesF, forcesF, potentialAndFieldF)
+    deallocate(coordsD, chargesD, forcesD, potentialAndGradientD)
+    deallocate(coordsF, chargesF, forcesF, potentialAndGradientF)
 
 end program testfortran

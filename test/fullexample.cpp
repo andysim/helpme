@@ -38,7 +38,7 @@ int main(int argc, char *argv[]) {
     double energyD = 0;
     helpme::Matrix<double> forcesD(6, 3);
     helpme::Matrix<double> virialD(1, 6);
-    helpme::Matrix<double> potentialAndFieldD(6, 4);
+    helpme::Matrix<double> potentialAndDerivativeD(6, 4);
 
     auto pmeD = std::unique_ptr<PMEInstanceD>(new PMEInstanceD);
     pmeD->setup(1, 0.3, 5, 32, 32, 32, scaleFactorD, 1);
@@ -54,9 +54,9 @@ int main(int argc, char *argv[]) {
     energyD = pmeD->computeEFVRec(0, chargesD, coordsD, forcesD, virialD);
     printResults("After computeEFVRec double", energyD, forcesD, virialD);
     // Compute the reciprocal space potential and field at the atoms' coordinates
-    pmeD->computePRec(0, chargesD, coordsD, coordsD, 1, potentialAndFieldD);
-    std::cout << "Potential and Field:" << std::endl;
-    std::cout << potentialAndFieldD << std::endl;
+    pmeD->computePRec(0, chargesD, coordsD, coordsD, 1, potentialAndDerivativeD);
+    std::cout << "Potential and its gradient:" << std::endl;
+    std::cout << potentialAndGradientD << std::endl;
 
     /*
      *  Instantiate single precision PME object
@@ -69,7 +69,7 @@ int main(int argc, char *argv[]) {
     float energyF = 0;
     helpme::Matrix<float> forcesF(6, 3);
     helpme::Matrix<float> virialF(1, 6);
-    helpme::Matrix<float> potentialAndFieldF(6, 4);
+    helpme::Matrix<float> potentialAndGradientF(6, 4);
 
     auto pmeF = std::unique_ptr<PMEInstanceF>(new PMEInstanceF);
     pmeF->setup(1, 0.3, 5, 32, 32, 32, scaleFactorF, 1);
@@ -84,10 +84,10 @@ int main(int argc, char *argv[]) {
     // Compute the energy, forces, and virial
     energyF = pmeF->computeEFVRec(0, chargesF, coordsF, forcesF, virialF);
     printResults("After computeEFVRec float", energyF, forcesF, virialF);
-    // Compute the reciprocal space potential and field at the atoms' coordinates
-    pmeF->computePRec(0, chargesF, coordsF, coordsF, 1, potentialAndFieldF);
-    std::cout << "Potential and Field:" << std::endl;
-    std::cout << potentialAndFieldF << std::endl;
+    // Compute the reciprocal space potential and its gradient at the atoms' coordinates
+    pmeF->computePRec(0, chargesF, coordsF, coordsF, 1, potentialAndGradientF);
+    std::cout << "Potential and its gradient:" << std::endl;
+    std::cout << potentialAndGradientF << std::endl;
 
     return 0;
 }
