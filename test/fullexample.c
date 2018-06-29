@@ -30,7 +30,7 @@ int main(int argc, char *argv[]) {
     double energyD = 0;
     double forcesD[18] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
     double virialD[6] = {0, 0, 0, 0, 0, 0};
-    double potentialAndDerivativeD[24] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+    double potentialAndGradientD[24] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
     PMEInstance *pmeD = helpme_createD();
     helpme_setupD(pmeD, 1, 0.3, 5, 32, 32, 32, scaleFactorD, 1);

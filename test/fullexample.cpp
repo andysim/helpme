@@ -38,7 +38,7 @@ int main(int argc, char *argv[]) {
     double energyD = 0;
     helpme::Matrix<double> forcesD(6, 3);
     helpme::Matrix<double> virialD(1, 6);
-    helpme::Matrix<double> potentialAndDerivativeD(6, 4);
+    helpme::Matrix<double> potentialAndGradientD(6, 4);
 
     auto pmeD = std::unique_ptr<PMEInstanceD>(new PMEInstanceD);
     pmeD->setup(1, 0.3, 5, 32, 32, 32, scaleFactorD, 1);
@@ -54,7 +54,7 @@ int main(int argc, char *argv[]) {
     energyD = pmeD->computeEFVRec(0, chargesD, coordsD, forcesD, virialD);
     printResults("After computeEFVRec double", energyD, forcesD, virialD);
     // Compute the reciprocal space potential and field at the atoms' coordinates
-    pmeD->computePRec(0, chargesD, coordsD, coordsD, 1, potentialAndDerivativeD);
+    pmeD->computePRec(0, chargesD, coordsD, coordsD, 1, potentialAndGradientD);
     std::cout << "Potential and its gradient:" << std::endl;
     std::cout << potentialAndGradientD << std::endl;
 
