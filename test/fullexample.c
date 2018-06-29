@@ -6,13 +6,36 @@
 // Author: Andrew C. Simmonett
 //
 // ENDLICENSE
+#include <assert.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "helpme.h"
 #include "print_results.h"
 
 int main(int argc, char *argv[]) {
     int atom;
+
+    /*
+     * Set up reference data for testing
+     */
+    double toleranceD = 1e-8;
+    double toleranceF = 1e-4;
+    double expectedEnergy = 5.864957414;
+    double expectedForces[18] = {-1.20630693, -1.49522843, 12.65589187,
+                                  1.00695882,  0.88956328, -5.08428301,
+                                  0.69297661,  1.09547848, -5.22771480,
+                                 -2.28988057, -2.10832506, 10.18914165,
+                                  0.81915340,  0.92013663, -6.43738026,
+                                  0.97696467,  0.69833887, -6.09492437};
+    double expectedVirial[6] = {0.65613058, 0.49091167, 0.61109732, 2.26906257, 2.31925449, -10.04901641};
+    double expectedPotential[24] = { 1.18119329, -0.72320559, -0.89641992, 7.58746515,
+                                     7.69247982, -1.20738468, -1.06662264, 6.09626260,
+                                     8.73449635, -0.83090721, -1.31352336, 6.26824317,
+                                    -9.98483179, -1.37283008, -1.26398385, 6.10859811,
+                                    -3.50591589, -0.98219832, -1.10328133, 7.71868137,
+                                    -2.39904512, -1.17142047, -0.83733677, 7.30806279};
+
     /*
      * Instantiate double precision PME object
      */
@@ -53,6 +76,11 @@ int main(int argc, char *argv[]) {
     printf("\n");
     helpme_destroyD(pmeD);
 
+    assert_close(1, &expectedEnergy, (void*) &energyD, toleranceD, sizeof(double),  __FILE__, __LINE__);
+    assert_close(18, expectedForces, (void*) forcesD, toleranceD, sizeof(double),  __FILE__, __LINE__);
+    assert_close(6, expectedVirial, (void*) virialD, toleranceD, sizeof(double),  __FILE__, __LINE__);
+    assert_close(24, expectedPotential, (void*) potentialAndGradientD, toleranceD, sizeof(double),  __FILE__, __LINE__);
+
     /*
      * Instantiate single precision PME object
      */
@@ -92,6 +120,11 @@ int main(int argc, char *argv[]) {
         printf("%16.10f %16.10f %16.10f %16.10f\n", potentialAndGradientF[4*atom+0], potentialAndGradientF[4*atom+1], potentialAndGradientF[4*atom+2], potentialAndGradientF[4*atom+3]);
     printf("\n");
     helpme_destroyF(pmeF);
+
+    assert_close(1, &expectedEnergy, (void*) &energyF, toleranceF, sizeof(float),  __FILE__, __LINE__);
+    assert_close(18, expectedForces, (void*) forcesF, toleranceF, sizeof(float),  __FILE__, __LINE__);
+    assert_close(6, expectedVirial, (void*) virialF, toleranceF, sizeof(float),  __FILE__, __LINE__);
+    assert_close(24, expectedPotential, (void*) potentialAndGradientF, toleranceF, sizeof(float),  __FILE__, __LINE__);
 
     return 0;
 }

@@ -13,6 +13,7 @@
 #include "helpme.h"
 #endif
 
+#include <cassert>
 #include <iomanip>
 #include <iostream>
 #include <memory>
@@ -27,6 +28,26 @@ void printResults(std::string label, T e, const helpme::Matrix<T> &f, const help
 }
 
 int main(int argc, char *argv[]) {
+    /*
+     * Some reference values for testing
+     */
+    const double toleranceD = 1e-8;
+    const double toleranceF = 1e-4;
+    double expectedEnergy = 5.864957414;
+    helpme::Matrix<double> expectedForces({{-1.20630693, -1.49522843, 12.65589187},
+                                           {1.00695882, 0.88956328, -5.08428301},
+                                           {0.69297661, 1.09547848, -5.22771480},
+                                           {-2.28988057, -2.10832506, 10.18914165},
+                                           {0.81915340, 0.92013663, -6.43738026},
+                                           {0.97696467, 0.69833887, -6.09492437}});
+    helpme::Matrix<double> expectedVirial({{0.65613058, 0.49091167, 0.61109732, 2.26906257, 2.31925449, -10.04901641}});
+    helpme::Matrix<double> expectedPotential({{1.18119329, -0.72320559, -0.89641992, 7.58746515},
+                                              {7.69247982, -1.20738468, -1.06662264, 6.09626260},
+                                              {8.73449635, -0.83090721, -1.31352336, 6.26824317},
+                                              {-9.98483179, -1.37283008, -1.26398385, 6.10859811},
+                                              {-3.50591589, -0.98219832, -1.10328133, 7.71868137},
+                                              {-2.39904512, -1.17142047, -0.83733677, 7.30806279}});
+
     /*
      *  Instantiate double precision PME object
      */
@@ -57,6 +78,11 @@ int main(int argc, char *argv[]) {
     pmeD->computePRec(0, chargesD, coordsD, coordsD, 1, potentialAndGradientD);
     std::cout << "Potential and its gradient:" << std::endl;
     std::cout << potentialAndGradientD << std::endl;
+
+    assert((std::abs(energyD - expectedEnergy) < toleranceD));
+    assert((potentialAndGradientD.almostEquals(expectedPotential, toleranceD)));
+    assert((forcesD.almostEquals(expectedForces, toleranceD)));
+    assert((virialD.almostEquals(expectedVirial, toleranceD)));
 
     /*
      *  Instantiate single precision PME object
@@ -89,5 +115,9 @@ int main(int argc, char *argv[]) {
     std::cout << "Potential and its gradient:" << std::endl;
     std::cout << potentialAndGradientF << std::endl;
 
+    assert((std::abs(energyF - expectedEnergy) < toleranceF));
+    assert((potentialAndGradientF.almostEquals(expectedPotential.cast<float>(), toleranceF)));
+    assert((forcesF.almostEquals(expectedForces.cast<float>(), toleranceF)));
+    assert((virialF.almostEquals(expectedVirial.cast<float>(), toleranceF)));
     return 0;
 }

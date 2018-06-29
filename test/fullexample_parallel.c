@@ -21,6 +21,7 @@ int main(int argc, char *argv[]) {
     int myRank;
     MPI_Comm_rank(MPI_COMM_WORLD, &myRank);
 
+    double tolerance = 1e-8;
     float kappa = 0.3;
     int gridX = 32;
     int gridY = 32;
@@ -75,7 +76,13 @@ int main(int argc, char *argv[]) {
         MPI_Reduce(&nodeVirial[0], &parallelVirial[0], 6, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
         char nodesStr[80];
         sprintf(&nodesStr[0], "Parallel results (nProcs = %d, %d, %d):", nx, ny, nz);
-        if (myRank == 0) print_resultsD(6, &nodesStr[0], parallelEnergy, parallelForces, parallelVirial);
+        if (myRank == 0) {
+            print_resultsD(6, &nodesStr[0], parallelEnergy, parallelForces, parallelVirial);
+
+            assert_close(1, &energyS, (void*) &parallelEnergy, tolerance, sizeof(double),  __FILE__, __LINE__);
+            assert_close(18, forcesS, (void*) parallelForces, tolerance, sizeof(double),  __FILE__, __LINE__);
+            assert_close(6, virialS, (void*) parallelVirial, tolerance, sizeof(double),  __FILE__, __LINE__);
+        }
     } else {
         printf("This test should be run with exactly 3 arguments describing the number of X,Y and Z nodes.");
         exit(1);

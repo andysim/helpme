@@ -50,6 +50,60 @@ subroutine print_results_F(nAtoms, label, e, f, v)
     return
 end subroutine print_results_F
 
+subroutine check_value_D(expected, found, tolerance, filename, lineno)
+    use iso_c_binding
+    character(len=*), intent(in) :: filename
+    integer, intent(in) :: lineno
+    real(c_double), intent(in) :: expected, found, tolerance
+
+    if(ABS(expected - found) .gt. tolerance) then
+        write(*,*) "Assertion failed on line ", lineno, " of file ", filename
+        stop 1
+    endif
+    return
+end subroutine check_value_D
+
+subroutine check_matrix_D(nrows, ncols, expected, found, tolerance, filename, lineno)
+    use iso_c_binding
+    character(len=*), intent(in) :: filename
+    integer, intent(in) :: lineno, nrows, ncols
+    real(c_double), intent(in) :: expected(nrows,ncols), found(nrows,ncols), tolerance
+
+    if(MAXVAL(ABS(expected - found)) .gt. tolerance) then
+        write(*,*) "Assertion failed on line ", lineno, " of file ", filename
+        stop 1
+    endif
+    return
+end subroutine check_matrix_D
+
+subroutine check_value_F(expected, found, tolerance, filename, lineno)
+    use iso_c_binding
+    character(len=*), intent(in) :: filename
+    integer, intent(in) :: lineno
+    real(c_float), intent(in) :: expected, found, tolerance
+
+    if(ABS(expected - found) .gt. tolerance) then
+        write(*,*) "Assertion failed on line ", lineno, " of file ", filename
+        stop 1
+    endif
+    return
+end subroutine check_value_F
+
+subroutine check_matrix_F(nrows, ncols, expected, found, tolerance, filename, lineno)
+    use iso_c_binding
+    character(len=*), intent(in) :: filename
+    integer, intent(in) :: lineno, nrows, ncols
+    real(c_float), intent(in) :: expected(nrows,ncols), found(nrows,ncols), tolerance
+
+    integer :: row, col
+
+    if(MAXVAL(ABS(expected - found)) .gt. tolerance) then
+        write(*,*) "Assertion failed on line ", lineno, " of file ", filename
+        stop 1
+    endif
+    return
+end subroutine check_matrix_F
+
 
 program testfortran
     use iso_c_binding
@@ -63,9 +117,30 @@ program testfortran
     integer(c_size_t) :: nAtoms, atom
     real(c_float), allocatable, target :: coordsF(:,:), chargesF(:), forcesF(:,:), potentialAndGradientF(:,:)
     real(c_double), allocatable, target :: coordsD(:,:), chargesD(:), forcesD(:,:), potentialAndGradientD(:,:)
-    real(c_float), target :: scaleFactorF, energyF, virialF(6)
-    real(c_double), target :: scaleFactorD, energyD, virialD(6)
+    real(c_float), target :: scaleFactorF, energyF, virialF(6,1), toleranceF
+    real(c_double), target :: scaleFactorD, energyD, virialD(6,1), toleranceD
+    real(c_double) expectedEnergy, expectedForces(3,6), expectedVirial(6,1), expectedPotential(4,6)
 
+    !
+    ! Some reference values for testing purposes
+    !
+    toleranceD = 1d-8
+    toleranceF = 1e-4
+    expectedEnergy = 5.864957414d0;
+    expectedForces = reshape( [-1.20630693d0, -1.49522843d0, 12.65589187d0,&
+                                1.00695882d0,  0.88956328d0, -5.08428301d0,&
+                                0.69297661d0,  1.09547848d0, -5.22771480d0,&
+                               -2.28988057d0, -2.10832506d0, 10.18914165d0,&
+                                0.81915340d0,  0.92013663d0, -6.43738026d0,&
+                                0.97696467d0,  0.69833887d0, -6.09492437d0], [ 3, 6 ] )
+    expectedVirial = reshape( [0.65613058d0,  0.49091167d0,   0.61109732d0,&
+                               2.26906257d0,  2.31925449d0, -10.04901641d0], [ 6, 1 ] )
+    expectedPotential = reshape( [ 1.18119329d0, -0.72320559d0, -0.89641992d0, 7.58746515d0,&
+                                   7.69247982d0, -1.20738468d0, -1.06662264d0, 6.09626260d0,&
+                                   8.73449635d0, -0.83090721d0, -1.31352336d0, 6.26824317d0,&
+                                  -9.98483179d0, -1.37283008d0, -1.26398385d0, 6.10859811d0,&
+                                  -3.50591589d0, -0.98219832d0, -1.10328133d0, 7.71868137d0,&
+                                  -2.39904512d0, -1.17142047d0, -0.83733677d0, 7.30806279d0 ], [4, 6])
     angMom = 0
     rPower = 1
     nAtoms = 6
@@ -86,6 +161,7 @@ program testfortran
                          0.5d0, 0.0d0, 1.0d0, &
                         -0.5d0, 0.0d0, 1.0d0 ], [ 3, size(coordsD,2) ] )
     chargesD = [ -0.834d0, 0.417d0, 0.417d0, -0.834d0, 0.417d0, 0.417d0 ]
+
     alphaD = 0.3d0
 
     energyD = 0d0
@@ -110,7 +186,17 @@ program testfortran
         write(*,'(4F16.10)') potentialAndGradientD(:,atom)
     enddo
     write(*,*)
+
     call helpme_destroyD(pmeD)
+
+    call check_value_D(expectedEnergy, energyD, toleranceD,&
+                      __FILE__, __LINE__)
+    call check_matrix_D(3, 6, expectedForces, forcesD, toleranceD,&
+                      __FILE__, __LINE__)
+    call check_matrix_D(6, 1, expectedVirial, virialD, toleranceD,&
+                      __FILE__, __LINE__)
+    call check_matrix_D(4, 6, expectedPotential, potentialAndGradientD, toleranceD,&
+                      __FILE__, __LINE__)
 
 
     !
@@ -144,7 +230,18 @@ program testfortran
         write(*,'(4F16.10)') potentialAndGradientF(:,atom)
     enddo
     write(*,*)
+
     call helpme_destroyF(pmeF)
+
+    call check_value_F(real(expectedEnergy, c_float), energyF, toleranceF,&
+                      __FILE__, __LINE__)
+    call check_matrix_F(3, 6, real(expectedForces, c_float), forcesF, toleranceF,&
+                      __FILE__, __LINE__)
+    call check_matrix_F(6, 1, real(expectedVirial, c_float), virialF, toleranceF,&
+                      __FILE__, __LINE__)
+    call check_matrix_F(4, 6, real(expectedPotential, c_float), potentialAndGradientF, toleranceF,&
+                      __FILE__, __LINE__)
+
 
     deallocate(coordsD, chargesD, forcesD, potentialAndGradientD)
     deallocate(coordsF, chargesF, forcesF, potentialAndGradientF)

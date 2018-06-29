@@ -8,6 +8,7 @@
 // ENDLICENSE
 
 #include <mpi.h>
+#include <cassert>
 #include <stdlib.h>
 
 #if BUILD_STANDALONE
@@ -23,6 +24,8 @@ int main(int argc, char *argv[]) {
     int myRank;
     MPI_Comm_rank(MPI_COMM_WORLD, &myRank);
 
+    const double tolerance = 1e-8;
+
     float kappa = 0.3;
     int gridX = 32;
     int gridY = 32;
@@ -37,11 +40,12 @@ int main(int argc, char *argv[]) {
     helpme::Matrix<double> serialForces(6, 3);
 
     // Generate a serial benchmark first
+    double energyS;
     if (myRank == 0) {
         auto pme = std::unique_ptr<PMEInstanceD>(new PMEInstanceD());
         pme->setup(1, kappa, splineOrder, gridX, gridY, gridZ, scaleFactor, 1);
         pme->setLatticeVectors(20, 20, 20, 90, 90, 90, PMEInstanceD::LatticeType::XAligned);
-        double energyS = pme->computeEFVRec(0, charges, coords, serialForces, serialVirial);
+        energyS = pme->computeEFVRec(0, charges, coords, serialForces, serialVirial);
         std::cout << "Serial results:" << std::endl;
         std::cout << "Total rec energy " << energyS << std::endl;
         std::cout << "Total forces" << std::endl << serialForces << std::endl;
@@ -69,11 +73,16 @@ int main(int argc, char *argv[]) {
         MPI_Reduce(&nodeEnergy, &parallelEnergy, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
         MPI_Reduce(nodeForces[0], parallelForces[0], 6 * 3, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
         MPI_Reduce(nodeVirial[0], parallelVirial[0], 6, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-        if (myRank == 0)
+        if (myRank == 0) {
             std::cout << "Parallel results (nProcs = " << nx << ", " << ny << ", " << nz << "):" << std::endl;
-        if (myRank == 0) std::cout << "Total rec energy " << parallelEnergy << std::endl;
-        if (myRank == 0) std::cout << "Total forces " << std::endl << parallelForces << std::endl;
-        if (myRank == 0) std::cout << "Total virial " << std::endl << parallelVirial << std::endl;
+            std::cout << "Total rec energy " << parallelEnergy << std::endl;
+            std::cout << "Total forces " << std::endl << parallelForces << std::endl;
+            std::cout << "Total virial " << std::endl << parallelVirial << std::endl;
+
+            assert((std::abs(energyS - parallelEnergy) < tolerance));
+            assert((serialForces.almostEquals(parallelForces, tolerance)));
+            assert((serialVirial.almostEquals(parallelVirial, tolerance)));
+        }
     } else {
         throw std::runtime_error(
             "This test should be run with exactly 3 arguments describing the number of X,Y and Z nodes.");
