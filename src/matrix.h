@@ -69,7 +69,13 @@ class Matrix {
     enum class SortOrder { Ascending, Descending };
 
     inline const Real& operator()(int row, int col) const { return *(data_ + row * nCols_ + col); }
+    inline const Real& operator()(const std::pair<int, int>& indices) const {
+        return *(data_ + std::get<0>(indices) * nCols_ + std::get<1>(indices));
+    }
     inline Real& operator()(int row, int col) { return *(data_ + row * nCols_ + col); }
+    inline Real& operator()(const std::pair<int, int>& indices) {
+        return *(data_ + std::get<0>(indices) * nCols_ + std::get<1>(indices));
+    }
     inline const Real* operator[](int row) const { return data_ + row * nCols_; }
     inline Real* operator[](int row) { return data_ + row * nCols_; }
 
@@ -352,10 +358,7 @@ class Matrix {
 
         auto eigenPairs = this->diagonalize();
         Matrix evalsReal = std::get<0>(eigenPairs);
-        Matrix evalsImag = std::get<1>(eigenPairs);
-        Matrix evecs = std::get<2>(eigenPairs);
-        if (!evalsImag.isNearZero())
-            throw std::runtime_error("Unexpected complex eigenvalues encountered when applying operator to Matrix.");
+        Matrix evecs = std::get<1>(eigenPairs);
         evalsReal.applyOperationToEachElement(function);
         Matrix evecsT = evecs.transpose();
         for (int row = 0; row < nRows_; ++row) {
@@ -511,50 +514,33 @@ class Matrix {
     }
 
     /*!
-     * \brief diagonalize diagonalize this matrix, leaving the original untouched.
-     * \param order how to order the (eigenvalue,eigenvector) pairs, where the sort key is the real part of the
-     * eigenvalue.
-     * \return a tuple of <real eigenvalue compnents, imaginary eigenvalue components, eigenvectors> sorted
-     * according to the order variable.  The eigenvectors are stored by column.
+     * \brief diagonalize diagonalize this matrix, leaving the original untouched.  Note that this assumes
+     *        that this matrix is real and symmetric.
+     * \param order how to order the (eigenvalue,eigenvector) pairs, where the sort key is the eigenvalue.
+     * \return a pair of corresponding <eigenvalue , eigenvectors> sorted according to the order variable.
+     *         The eigenvectors are stored by column.
      */
-    std::tuple<Matrix<Real>, Matrix<Real>, Matrix<Real>> diagonalize(SortOrder order = SortOrder::Ascending) const {
-        if (nRows_ != nCols_) throw std::runtime_error("Attempting to diagonalize a non-square matrix.");
-        Matrix evalsReal(nRows_, 1);
-        Matrix evalsImag(nRows_, 1);
-        Matrix evecs(nRows_, nRows_);
-        std::vector<Real> clone(data_, data_ + nRows_ * nCols_);
+    std::pair<Matrix<Real>, Matrix<Real>> diagonalize(SortOrder order = SortOrder::Ascending) const {
+        assertSymmetric();
 
-        int info;
-        Real workDim;
-        LapackWrapper<Real>::diagonalizer()('V', 'N', nRows_, clone.data(), nCols_, evalsReal.data_, evalsImag.data_,
-                                            evecs.data_, nCols_, nullptr, 1, &workDim, -1, &info);
-        int scratchSize = static_cast<int>(workDim);
-        std::vector<Real> work(scratchSize);
-        LapackWrapper<Real>::diagonalizer()('V', 'N', nRows_, clone.data(), nCols_, evalsReal.data_, evalsImag.data_,
-                                            evecs.data_, nCols_, nullptr, 1, work.data(), scratchSize, &info);
-        if (info) throw std::runtime_error("Something went wrong during diagonalization!");
+        Matrix eigenValues(nRows_, 1);
+        Matrix unsortedEigenVectors(nRows_, nRows_);
+        Matrix sortedEigenVectors(nRows_, nRows_);
 
-        struct eigenInfo {
-            Real valueReal, valueImag, *vector;
-            eigenInfo(Real r, Real i, Real* v) : valueReal(r), valueImag(i), vector(v) {}
-            bool operator<(eigenInfo const& other) const { return valueReal < other.valueReal; }
-        };
+        JacobiCyclicDiagonalization<Real>(eigenValues[0], unsortedEigenVectors[0], cbegin(), nRows_);
+        unsortedEigenVectors.transposeInPlace();
 
-        std::vector<eigenInfo> eigenTuples;
-        for (int val = 0; val < nRows_; ++val)
-            eigenTuples.push_back(eigenInfo(evalsReal[val][0], evalsImag[val][0], evecs[val]));
-
-        std::sort(eigenTuples.begin(), eigenTuples.end());
-        if (order == SortOrder::Descending) std::reverse(eigenTuples.begin(), eigenTuples.end());
+        std::vector<std::pair<Real, const Real*>> eigenPairs;
+        for (int val = 0; val < nRows_; ++val) eigenPairs.push_back({eigenValues[val][0], unsortedEigenVectors[val]});
+        std::sort(eigenPairs.begin(), eigenPairs.end());
+        if (order == SortOrder::Descending) std::reverse(eigenPairs.begin(), eigenPairs.end());
         for (int val = 0; val < nRows_; ++val) {
-            const auto& e = eigenTuples[val];
-            evalsReal.data_[val] = e.valueReal;
-            evalsImag.data_[val] = e.valueImag;
-            std::copy(e.vector, e.vector + nCols_, clone.data() + val * nCols_);
+            const auto& e = eigenPairs[val];
+            eigenValues.data_[val] = std::get<0>(e);
+            std::copy(std::get<1>(e), std::get<1>(e) + nCols_, sortedEigenVectors[val]);
         }
-        std::copy(clone.begin(), clone.end(), evecs.begin());
-        evecs.transposeInPlace();
-        return std::make_tuple(std::move(evalsReal), std::move(evalsImag), std::move(evecs));
+        sortedEigenVectors.transposeInPlace();
+        return {std::move(eigenValues), std::move(sortedEigenVectors)};
     }
 };
 
