@@ -75,7 +75,7 @@ add_library( CatchMain OBJECT ${UNITTEST_DIR}/${SOURCES_UNITTESTS_MAIN} ${HEADER
 foreach( name ${TARGETS_UNITTESTS_PARALLEL_TESTS} )
     add_executable( ${name} ${name}.cpp $<TARGET_OBJECTS:CatchMain> ${HEADER_DIR}/catch.hpp )
     set_target_properties(${name} PROPERTIES COMPILE_FLAGS "${MPI_CXX_COMPILE_FLAGS}")
-    target_link_libraries( ${name} PRIVATE ${BLAS_LIBRARIES} ${LAPACK_LIBRARIES} ${FFTW_LIBRARIES} ${MPI_CXX_LIBRARIES})
+    target_link_libraries( ${name} PRIVATE ${EXTERNAL_LIBRARIES} ${MPI_CXX_LIBRARIES})
     target_compile_definitions(${name} PRIVATE "-DHAVE_MPI=1")
     target_include_directories(${name} PRIVATE "${MPI_CXX_INCLUDE_PATH}")
     add_test(NAME ${name}
@@ -85,7 +85,7 @@ endforeach()
 
 foreach( name ${TARGETS_UNITTESTS_TESTS} )
     add_executable( ${name} ${name}.cpp $<TARGET_OBJECTS:CatchMain> ${HEADER_DIR}/catch.hpp )
-    target_link_libraries( ${name} PRIVATE ${BLAS_LIBRARIES} ${LAPACK_LIBRARIES} ${FFTW_LIBRARIES})
+    target_link_libraries( ${name} PRIVATE ${EXTERNAL_LIBRARIES})
     add_test(NAME ${name}
              COMMAND ${name} 
              WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/test/unittests)

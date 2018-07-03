@@ -41,12 +41,6 @@ add_custom_target(SingleHeader
                   DEPENDS StandaloneHeader
 )
 
-if(CMAKE_CXX_COMPILER_ID MATCHES "AppleClang")
-    set(cpplib c++)
-else()
-    set(cpplib stdc++)
-endif()
-
 # C example
 add_executable (RunCWrapper fullexample.c)
 add_dependencies(RunCWrapper helpmestatic)
@@ -56,20 +50,20 @@ add_test(NAME CWrapperTest COMMAND RunCWrapper)
 
 # CXX DHFR benchmark example
 add_executable (DHFRBenchmark dhfr_benchmark.cpp)
-target_link_libraries(DHFRBenchmark ${FFTW_LIBRARIES})
+target_link_libraries(DHFRBenchmark ${EXTERNAL_LIBRARIES})
 configure_file(data/dhfr_charges.txt . COPYONLY)
 configure_file(data/dhfr_c6s.txt . COPYONLY)
 configure_file(data/dhfr_coords.txt . COPYONLY)
 
 # CXX example
 add_executable (RunCXXWrapper fullexample.cpp)
-target_link_libraries(RunCXXWrapper ${FFTW_LIBRARIES})
+target_link_libraries(RunCXXWrapper ${EXTERNAL_LIBRARIES})
 add_test(NAME CXXWrapperTest COMMAND RunCXXWrapper)
 
 # CXX example using standalone header file
 add_executable (RunCXXWrapperStandalone fullexample.cpp)
 add_dependencies(RunCXXWrapperStandalone SingleHeader)
-target_link_libraries(RunCXXWrapperStandalone ${FFTW_LIBRARIES})
+target_link_libraries(RunCXXWrapperStandalone ${EXTERNAL_LIBRARIES})
 target_compile_definitions(RunCXXWrapperStandalone PRIVATE "BUILD_STANDALONE=1")
 add_test(NAME CXXWrapperStandaloneTest COMMAND RunCXXWrapperStandalone)
 
@@ -77,7 +71,7 @@ add_test(NAME CXXWrapperStandaloneTest COMMAND RunCXXWrapperStandalone)
 if(HAVE_MPI)
     # CXX example
     add_executable (RunCXXMPIWrapper fullexample_parallel.cpp)
-    target_link_libraries(RunCXXMPIWrapper ${FFTW_LIBRARIES})
+    target_link_libraries(RunCXXMPIWrapper ${EXTERNAL_LIBRARIES})
     add_test(NAME CXXMPIWrapperTestX
              COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./RunCXXMPIWrapper 2 1 1 ${MPIEXEC_POSTFLAGS})
     add_test(NAME CXXMPIWrapperTestY

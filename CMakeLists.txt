@@ -117,6 +117,16 @@ set(Python_ENABLED ON) # For now, we just always assume this is on
 add_subdirectory(external/pybind11)
 add_subdirectory(python)
 
+# Handle different C++ libraries
+if(CMAKE_CXX_COMPILER_ID MATCHES "AppleClang")
+    set(cpplib c++)
+else()
+    set(cpplib stdc++)
+endif()
+
+# The C++ library is linked explicitly because exception handling on macOS appears to be broken otherwise.
+set(EXTERNAL_LIBRARIES ${FFTW_LIBRARIES} ${cpplib})
+
 # Documentation
 find_package(Doxygen)
 find_package(Sphinx)
