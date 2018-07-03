@@ -21,10 +21,6 @@ cmake_minimum_required(VERSION 3.3 FATAL_ERROR)
 #    - CMAKE_Fortran_COMPILER "Fortran compiler (required for some add-ons)"
 #    - CMAKE_Fortran_FLAGS "Additional Fortran flags"
 #
-#  <<<  Detecting BLAS/LAPACK  >>>
-#
-#    - ENV(MATH_ROOT) "Root directory where BLAS/LAPACK libraries should be detected (e.g., ${MATH_ROOT}/lib/libblas.so)"
-#
 #  <<<  Detecting dependencies and add-ons  >>>
 #
 #    - PYTHON_EXECUTABLE "Python interpreter to use (e.g., /path/to/bin/python2.7)"
@@ -70,16 +66,10 @@ option_with_flags(ENABLE_TSAN "Enables thread sanitizer" OFF
                   "-fsanitize=thread" "-fno-omit-frame-pointer -pie")
 option_with_flags(ENABLE_UBSAN "Enables undefined behavior sanitizer" OFF
                   "-fsanitize=undefined" "-fno-omit-frame-pointer")
-option_with_default(FC_SYMBOL "The type of Fortran name mangling" 2)
 
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0")
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -O0")
 set(CMAKE_Fortran_FLAGS_DEBUG "${CMAKE_Fortran_FLAGS_DEBUG} -O0")
-
-# Linear algebra stuff is needed
-find_package(BLAS REQUIRED)
-find_package(LAPACK REQUIRED)
-add_definitions("-DFC_SYMBOL=${FC_SYMBOL}")
 
 # FFTW
 find_package(FFTW REQUIRED)
@@ -126,6 +116,16 @@ message(STATUS "${Cyan}Found Python ${PYTHON_VERSION_MAJOR}.${PYTHON_VERSION_MIN
 set(Python_ENABLED ON) # For now, we just always assume this is on
 add_subdirectory(external/pybind11)
 add_subdirectory(python)
+
+# Handle different C++ libraries
+if(CMAKE_CXX_COMPILER_ID MATCHES "AppleClang")
+    set(cpplib c++)
+else()
+    set(cpplib stdc++)
+endif()
+
+# The C++ library is linked explicitly because exception handling on macOS appears to be broken otherwise.
+set(EXTERNAL_LIBRARIES ${FFTW_LIBRARIES} ${cpplib})
 
 # Documentation
 find_package(Doxygen)

@@ -154,28 +154,24 @@ TEST_CASE("test the matrix class.") {
     }
 
     SECTION("Diagonalization. ") {
-        helpme::Matrix<double> mat({{12, 2, 0}, {1, 11, 0}, {2, 4, 15}});
-        SECTION("Ascending order ") {
-            helpme::Matrix<double> refEvecsA({{-0.6804138174, 0.4364357805, 0.0},
-                                              {0.6804138174, 0.2182178902, 0.0},
-                                              {-0.2721655270, -0.8728715609, 1.0}});
-            helpme::Matrix<double> refEvalsRealA({10, 13, 15});
-            helpme::Matrix<double> refEvalsImagA(3, 1);
-            auto eigensystemA = mat.diagonalize();
-            REQUIRE(refEvalsRealA.almostEquals(std::get<0>(eigensystemA)));
-            REQUIRE(refEvalsImagA.almostEquals(std::get<1>(eigensystemA)));
-            REQUIRE(refEvecsA.almostEquals(std::get<2>(eigensystemA)));
-        }
+        helpme::Matrix<double> mat({{12, 2, 1}, {2, 11, 4}, {1, 4, 15}});
         SECTION("Descending order ") {
-            helpme::Matrix<double> refEvecsD({{0.0, 0.4364357805, -0.6804138174},
-                                              {0.0, 0.2182178902, 0.6804138174},
-                                              {1.0, -0.8728715609, -0.2721655270}});
-            helpme::Matrix<double> refEvalsRealD({15, 13, 10});
-            helpme::Matrix<double> refEvalsImagD(3, 1);
-            auto eigensystemD = mat.diagonalize(helpme::Matrix<double>::SortOrder::Descending);
-            REQUIRE(refEvalsRealD.almostEquals(std::get<0>(eigensystemD)));
-            REQUIRE(refEvalsImagD.almostEquals(std::get<1>(eigensystemD)));
-            REQUIRE(refEvecsD.almostEquals(std::get<2>(eigensystemD)));
+            helpme::Matrix<double> refEvecs({{0.3048963871145365, 0.8972939231558096, -0.31922062682752606},
+                                             {0.5322240637462533, 0.1174283765806552, 0.8384200154713962},
+                                             {0.7897947449140992, -0.42552813284351465, -0.4417579303926363}});
+            helpme::Matrix<double> refEvals({18.08155081781946, 11.787503988646652, 8.1309451935339});
+            auto eigensystem = mat.diagonalize(helpme::Matrix<double>::SortOrder::Descending);
+            REQUIRE(refEvals.almostEquals(std::get<0>(eigensystem)));
+            REQUIRE(refEvecs.almostEquals(std::get<1>(eigensystem)));
+        }
+        SECTION("Ascending order ") {
+            helpme::Matrix<double> refEvecs({{-0.31922062682752606, 0.8972939231558096, 0.3048963871145365},
+                                             {0.8384200154713962, 0.1174283765806552, 0.5322240637462533},
+                                             {-0.4417579303926363, -0.42552813284351465, 0.7897947449140992}});
+            helpme::Matrix<double> refEvals({8.1309451935339, 11.787503988646652, 18.08155081781946});
+            auto eigensystem = mat.diagonalize(helpme::Matrix<double>::SortOrder::Ascending);
+            REQUIRE(refEvals.almostEquals(std::get<0>(eigensystem)));
+            REQUIRE(refEvecs.almostEquals(std::get<1>(eigensystem)));
         }
     }
 }

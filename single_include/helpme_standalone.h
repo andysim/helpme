@@ -84,115 +84,231 @@
 // Author: Andrew C. Simmonett
 //
 // ENDLICENSE
+//
+// The code for Jacobi diagonalization is taken (with minimal modification) from
+//
+// http://www.mymathlib.com/c_source/matrices/eigen/jacobi_cyclic_method.c
+//
 #ifndef _HELPME_LAPACK_WRAPPER_H_
 #define _HELPME_LAPACK_WRAPPER_H_
 
-#include <exception>
-#include <functional>
-#include <complex>
-
-#if FC_SYMBOL == 2
-#define F_SGEEV sgeev_
-#define F_SGESV sgesv_
-#define F_DGEEV dgeev_
-#define F_DGESV dgesv_
-#define F_CGEEV cgeev_
-#define F_CGESV cgesv_
-#define F_ZGEEV zgeev_
-#define F_ZGESV zgesv_
-#elif FC_SYMBOL == 1
-#define F_SGEEV sgeev
-#define F_SGESV sgesv
-#define F_DGEEV dgeev
-#define F_DGESV dgesv
-#define F_CGEEV cgeev
-#define F_CGESV cgesv
-#define F_ZGEEV zgeev
-#define F_ZGESV zgesv
-#elif FC_SYMBOL == 3
-#define F_SGEEV SGEEV
-#define F_SGESV SGESV
-#define F_DGEEV DGEEV
-#define F_DGESV DGESV
-#define F_CGEEV CGEEV
-#define F_CGESV CGESV
-#define F_ZGEEV ZGEEV
-#define F_ZGESV ZGESV
-#elif FC_SYMBOL == 4
-#define F_SGEEV SGEEV_
-#define F_SGESV SGESV_
-#define F_DGEEV DGEEV_
-#define F_DGESV DGESV_
-#define F_CGEEV CGEEV_
-#define F_CGESV CGESV_
-#define F_ZGEEV ZGEEV_
-#define F_ZGESV ZGESV_
-#endif
-
-extern "C" {
-extern void F_SGEEV(char *, char *, int *, float *, int *, float *, float *, float *, int *, float *, int *, float *,
-                    int *, int *);
-extern void F_DGEEV(char *, char *, int *, double *, int *, double *, double *, double *, int *, double *, int *,
-                    double *, int *, int *);
-extern void F_CGEEV(char *, char *, int *, std::complex<float> *, int *, std::complex<float> *, std::complex<float> *,
-                    std::complex<float> *, int *, std::complex<float> *, int *, std::complex<float> *, int *, int *);
-extern void F_ZGEEV(char *, char *, int *, std::complex<double> *, int *, std::complex<double> *,
-                    std::complex<double> *, std::complex<double> *, int *, std::complex<double> *, int *,
-                    std::complex<double> *, int *, int *);
-}
+#include <cmath>
+#include <limits>
 
 namespace helpme {
-
-static void C_SGEEV(char jobvl, char jobvr, int n, float *a, int lda, float *wr, float *wi, float *vl, int ldvl,
-                    float *vr, int ldvr, float *work, int lwork, int *info) {
-    ::F_SGEEV(&jobvl, &jobvr, &n, a, &lda, wr, wi, vl, &ldvl, vr, &ldvr, work, &lwork, info);
-}
-
-static void C_DGEEV(char jobvl, char jobvr, int n, double *a, int lda, double *wr, double *wi, double *vl, int ldvl,
-                    double *vr, int ldvr, double *work, int lwork, int *info) {
-    ::F_DGEEV(&jobvl, &jobvr, &n, a, &lda, wr, wi, vl, &ldvl, vr, &ldvr, work, &lwork, info);
-}
-
-static void C_CGEEV(char jobvl, char jobvr, int n, std::complex<float> *a, int lda, std::complex<float> *wr,
-                    std::complex<float> *wi, std::complex<float> *vl, int ldvl, std::complex<float> *vr, int ldvr,
-                    std::complex<float> *work, int lwork, int *info) {
-    ::F_CGEEV(&jobvl, &jobvr, &n, a, &lda, wr, wi, vl, &ldvl, vr, &ldvr, work, &lwork, info);
-}
-
-static void C_ZGEEV(char jobvl, char jobvr, int n, std::complex<double> *a, int lda, std::complex<double> *wr,
-                    std::complex<double> *wi, std::complex<double> *vl, int ldvl, std::complex<double> *vr, int ldvr,
-                    std::complex<double> *work, int lwork, int *info) {
-    ::F_ZGEEV(&jobvl, &jobvr, &n, a, &lda, wr, wi, vl, &ldvl, vr, &ldvr, work, &lwork, info);
-}
+////////////////////////////////////////////////////////////////////////////////
+//  void Jacobi_Cyclic_Method                                                 //
+//            (Real eigenvalues[], Real *eigenvectors, Real *A, int n)  //
+//                                                                            //
+//  Description:                                                              //
+//     Find the eigenvalues and eigenvectors of a symmetric n x n matrix A    //
+//     using the Jacobi method. Upon return, the input matrix A will have     //
+//     been modified.                                                         //
+//     The Jacobi procedure for finding the eigenvalues and eigenvectors of a //
+//     symmetric matrix A is based on finding a similarity transformation     //
+//     which diagonalizes A.  The similarity transformation is given by a     //
+//     product of a sequence of orthogonal (rotation) matrices each of which  //
+//     annihilates an off-diagonal element and its transpose.  The rotation   //
+//     effects only the rows and columns containing the off-diagonal element  //
+//     and its transpose, i.e. if a[i][j] is an off-diagonal element, then    //
+//     the orthogonal transformation rotates rows a[i][] and a[j][], and      //
+//     equivalently it rotates columns a[][i] and a[][j], so that a[i][j] = 0 //
+//     and a[j][i] = 0.                                                       //
+//     The cyclic Jacobi method considers the off-diagonal elements in the    //
+//     following order: (0,1),(0,2),...,(0,n-1),(1,2),...,(n-2,n-1).  If the  //
+//     the magnitude of the off-diagonal element is greater than a treshold,  //
+//     then a rotation is performed to annihilate that off-diagnonal element. //
+//     The process described above is called a sweep.  After a sweep has been //
+//     completed, the threshold is lowered and another sweep is performed     //
+//     with the new threshold. This process is completed until the final      //
+//     sweep is performed with the final threshold.                           //
+//     The orthogonal transformation which annihilates the matrix element     //
+//     a[k][m], k != m, is Q = q[i][j], where q[i][j] = 0 if i != j, i,j != k //
+//     i,j != m and q[i][j] = 1 if i = j, i,j != k, i,j != m, q[k][k] =       //
+//     q[m][m] = cos(phi), q[k][m] = -sin(phi), and q[m][k] = sin(phi), where //
+//     the angle phi is determined by requiring a[k][m] -> 0.  This condition //
+//     on the angle phi is equivalent to                                      //
+//               cot(2 phi) = 0.5 * (a[k][k] - a[m][m]) / a[k][m]             //
+//     Since tan(2 phi) = 2 tan(phi) / (1 - tan(phi)^2),                      //
+//               tan(phi)^2 + 2cot(2 phi) * tan(phi) - 1 = 0.                 //
+//     Solving for tan(phi), choosing the solution with smallest magnitude,   //
+//       tan(phi) = - cot(2 phi) + sgn(cot(2 phi)) sqrt(cot(2phi)^2 + 1).     //
+//     Then cos(phi)^2 = 1 / (1 + tan(phi)^2) and sin(phi)^2 = 1 - cos(phi)^2 //
+//     Finally by taking the sqrts and assigning the sign to the sin the same //
+//     as that of the tan, the orthogonal transformation Q is determined.     //
+//     Let A" be the matrix obtained from the matrix A by applying the        //
+//     similarity transformation Q, since Q is orthogonal, A" = Q'AQ, where Q'//
+//     is the transpose of Q (which is the same as the inverse of Q).  Then   //
+//         a"[i][j] = Q'[i][p] a[p][q] Q[q][j] = Q[p][i] a[p][q] Q[q][j],     //
+//     where repeated indices are summed over.                                //
+//     If i is not equal to either k or m, then Q[i][j] is the Kronecker      //
+//     delta.   So if both i and j are not equal to either k or m,            //
+//                                a"[i][j] = a[i][j].                         //
+//     If i = k, j = k,                                                       //
+//        a"[k][k] =                                                          //
+//           a[k][k]*cos(phi)^2 + a[k][m]*sin(2 phi) + a[m][m]*sin(phi)^2     //
+//     If i = k, j = m,                                                       //
+//        a"[k][m] = a"[m][k] = 0 =                                           //
+//           a[k][m]*cos(2 phi) + 0.5 * (a[m][m] - a[k][k])*sin(2 phi)        //
+//     If i = k, j != k or m,                                                 //
+//        a"[k][j] = a"[j][k] = a[k][j] * cos(phi) + a[m][j] * sin(phi)       //
+//     If i = m, j = k, a"[m][k] = 0                                          //
+//     If i = m, j = m,                                                       //
+//        a"[m][m] =                                                          //
+//           a[m][m]*cos(phi)^2 - a[k][m]*sin(2 phi) + a[k][k]*sin(phi)^2     //
+//     If i= m, j != k or m,                                                  //
+//        a"[m][j] = a"[j][m] = a[m][j] * cos(phi) - a[k][j] * sin(phi)       //
+//                                                                            //
+//     If X is the matrix of normalized eigenvectors stored so that the ith   //
+//     column corresponds to the ith eigenvalue, then AX = X Lamda, where     //
+//     Lambda is the diagonal matrix with the ith eigenvalue stored at        //
+//     Lambda[i][i], i.e. X'AX = Lambda and X is orthogonal, the eigenvectors //
+//     are normalized and orthogonal.  So, X = Q1 Q2 ... Qs, where Qi is      //
+//     the ith orthogonal matrix,  i.e. X can be recursively approximated by  //
+//     the recursion relation X" = X Q, where Q is the orthogonal matrix and  //
+//     the initial estimate for X is the identity matrix.                     //
+//     If j = k, then x"[i][k] = x[i][k] * cos(phi) + x[i][m] * sin(phi),     //
+//     if j = m, then x"[i][m] = x[i][m] * cos(phi) - x[i][k] * sin(phi), and //
+//     if j != k and j != m, then x"[i][j] = x[i][j].                         //
+//                                                                            //
+//  Arguments:                                                                //
+//     Real  eigenvalues                                                      //
+//        Array of dimension n, which upon return contains the eigenvalues of //
+//        the matrix A.                                                       //
+//     Real* eigenvectors                                                     //
+//        Matrix of eigenvectors, the ith column of which contains an         //
+//        eigenvector corresponding to the ith eigenvalue in the array        //
+//        eigenvalues.                                                        //
+//     Real* A                                                                //
+//        Pointer to the first element of the symmetric n x n matrix A. The   //
+//        input matrix A is modified during the process.                      //
+//     int     n                                                              //
+//        The dimension of the array eigenvalues, number of columns and rows  //
+//        of the matrices eigenvectors and A.                                 //
+//                                                                            //
+//  Return Values:                                                            //
+//     Function is of type void.                                              //
+//                                                                            //
+//  Example:                                                                  //
+//     #define N                                                              //
+//     Real A[N][N], Real eigenvalues[N], Real eigenvectors[N][N]             //
+//                                                                            //
+//     (your code to initialize the matrix A )                                //
+//                                                                            //
+//     JacobiCyclicDiagonalization(eigenvalues, (Real*)eigenvectors,          //
+//                                                          (Real *) A, N);   //
+////////////////////////////////////////////////////////////////////////////////
 
 template <typename Real>
-using diagonalizerType =
-    std::function<void(char, char, int, Real *, int, Real *, Real *, Real *, int, Real *, int, Real *, int, int *)>;
+void JacobiCyclicDiagonalization(Real *eigenvalues, Real *eigenvectors, const Real *A, int n) {
+    int row, i, j, k, m;
+    Real *pAk, *pAm, *p_r, *p_e;
+    Real threshold_norm;
+    Real threshold;
+    Real tan_phi, sin_phi, cos_phi, tan2_phi, sin2_phi, cos2_phi;
+    Real sin_2phi, cos_2phi, cot_2phi;
+    Real dum1;
+    Real dum2;
+    Real dum3;
+    Real r;
+    Real max;
 
-template <typename Real>
-class LapackWrapper {
-   public:
-    static diagonalizerType<Real> diagonalizer() {
-        throw std::runtime_error("Diagonalization is not implemented for the requested data type");
-        return diagonalizerType<Real>();
+    // Take care of trivial cases
+
+    if (n < 1) return;
+    if (n == 1) {
+        eigenvalues[0] = *A;
+        *eigenvectors = 1;
+        return;
     }
-};
 
-template <>
-inline diagonalizerType<float> LapackWrapper<float>::diagonalizer() {
-    return &C_SGEEV;
-}
-template <>
-inline diagonalizerType<double> LapackWrapper<double>::diagonalizer() {
-    return &C_DGEEV;
-}
-template <>
-inline diagonalizerType<std::complex<float>> LapackWrapper<std::complex<float>>::diagonalizer() {
-    return &C_CGEEV;
-}
-template <>
-inline diagonalizerType<std::complex<double>> LapackWrapper<std::complex<double>>::diagonalizer() {
-    return &C_ZGEEV;
+    // Initialize the eigenvalues to the identity matrix.
+
+    for (p_e = eigenvectors, i = 0; i < n; i++)
+        for (j = 0; j < n; p_e++, j++)
+            if (i == j)
+                *p_e = 1;
+            else
+                *p_e = 0;
+
+    // Calculate the threshold and threshold_norm.
+
+    for (threshold = 0, pAk = const_cast<Real *>(A), i = 0; i < (n - 1); pAk += n, i++)
+        for (j = i + 1; j < n; j++) threshold += *(pAk + j) * *(pAk + j);
+    threshold = sqrt(threshold + threshold);
+    threshold_norm = threshold * std::numeric_limits<Real>::epsilon();
+    max = threshold + 1;
+    while (threshold > threshold_norm) {
+        threshold /= 10;
+        if (max < threshold) continue;
+        max = 0;
+        for (pAk = const_cast<Real *>(A), k = 0; k < (n - 1); pAk += n, k++) {
+            for (pAm = pAk + n, m = k + 1; m < n; pAm += n, m++) {
+                if (std::abs(*(pAk + m)) < threshold) continue;
+
+                // Calculate the sin and cos of the rotation angle which
+                // annihilates A[k][m].
+
+                cot_2phi = 0.5f * (*(pAk + k) - *(pAm + m)) / *(pAk + m);
+                dum1 = sqrt(cot_2phi * cot_2phi + 1);
+                if (cot_2phi < 0) dum1 = -dum1;
+                tan_phi = -cot_2phi + dum1;
+                tan2_phi = tan_phi * tan_phi;
+                sin2_phi = tan2_phi / (1 + tan2_phi);
+                cos2_phi = 1 - sin2_phi;
+                sin_phi = sqrt(sin2_phi);
+                if (tan_phi < 0) sin_phi = -sin_phi;
+                cos_phi = sqrt(cos2_phi);
+                sin_2phi = 2 * sin_phi * cos_phi;
+                cos_2phi = cos2_phi - sin2_phi;
+
+                // Rotate columns k and m for both the matrix A
+                //     and the matrix of eigenvectors.
+
+                p_r = const_cast<Real *>(A);
+                dum1 = *(pAk + k);
+                dum2 = *(pAm + m);
+                dum3 = *(pAk + m);
+                *(pAk + k) = dum1 * cos2_phi + dum2 * sin2_phi + dum3 * sin_2phi;
+                *(pAm + m) = dum1 * sin2_phi + dum2 * cos2_phi - dum3 * sin_2phi;
+                *(pAk + m) = 0;
+                *(pAm + k) = 0;
+                for (i = 0; i < n; p_r += n, i++) {
+                    if ((i == k) || (i == m)) continue;
+                    if (i < k)
+                        dum1 = *(p_r + k);
+                    else
+                        dum1 = *(pAk + i);
+                    if (i < m)
+                        dum2 = *(p_r + m);
+                    else
+                        dum2 = *(pAm + i);
+                    dum3 = dum1 * cos_phi + dum2 * sin_phi;
+                    if (i < k)
+                        *(p_r + k) = dum3;
+                    else
+                        *(pAk + i) = dum3;
+                    dum3 = -dum1 * sin_phi + dum2 * cos_phi;
+                    if (i < m)
+                        *(p_r + m) = dum3;
+                    else
+                        *(pAm + i) = dum3;
+                }
+                for (p_e = eigenvectors, i = 0; i < n; p_e += n, i++) {
+                    dum1 = *(p_e + k);
+                    dum2 = *(p_e + m);
+                    *(p_e + k) = dum1 * cos_phi + dum2 * sin_phi;
+                    *(p_e + m) = -dum1 * sin_phi + dum2 * cos_phi;
+                }
+            }
+            for (i = 0; i < n; i++)
+                if (i == k)
+                    continue;
+                else if (max < std::abs(*(pAk + i)))
+                    max = std::abs(*(pAk + i));
+        }
+    }
+    for (pAk = const_cast<Real *>(A), k = 0; k < n; pAk += n, k++) eigenvalues[k] = *(pAk + k);
 }
 
 }  // Namespace helpme
@@ -409,7 +525,13 @@ class Matrix {
     enum class SortOrder { Ascending, Descending };
 
     inline const Real& operator()(int row, int col) const { return *(data_ + row * nCols_ + col); }
+    inline const Real& operator()(const std::pair<int, int>& indices) const {
+        return *(data_ + std::get<0>(indices) * nCols_ + std::get<1>(indices));
+    }
     inline Real& operator()(int row, int col) { return *(data_ + row * nCols_ + col); }
+    inline Real& operator()(const std::pair<int, int>& indices) {
+        return *(data_ + std::get<0>(indices) * nCols_ + std::get<1>(indices));
+    }
     inline const Real* operator[](int row) const { return data_ + row * nCols_; }
     inline Real* operator[](int row) { return data_ + row * nCols_; }
 
@@ -692,10 +814,7 @@ class Matrix {
 
         auto eigenPairs = this->diagonalize();
         Matrix evalsReal = std::get<0>(eigenPairs);
-        Matrix evalsImag = std::get<1>(eigenPairs);
-        Matrix evecs = std::get<2>(eigenPairs);
-        if (!evalsImag.isNearZero())
-            throw std::runtime_error("Unexpected complex eigenvalues encountered when applying operator to Matrix.");
+        Matrix evecs = std::get<1>(eigenPairs);
         evalsReal.applyOperationToEachElement(function);
         Matrix evecsT = evecs.transpose();
         for (int row = 0; row < nRows_; ++row) {
@@ -851,50 +970,33 @@ class Matrix {
     }
 
     /*!
-     * \brief diagonalize diagonalize this matrix, leaving the original untouched.
-     * \param order how to order the (eigenvalue,eigenvector) pairs, where the sort key is the real part of the
-     * eigenvalue.
-     * \return a tuple of <real eigenvalue compnents, imaginary eigenvalue components, eigenvectors> sorted
-     * according to the order variable.  The eigenvectors are stored by column.
+     * \brief diagonalize diagonalize this matrix, leaving the original untouched.  Note that this assumes
+     *        that this matrix is real and symmetric.
+     * \param order how to order the (eigenvalue,eigenvector) pairs, where the sort key is the eigenvalue.
+     * \return a pair of corresponding <eigenvalue , eigenvectors> sorted according to the order variable.
+     *         The eigenvectors are stored by column.
      */
-    std::tuple<Matrix<Real>, Matrix<Real>, Matrix<Real>> diagonalize(SortOrder order = SortOrder::Ascending) const {
-        if (nRows_ != nCols_) throw std::runtime_error("Attempting to diagonalize a non-square matrix.");
-        Matrix evalsReal(nRows_, 1);
-        Matrix evalsImag(nRows_, 1);
-        Matrix evecs(nRows_, nRows_);
-        std::vector<Real> clone(data_, data_ + nRows_ * nCols_);
+    std::pair<Matrix<Real>, Matrix<Real>> diagonalize(SortOrder order = SortOrder::Ascending) const {
+        assertSymmetric();
 
-        int info;
-        Real workDim;
-        LapackWrapper<Real>::diagonalizer()('V', 'N', nRows_, clone.data(), nCols_, evalsReal.data_, evalsImag.data_,
-                                            evecs.data_, nCols_, nullptr, 1, &workDim, -1, &info);
-        int scratchSize = static_cast<int>(workDim);
-        std::vector<Real> work(scratchSize);
-        LapackWrapper<Real>::diagonalizer()('V', 'N', nRows_, clone.data(), nCols_, evalsReal.data_, evalsImag.data_,
-                                            evecs.data_, nCols_, nullptr, 1, work.data(), scratchSize, &info);
-        if (info) throw std::runtime_error("Something went wrong during diagonalization!");
+        Matrix eigenValues(nRows_, 1);
+        Matrix unsortedEigenVectors(nRows_, nRows_);
+        Matrix sortedEigenVectors(nRows_, nRows_);
 
-        struct eigenInfo {
-            Real valueReal, valueImag, *vector;
-            eigenInfo(Real r, Real i, Real* v) : valueReal(r), valueImag(i), vector(v) {}
-            bool operator<(eigenInfo const& other) const { return valueReal < other.valueReal; }
-        };
+        JacobiCyclicDiagonalization<Real>(eigenValues[0], unsortedEigenVectors[0], cbegin(), nRows_);
+        unsortedEigenVectors.transposeInPlace();
 
-        std::vector<eigenInfo> eigenTuples;
-        for (int val = 0; val < nRows_; ++val)
-            eigenTuples.push_back(eigenInfo(evalsReal[val][0], evalsImag[val][0], evecs[val]));
-
-        std::sort(eigenTuples.begin(), eigenTuples.end());
-        if (order == SortOrder::Descending) std::reverse(eigenTuples.begin(), eigenTuples.end());
+        std::vector<std::pair<Real, const Real*>> eigenPairs;
+        for (int val = 0; val < nRows_; ++val) eigenPairs.push_back({eigenValues[val][0], unsortedEigenVectors[val]});
+        std::sort(eigenPairs.begin(), eigenPairs.end());
+        if (order == SortOrder::Descending) std::reverse(eigenPairs.begin(), eigenPairs.end());
         for (int val = 0; val < nRows_; ++val) {
-            const auto& e = eigenTuples[val];
-            evalsReal.data_[val] = e.valueReal;
-            evalsImag.data_[val] = e.valueImag;
-            std::copy(e.vector, e.vector + nCols_, clone.data() + val * nCols_);
+            const auto& e = eigenPairs[val];
+            eigenValues.data_[val] = std::get<0>(e);
+            std::copy(std::get<1>(e), std::get<1>(e) + nCols_, sortedEigenVectors[val]);
         }
-        std::copy(clone.begin(), clone.end(), evecs.begin());
-        evecs.transposeInPlace();
-        return std::make_tuple(std::move(evalsReal), std::move(evalsImag), std::move(evecs));
+        sortedEigenVectors.transposeInPlace();
+        return {std::move(eigenValues), std::move(sortedEigenVectors)};
     }
 };
 
@@ -3103,10 +3205,7 @@ class PMEInstance {
 
                 auto eigenTuple = HtH.diagonalize();
                 RealMat evalsReal = std::get<0>(eigenTuple);
-                RealMat evalsImag = std::get<1>(eigenTuple);
-                RealMat evecs = std::get<2>(eigenTuple);
-                if (!evalsImag.isNearZero())
-                    throw std::runtime_error("Unexpected complex eigenvalues encountered while making shape matrix.");
+                RealMat evecs = std::get<1>(eigenTuple);
                 for (int i = 0; i < 3; ++i) evalsReal(i, 0) = sqrt(evalsReal(i, 0));
                 boxVecs_.setZero();
                 for (int i = 0; i < 3; ++i) {

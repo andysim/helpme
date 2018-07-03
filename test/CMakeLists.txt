@@ -23,7 +23,6 @@ endforeach()
 include_directories(${PROJECT_SOURCE_DIR}/src)
 include_directories(${PROJECT_SOURCE_DIR}/single_include)
 include_directories(${FFTW_INCLUDES})
-link_libraries(${BLAS_LIBRARIES} ${LAPACK_LIBRARIES} ${FFTW_LIBRARIES})
 
 if(HAVE_MPI)
     link_libraries(${MPI_CXX_LIBRARIES})
@@ -42,30 +41,29 @@ add_custom_target(SingleHeader
                   DEPENDS StandaloneHeader
 )
 
-# Find only the static library for linking with C++/C/Fortran wrappers
-set(helpmestatic_name ${CMAKE_BINARY_DIR}/src/helpme.a)
-
 # C example
 add_executable (RunCWrapper fullexample.c)
 add_dependencies(RunCWrapper helpmestatic)
-target_link_libraries(RunCWrapper ${helpmestatic_name})
+target_link_libraries(RunCWrapper helpmestatic)
 set_target_properties(RunCWrapper PROPERTIES LINKER_LANGUAGE CXX)
 add_test(NAME CWrapperTest COMMAND RunCWrapper)
 
 # CXX DHFR benchmark example
 add_executable (DHFRBenchmark dhfr_benchmark.cpp)
+target_link_libraries(DHFRBenchmark ${EXTERNAL_LIBRARIES})
 configure_file(data/dhfr_charges.txt . COPYONLY)
 configure_file(data/dhfr_c6s.txt . COPYONLY)
 configure_file(data/dhfr_coords.txt . COPYONLY)
-#target_compile_options(DHFRBenchmark  PRIVATE -g)
 
 # CXX example
 add_executable (RunCXXWrapper fullexample.cpp)
+target_link_libraries(RunCXXWrapper ${EXTERNAL_LIBRARIES})
 add_test(NAME CXXWrapperTest COMMAND RunCXXWrapper)
 
 # CXX example using standalone header file
 add_executable (RunCXXWrapperStandalone fullexample.cpp)
 add_dependencies(RunCXXWrapperStandalone SingleHeader)
+target_link_libraries(RunCXXWrapperStandalone ${EXTERNAL_LIBRARIES})
 target_compile_definitions(RunCXXWrapperStandalone PRIVATE "BUILD_STANDALONE=1")
 add_test(NAME CXXWrapperStandaloneTest COMMAND RunCXXWrapperStandalone)
 
@@ -73,6 +71,7 @@ add_test(NAME CXXWrapperStandaloneTest COMMAND RunCXXWrapperStandalone)
 if(HAVE_MPI)
     # CXX example
     add_executable (RunCXXMPIWrapper fullexample_parallel.cpp)
+    target_link_libraries(RunCXXMPIWrapper ${EXTERNAL_LIBRARIES})
     add_test(NAME CXXMPIWrapperTestX
              COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./RunCXXMPIWrapper 2 1 1 ${MPIEXEC_POSTFLAGS})
     add_test(NAME CXXMPIWrapperTestY
@@ -82,8 +81,7 @@ if(HAVE_MPI)
 
     # C example
     add_executable (RunCMPIWrapper fullexample_parallel.c)
-    add_dependencies(RunCMPIWrapper helpmestatic)
-    target_link_libraries(RunCMPIWrapper ${helpmestatic_name})
+    target_link_libraries(RunCMPIWrapper helpmestatic)
     set_target_properties(RunCMPIWrapper PROPERTIES LINKER_LANGUAGE CXX)
     add_test(NAME CMPIWrapperTestX
              COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./RunCMPIWrapper 2 1 1 ${MPIEXEC_POSTFLAGS})
@@ -96,13 +94,8 @@ if(HAVE_MPI)
     if(Fortran_ENABLED)
         link_libraries(${MPI_Fortran_LIBRARIES})
         add_executable(RunFortranMPIWrapper ${PROJECT_SOURCE_DIR}/src/helpme.F90 fullexample_parallel.F90 )
-        add_dependencies(RunFortranMPIWrapper helpmestatic)
-        if(CMAKE_CXX_COMPILER_ID MATCHES "AppleClang")
-            set(cpplib c++)
-        else()
-            set(cpplib stdc++)
-        endif()
-        target_link_libraries(RunFortranMPIWrapper ${helpmestatic_name} ${cpplib})
+        set_target_properties(RunFortranMPIWrapper PROPERTIES LINKER_LANGUAGE Fortran)
+        target_link_libraries(RunFortranMPIWrapper helpmestatic ${cpplib})
         add_test(NAME FortranMPIWrapperTestX
                  COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./RunFortranMPIWrapper 2 1 1 ${MPIEXEC_POSTFLAGS})
         add_test(NAME FortranMPIWrapperTestY
@@ -115,13 +108,8 @@ endif()
 # Fortran example
 if(Fortran_ENABLED)
     add_executable(RunFortranWrapper ${PROJECT_SOURCE_DIR}/src/helpme.F90 fullexample.F90 )
-    add_dependencies(RunFortranWrapper helpmestatic)
-    if(CMAKE_CXX_COMPILER_ID MATCHES "AppleClang")
-        set(cpplib c++)
-    else()
-        set(cpplib stdc++)
-    endif()
-    target_link_libraries(RunFortranWrapper ${helpmestatic_name} ${cpplib})
+    target_link_libraries(RunFortranWrapper helpmestatic ${cpplib})
+    set_target_properties(RunFortranWrapper PROPERTIES LINKER_LANGUAGE Fortran)
     add_test(NAME FortranWrapper COMMAND RunFortranWrapper)
 endif()
 
@@ -132,3 +120,4 @@ if(Python_ENABLED)
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/../python
     )
 endif()
+

@@ -1058,10 +1058,7 @@ class PMEInstance {
 
                 auto eigenTuple = HtH.diagonalize();
                 RealMat evalsReal = std::get<0>(eigenTuple);
-                RealMat evalsImag = std::get<1>(eigenTuple);
-                RealMat evecs = std::get<2>(eigenTuple);
-                if (!evalsImag.isNearZero())
-                    throw std::runtime_error("Unexpected complex eigenvalues encountered while making shape matrix.");
+                RealMat evecs = std::get<1>(eigenTuple);
                 for (int i = 0; i < 3; ++i) evalsReal(i, 0) = sqrt(evalsReal(i, 0));
                 boxVecs_.setZero();
                 for (int i = 0; i < 3; ++i) {
