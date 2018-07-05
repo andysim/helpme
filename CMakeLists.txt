@@ -73,6 +73,15 @@ set(CMAKE_Fortran_FLAGS_DEBUG "${CMAKE_Fortran_FLAGS_DEBUG} -O0")
 
 # FFTW
 find_package(FFTW REQUIRED)
+if(HAVE_FFTWF)
+    add_definitions(-DHAVE_FFTWF=1)
+endif()
+if(HAVE_FFTWD)
+    add_definitions(-DHAVE_FFTWD=1)
+endif()
+if(HAVE_FFTWL)
+    add_definitions(-DHAVE_FFTWL=1)
+endif()
 
 # OpenMP
 if(ENABLE_OPENMP)
