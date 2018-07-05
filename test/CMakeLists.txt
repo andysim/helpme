@@ -121,3 +121,9 @@ if(Python_ENABLED)
     )
 endif()
 
+# Make sure examples are installed
+set(EXAMPLEFILES fullexample.c fullexample.cpp fullexample.F90 fullexample.py)
+if(HAVE_MPI)
+    set(EXAMPLEFILES ${EXAMPLEFILES} fullexample_parallel.c fullexample_parallel.cpp fullexample_parallel.F90)
+endif()
+install(FILES ${EXAMPLEFILES} DESTINATION examples)
