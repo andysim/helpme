@@ -126,11 +126,12 @@ function used in :eq:`ewald_partitioning` is
 
 with the numerator defined by the upper incomplete gamma function
 
-.. math::
-    :label: incomplete_gamma_function
 
-    \Gamma\left(n, x \right) = \int_x^\infty t^{n-1}e^{-t} \mathrm{d}t =
-    2\int_\sqrt{x}^\infty u^{2n-1}e^{-u^2} \mathrm{d}u,
+.. math::
+     :label: incomplete_gamma_function
+
+     \Gamma\left(n, x \right) = \int_x^\infty t^{n-1}e^{-t} \mathrm{d}t =
+     2\int_{\sqrt{x}}^\infty u^{2n-1}e^{-u^2} \mathrm{d}u,
 
 while the denominator involves the gamma function
 
@@ -280,7 +281,7 @@ Potential Expressions
                        \frac{s}{\Gamma\left(\frac{p}{2}\right)}
                        \sum_{\mathbf{n}^*} \sum_{B \notin \mathcal{M}}
                        \frac{\Gamma\left(\frac{p}{2},\kappa^2 R^2 \right) C_B}
-                                          {R^p_\vphantom{P}}
+                                          {R^p_{\vphantom{P}}}
 
 .. math::
     :label: phiadj
@@ -289,24 +290,24 @@ Potential Expressions
                        \frac{s}{\Gamma\left(\frac{p}{2}\right)}
                        \sum_{B \in \mathcal{M}}
                        \frac{\left[\Gamma\left(\frac{p}{2},\kappa^2 R^2 \right) - 1 \right] C_B}
-                                                           {R^p_\vphantom{P}}
+                                                           {R^p_{\vphantom{P}}}
 
 .. math::
     :label: phirec
 
     \phi_\mathrm{rec}\left(\mathbf{r}_A\right) =
-                       \frac{\pi^{p-\frac{3}{2}}_\vphantom{P} s}
+                       \frac{\pi^{p-\frac{3}{2}}_{\vphantom{P}} s}
                             {\Gamma \left(\frac{p}{2}\right) V}
                        \sum_{\mathbf{m} \ne \mathbf{0}}
                        \frac{\Gamma \left(\frac{3-p}{2},\frac{m^2 \pi ^2}{\kappa ^2}\right)}
-                                               {m^{3-p}_\vphantom{P}}
+                                               {m^{3-p}_{\vphantom{P}}}
                        S(\mathbf{m}) e^{-2 \pi i\mkern1mu \mathbf{m}\cdot\mathbf{r}_A}
 
 .. math::
     :label: phislf
 
     \phi_\mathrm{slf}\left(\mathbf{r}_A\right) =
-                      -\frac{\kappa^{\ p}_\vphantom{P} s}
+                      -\frac{\kappa^{\ p}_{\vphantom{P}} s}
                      {p \Gamma\left(\frac{p}{2}\right)}C_A
 
 
@@ -329,7 +330,7 @@ Energy Expressions
                       \frac{s}{2 \Gamma\left(\frac{p}{2}\right)}
                       \sum_{\mathbf{n}^*} \sum_{A,B \notin \mathcal{M}}
                       \frac{\Gamma\left(\frac{p}{2},\kappa^2 R^2 \right) C_A C_B}
-                                               {R^p_\vphantom{P}}
+                                               {R^p_{\vphantom{P}}}
 
 .. math::
     :label: Uadj
@@ -338,24 +339,24 @@ Energy Expressions
                       \frac{s}{2 \Gamma\left(\frac{p}{2}\right)}
                       \sum_{\mathbf{n}^*} \sum_{A,B \notin \mathcal{M}}
                       \frac{\left[\Gamma\left(\frac{p}{2},\kappa^2 R^2 \right) - 1\right] C_A C_B}
-                                                  {R^p_\vphantom{P}}
+                                                  {R^p_{\vphantom{P}}}
 
 .. math::
     :label: Urec
 
     U_\mathrm{rec} = 
-                     \frac{\pi^{p-\frac{3}{2}}_\vphantom{P} s }
+                     \frac{\pi^{p-\frac{3}{2}}_{\vphantom{P}} s }
                           {2 \Gamma \left(\frac{p}{2}\right) V}
                      \sum_{\mathbf{m} \ne \mathbf{0}}
                      \frac{\Gamma \left(\frac{3-p}{2},\frac{m^2 \pi ^2}{\kappa ^2}\right)}
-                                             {m^{3-p}_\vphantom{P}}
+                                             {m^{3-p}_{\vphantom{P}}}
                      S(\mathbf{m}) S(-\mathbf{m})
 
 .. math::
     :label: Uslf
 
     U_\mathrm{slf} =
-                           -\frac{\kappa^{\ p}_\vphantom{P} s}
+                           -\frac{\kappa^{\ p}_{\vphantom{P}} s}
                 {p \Gamma\left(\frac{p}{2}\right)}\left(\sum_A C_A^2\right)
 
 For absolutely convergenct cases, with :math:`p > 3`, |Urec| has an additional
@@ -366,7 +367,7 @@ erroneously excluded:
     :label: Uzer
 
     U_\mathrm{zer} =
-               \frac{\pi^{\frac{3}{2}}_\vphantom{P} \kappa^{\ p-3}_\vphantom{P} s}
+               \frac{\pi^{\frac{3}{2}}_{\vphantom{P}} \kappa^{\ p-3}_{\vphantom{P}} s}
                     {\left(p-3\right) \Gamma\left(\frac{p}{2}\right) V}
               \left(\sum_{A,B} C_AC_B\right)
 
@@ -380,7 +381,7 @@ Force Expressions
     \mathbf{F}_\mathrm{dir}\left(\mathbf{r}_A\right) =
                    -\sum_B \frac{s C_B}{R^2 \Gamma\left(\frac{p}{2}\right)}
                                            \left( \frac{p \Gamma\left(\frac{p}{2},\kappa^2 R^2 \right)}
-                                                               {R^{p}_\vphantom{P}}
+                                                               {R^{p}_{\vphantom{P}}}
                                                 + 2 e^{-\kappa^2 R^2} \kappa^p
                                                                \right)
 
@@ -390,7 +391,7 @@ Force Expressions
     \mathbf{F}_\mathrm{adj}\left(\mathbf{r}_A\right) =
                     -\sum_B \frac{s C_B}{R^2 \Gamma\left(\frac{p}{2}\right)}
                   \left( \frac{p \left[\Gamma\left(\frac{p}{2},\kappa^2 R^2 \right) - 1\right]}
-                                             {R^{p}_\vphantom{P}}
+                                             {R^{p}_{\vphantom{P}}}
                                + 2 e^{-\kappa^2 R^2} \kappa^p
                                                    \right)
 
@@ -398,11 +399,11 @@ Force Expressions
     :label: Frecfrac
 
     \mathbf{F}'_\mathrm{rec}\left(\mathbf{r}_A\right)  = 
-                 \frac{2 \pi^{p-\frac{1}{2}}_\vphantom{P} i\mkern1mu s C_A}
+                 \frac{2 \pi^{p-\frac{1}{2}}_{\vphantom{P}} i\mkern1mu s C_A}
                             {\Gamma \left(\frac{p}{2}\right) V}
                  \sum_{\mathbf{m} \ne \mathbf{0}}
                  \frac{\Gamma \left(\frac{3-p}{2},\frac{m^2 \pi ^2}{\kappa ^2}\right)\mathbf{m} }
-                                           {m^{3-p}_\vphantom{P}}
+                                           {m^{3-p}_{\vphantom{P}}}
                  S(\mathbf{m}) e^{-2 \pi i\mkern1mu \mathbf{m}\cdot\mathbf{r}_A}
 
 Comparing :eq:`phirec` and :eq:`Frecfrac`, and remembering that :math:`\nabla_A
@@ -453,14 +454,14 @@ Virial Expressions
     :label: Vrec
 
     V_\mathrm{rec} = 
-                     \frac{\pi^{\frac{3}{2}}_\vphantom{P} s }
+                     \frac{\pi^{\frac{3}{2}}_{\vphantom{P}} s }
                           {2 \Gamma \left(\frac{p}{2}\right) V}
                      \sum_{\mathbf{m} \ne \mathbf{0}}
                      \left(
                      \frac{\Gamma \left(\frac{3-p}{2},\frac{m^2 \pi ^2}{\kappa ^2}\right)}
-                                         {m^{3-p}_\vphantom{P}} \mathbf{I}
+                                         {m^{3-p}_{\vphantom{P}}} \mathbf{I}
                       - \frac{\Gamma \left(\frac{5-p}{2},\frac{m^2 \pi ^2}{\kappa ^2}\right)}
-                                  {m^{5-p}_\vphantom{P}} \mathbf{m} \otimes \mathbf{m}
+                                  {m^{5-p}_{\vphantom{P}}} \mathbf{m} \otimes \mathbf{m}
                      \right)
                      S(\mathbf{m}) S(-\mathbf{m})
 
@@ -473,7 +474,7 @@ the energy, we have to correct :eq:`Vrec` for the absence of the
     :label: Vzer
 
     V_\mathrm{zer} =
-              \frac{\pi^{p-\frac{3}{2}}_\vphantom{P} \kappa^{\ p-3}_\vphantom{P} s}
+              \frac{\pi^{p-\frac{3}{2}}_{\vphantom{P}} \kappa^{\ p-3}_{\vphantom{P}} s}
                     {\left(p-3\right) \Gamma\left(\frac{p}{2}\right) V}
               \left(\sum_{A,B} C_AC_B\right) \mathbf{I}
 
@@ -514,7 +515,7 @@ Ewald (PME) method.
 Boundary Conditions
 -------------------
 
-For kernels with :math:`1 \ge n \gt 4`, which includes Coulombic systems, the
+For kernels with :math:`1 \leq n \leq 3`, which includes Coulombic systems, the
 summation is conditionally convergent.  In these cases the leading term in the
 reciprocal space summation is neglected, which corresponds to introducing a
 neutralizing plasma in charged Coulombic systems.  Corrections that reintroduce

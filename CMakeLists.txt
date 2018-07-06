@@ -139,6 +139,7 @@ set(EXTERNAL_LIBRARIES ${FFTW_LIBRARIES} ${cpplib})
 # Documentation
 find_package(Doxygen)
 find_package(Sphinx)
+find_package(Latex)
 if(DOXYGEN_EXECUTABLE)
     if(SPHINX_EXECUTABLE)
         add_subdirectory(docs)
