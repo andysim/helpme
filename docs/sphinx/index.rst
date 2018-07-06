@@ -20,6 +20,7 @@ Welcome to helPME's documentation!
    :caption: Contents:
 
    introduction
+   gettingstarted
    bibliography
 
 
