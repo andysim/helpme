@@ -3,6 +3,7 @@ set( SOURCES_UNITTESTS_TESTS
     unittest-cartesiantransform.cpp
     unittest-coulombkappasweep.cpp
     unittest-dispersionkappasweep.cpp
+    unittest-fft.cpp
     unittest-fullrun.cpp
     unittest-gammafunction.cpp
     unittest-gridsize.cpp
