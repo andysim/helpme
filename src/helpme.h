@@ -788,7 +788,6 @@ class PMEInstance {
 
         Real bPrefac = M_PI * M_PI / (kappa * kappa);
         Real volPrefac = scaleFactor * pow(M_PI, rPower - 1) / (sqrtPi * gammaComputer<Real, rPower>::value * volume);
-        int halfNx = nx / 2 + 1;
         const Real *boxPtr = boxInv[0];
         const Real *xMPtr = xMVals.data();
         const Real *yMPtr = yMVals.data();
