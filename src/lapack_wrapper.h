@@ -132,7 +132,6 @@ void JacobiCyclicDiagonalization(Real *eigenvalues, Real *eigenvectors, const Re
     Real dum1;
     Real dum2;
     Real dum3;
-    Real r;
     Real max;
 
     // Take care of trivial cases
