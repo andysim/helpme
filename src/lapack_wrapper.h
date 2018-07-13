@@ -123,7 +123,7 @@ namespace helpme {
 
 template <typename Real>
 void JacobiCyclicDiagonalization(Real *eigenvalues, Real *eigenvectors, const Real *A, int n) {
-    int row, i, j, k, m;
+    int i, j, k, m;
     Real *pAk, *pAm, *p_r, *p_e;
     Real threshold_norm;
     Real threshold;
