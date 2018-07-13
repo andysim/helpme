@@ -2973,9 +2973,6 @@ class PMEInstance {
         Real bPrefac = M_PI * M_PI / (kappa * kappa);
         Real volPrefac = scaleFactor * pow(M_PI, rPower - 1) / (sqrtPi * gammaComputer<Real, rPower>::value * volume);
         const Real *boxPtr = boxInv[0];
-        const Real *xMPtr = xMVals.data();
-        const Real *yMPtr = yMVals.data();
-        const Real *zMPtr = zMVals.data();
         // Exclude m=0 cell.
         int start = (nodeZero ? 1 : 0);
 // Writing the three nested loops in one allows for better load balancing in parallel.
