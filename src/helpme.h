@@ -1395,7 +1395,6 @@ class PMEInstance {
         bool iAmNodeZero = (rankA_ == 0 && rankB_ == 0 && rankC_ == 0);
         Real *influenceFunction = cachedInfluenceFunction_.data();
         int startX = rankA_ * myComplexDimA_;
-        int startY = rankB_ * myDimB_ + rankC_ * myDimB_ / numNodesC_;
 
         Real energy = 0;
         if (rPower_ > 3 && iAmNodeZero) {
