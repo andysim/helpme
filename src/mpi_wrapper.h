@@ -12,9 +12,9 @@
 #include <mpi.h>
 
 #include <complex>
-#include <exception>
 #include <iomanip>
 #include <iostream>
+#include <stdexcept>
 
 namespace helpme {
 
