@@ -11,12 +11,12 @@
 
 #include <algorithm>
 #include <complex>
-#include <exception>
 #include <fstream>
 #include <initializer_list>
 #include <iostream>
 #include <iomanip>
 #include <numeric>
+#include <stdexcept>
 #include <tuple>
 
 #include "lapack_wrapper.h"

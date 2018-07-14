@@ -9,7 +9,7 @@
 #ifndef _HELPME_MEMORY_H_
 #define _HELPME_MEMORY_H_
 
-#include <exception>
+#include <stdexcept>
 #include <vector>
 
 #include <fftw3.h>

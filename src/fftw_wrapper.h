@@ -10,9 +10,9 @@
 #define _HELPME_FFTW_WRAPPER_H_
 
 #include <complex>
-#include <exception>
 #include <iostream>
 #include <limits>
+#include <stdexcept>
 #include <type_traits>
 
 #include <fftw3.h>

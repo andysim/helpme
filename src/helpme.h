@@ -17,13 +17,13 @@
 #include <array>
 #include <cmath>
 #include <complex>
-#include <exception>
 #include <functional>
 #include <iostream>
 #include <memory>
 #ifdef _OPENMP
 #include <omp.h>
 #endif
+#include <stdexcept>
 #include <string>
 #include <tuple>
 #include <unistd.h>
