@@ -134,8 +134,8 @@ class PMEInstance {
     int myComplexDimA_;
     /// The order of the cardinal B-Spline used for interpolation.
     int splineOrder_;
-    /// The number of threads per MPI instance.
-    int nThreads_;
+    /// The actual number of threads per MPI instance, and the number requested previously.
+    int nThreads_, requestedNumberOfThreads_;
     /// The exponent of the (inverse) interatomic distance used in this kernel.
     int rPower_;
     /// The scale factor to apply to all energies and derivatives.
@@ -934,7 +934,7 @@ class PMEInstance {
         splineOrderHasChanged_ = splineOrder_ != splineOrder;
         scaleFactorHasChanged_ = scaleFactor_ != scaleFactor;
         if (kappaHasChanged_ || rPowerHasChanged_ || gridDimensionHasChanged_ || splineOrderHasChanged_ ||
-            scaleFactorHasChanged_ || nThreads_ != nThreads) {
+            scaleFactorHasChanged_ || requestedNumberOfThreads_ != nThreads) {
             rPower_ = rPower;
 
             dimA_ = dimA;
@@ -943,6 +943,7 @@ class PMEInstance {
             complexDimA_ = dimA / 2 + 1;
             myComplexDimA_ = myDimA_ / 2 + 1;
             splineOrder_ = splineOrder;
+            requestedNumberOfThreads_ = nThreads;
 #ifdef _OPENMP
             nThreads_ = nThreads ? nThreads : omp_get_max_threads();
 #else
@@ -998,6 +999,7 @@ class PMEInstance {
           dimB_(0),
           dimC_(0),
           splineOrder_(0),
+          requestedNumberOfThreads_(-1),
           rPower_(0),
           scaleFactor_(0),
           kappa_(0),
