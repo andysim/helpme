@@ -1085,6 +1085,13 @@ class PMEInstance {
             scaledRecVecs_.row(0) *= dimA_;
             scaledRecVecs_.row(1) *= dimB_;
             scaledRecVecs_.row(2) *= dimC_;
+            cellA_ = A;
+            cellB_ = B;
+            cellC_ = C;
+            cellAlpha_ = alpha;
+            cellBeta_ = beta;
+            cellGamma_ = gamma;
+            latticeType_ = latticeType;
             unitCellHasChanged_ = true;
         } else {
             unitCellHasChanged_ = false;

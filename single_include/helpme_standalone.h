@@ -26,13 +26,13 @@
 #include <array>
 #include <cmath>
 #include <complex>
-#include <exception>
 #include <functional>
 #include <iostream>
 #include <memory>
 #ifdef _OPENMP
 #include <omp.h>
 #endif
+#include <stdexcept>
 #include <string>
 #include <tuple>
 #include <unistd.h>
@@ -66,12 +66,12 @@
 
 #include <algorithm>
 #include <complex>
-#include <exception>
 #include <fstream>
 #include <initializer_list>
 #include <iostream>
 #include <iomanip>
 #include <numeric>
+#include <stdexcept>
 #include <tuple>
 
 // original file: ../src/lapack_wrapper.h
@@ -400,7 +400,7 @@ std::string stringify(T *data, size_t size, size_t rowDim, int width = 14, int p
 #ifndef _HELPME_MEMORY_H_
 #define _HELPME_MEMORY_H_
 
-#include <exception>
+#include <stdexcept>
 #include <vector>
 
 #include <fftw3.h>
@@ -1137,9 +1137,9 @@ Matrix<Real> cartesianTransform(int maxAngularMomentum, const Matrix<Real> &tran
 #define _HELPME_FFTW_WRAPPER_H_
 
 #include <complex>
-#include <exception>
 #include <iostream>
 #include <limits>
+#include <stdexcept>
 #include <type_traits>
 
 #include <fftw3.h>
@@ -1825,9 +1825,9 @@ int findGridSize(T inputSize, const std::initializer_list<T> &requiredDivisors) 
 #include <mpi.h>
 
 #include <complex>
-#include <exception>
 #include <iomanip>
 #include <iostream>
+#include <stdexcept>
 
 namespace helpme {
 
@@ -3268,6 +3268,13 @@ class PMEInstance {
             scaledRecVecs_.row(0) *= dimA_;
             scaledRecVecs_.row(1) *= dimB_;
             scaledRecVecs_.row(2) *= dimC_;
+            cellA_ = A;
+            cellB_ = B;
+            cellC_ = C;
+            cellAlpha_ = alpha;
+            cellBeta_ = beta;
+            cellGamma_ = gamma;
+            latticeType_ = latticeType;
             unitCellHasChanged_ = true;
         } else {
             unitCellHasChanged_ = false;
