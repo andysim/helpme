@@ -14,6 +14,7 @@ set( SOURCES_UNITTESTS_TESTS
     unittest-potential.cpp
     unittest-splines.cpp
     unittest-string.cpp
+    unittest-tensor.cpp
 )
 if(HAVE_MPI)
     set( SOURCES_UNITTESTS_PARALLEL_TESTS

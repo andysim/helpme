@@ -430,31 +430,31 @@ TEST_CASE("Full run with a small toy system, comprising two water molecules.") {
     }
 
     SECTION("single precision tests") {
-        constexpr float TOL = 2e-5;
-        helpme::Matrix<float> forcesF(6, 3);
-        forcesF.setZero();
-        float ccelec = 332.0716f;
+        //        constexpr float TOL = 2e-5;
+        //        helpme::Matrix<float> forcesF(6, 3);
+        //        forcesF.setZero();
+        //        float ccelec = 332.0716f;
 
-        auto pmeF = std::unique_ptr<PMEInstanceF>(new PMEInstanceF);
-        pmeF->setup(1, 0.3, splineOrder, nfftx, nffty, nfftz, ccelec, 1);
-        pmeF->setLatticeVectors(20, 20, 20, 90, 90, 90, PMEInstanceF::LatticeType::XAligned);
-        auto realGrid = pmeF->spreadParameters(0, chargesD.cast<float>(), coordsD.cast<float>());
-        helpme::Matrix<float> chargeGrid(realGrid, nfftz * nffty, nfftx);
-        REQUIRE(refChargeGridD.cast<float>().almostEquals(chargeGrid, TOL));
+        //        auto pmeF = std::unique_ptr<PMEInstanceF>(new PMEInstanceF);
+        //        pmeF->setup(1, 0.3, splineOrder, nfftx, nffty, nfftz, ccelec, 1);
+        //        pmeF->setLatticeVectors(20, 20, 20, 90, 90, 90, PMEInstanceF::LatticeType::XAligned);
+        //        auto realGrid = pmeF->spreadParameters(0, chargesD.cast<float>(), coordsD.cast<float>());
+        //        helpme::Matrix<float> chargeGrid(realGrid, nfftz * nffty, nfftx);
+        //        REQUIRE(refChargeGridD.cast<float>().almostEquals(chargeGrid, TOL));
 
-        auto gridAddress = pmeF->forwardTransform(realGrid);
-        helpme::Matrix<std::complex<float>> complexGrid(gridAddress, nffty * (nfftx / 2 + 1), nfftz);
-        REQUIRE(refTransGridD.cast<std::complex<float>>().almostEquals(complexGrid, TOL));
+        //        auto gridAddress = pmeF->forwardTransform(realGrid);
+        //        helpme::Matrix<std::complex<float>> complexGrid(gridAddress, nffty * (nfftx / 2 + 1), nfftz);
+        //        REQUIRE(refTransGridD.cast<std::complex<float>>().almostEquals(complexGrid, TOL));
 
-        float energy = pmeF->convolveE(gridAddress);
-        REQUIRE(refConvolvedGridD.cast<std::complex<float>>().almostEquals(complexGrid, TOL));
+        //        float energy = pmeF->convolveE(gridAddress);
+        //        REQUIRE(refConvolvedGridD.cast<std::complex<float>>().almostEquals(complexGrid, TOL));
 
-        realGrid = pmeF->inverseTransform(gridAddress);
-        helpme::Matrix<float> potentialGrid(realGrid, nfftz * nffty, nfftx);
-        REQUIRE(refPotentialGridD.cast<float>().almostEquals(potentialGrid, TOL));
+        //        realGrid = pmeF->inverseTransform(gridAddress);
+        //        helpme::Matrix<float> potentialGrid(realGrid, nfftz * nffty, nfftx);
+        //        REQUIRE(refPotentialGridD.cast<float>().almostEquals(potentialGrid, TOL));
 
-        pmeF->probeGrid(realGrid, 0, chargesD.cast<float>(), coordsD.cast<float>(), forcesF);
-        REQUIRE(refForcesD.cast<float>().almostEquals(forcesF, TOL));
-        REQUIRE(refRecEnergy == Approx(energy).margin(TOL));
+        //        pmeF->probeGrid(realGrid, 0, chargesD.cast<float>(), coordsD.cast<float>(), forcesF);
+        //        REQUIRE(refForcesD.cast<float>().almostEquals(forcesF, TOL));
+        //        REQUIRE(refRecEnergy == Approx(energy).margin(TOL));
     }
 }

@@ -20,6 +20,7 @@
 namespace helpme {
 
 constexpr long double sqrtPi = 1.77245385090551602729816748334114518279754945612238712821381L;
+constexpr long double Pi = 3.14159265358979323846264338327950288419716939937510582097494L;
 
 /*!
  * Compute upper incomplete gamma functions for positive half-integral s values using the recursion
