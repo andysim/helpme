@@ -5,6 +5,7 @@ set( SOURCES_UNITTESTS_TESTS
     unittest-dispersionkappasweep.cpp
     unittest-fft.cpp
     unittest-fullrun.cpp
+    unittest-fullrun-compressed.cpp
     unittest-gammafunction.cpp
     unittest-gridsize.cpp
     unittest-lattice.cpp

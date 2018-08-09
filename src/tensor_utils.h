@@ -55,10 +55,11 @@ void permuteABCtoACB(Real const *__restrict__ abcPtr, int const aDimension, int 
  * \param cDimension the dimension of the C index.
  * \param dDimension the dimension of the D index.
  * \param abdPtr the address of the outgoing ABD tensor.
+ * \param the length of the vector registers on the current CPU in bits.
  */
-template <typename Real, int vectorLength>
+template <typename Real>
 void contractABxCWithDxC(Real const *__restrict__ abcPtr, Real const *__restrict__ dcPtr, int const abDimension,
-                         int const cDimension, int const dDimension, Real *__restrict__ abdPtr) {
+                         int const cDimension, int const dDimension, Real *__restrict__ abdPtr, int vectorLength = 0) {
     Real acc_C;
 
     for (int AB = 0; AB <= -1 + abDimension; ++AB) {
