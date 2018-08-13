@@ -1561,7 +1561,7 @@ class PMEInstance {
 
         if (iAmNodeZero) transformedGrid[0] = 0;
 // Writing the three nested loops in one allows for better load balancing in parallel.
-#pragma omp parallel for num_threads(nThreads)
+#pragma omp parallel for reduction(+ : energy) num_threads(nThreads_)
         for (size_t yxz = 0; yxz < nyxz; ++yxz) {
             energy += transformedGrid[yxz] * transformedGrid[yxz] * influenceFunction[yxz];
             transformedGrid[yxz] *= influenceFunction[yxz];
@@ -1797,7 +1797,7 @@ class PMEInstance {
 #ifdef _OPENMP
                 int threadID = omp_get_thread_num();
 #else
-                int threadID = 1;
+                int threadID = 0;
 #endif
                 Real *myScratch = fractionalPhis[threadID % nThreads_];
                 probeGridImpl(atom, potentialGrid, nComponents, nForceComponents, splineA, splineB, splineC, myScratch,
@@ -2252,10 +2252,21 @@ class PMEInstance {
         filterAtomsAndBuildSplineCache(parameterAngMom + 1, coordinates);
 
         auto realGrid = spreadParameters(parameterAngMom, parameters);
-        auto gridAddress = forwardTransform(realGrid);
-        Real energy = convolveE(gridAddress);
-        const auto potentialGrid = inverseTransform(gridAddress);
-        probeGrid(potentialGrid, parameterAngMom, parameters, forces);
+
+        Real energy;
+        if (algorithmType_ == AlgorithmType::PME) {
+            auto gridAddress = forwardTransform(realGrid);
+            energy = convolveE(gridAddress);
+            auto potentialGrid = inverseTransform(gridAddress);
+            probeGrid(potentialGrid, parameterAngMom, parameters, forces);
+        } else if (algorithmType_ == AlgorithmType::CompressedPME) {
+            auto gridAddress = compressedForwardTransform(realGrid);
+            energy = convolveE(gridAddress);
+            auto potentialGrid = compressedInverseTransform(gridAddress);
+            probeGrid(potentialGrid, parameterAngMom, parameters, forces);
+        } else {
+            std::logic_error("Unknown algorithm in helpme::computeEFRec");
+        }
 
         return energy;
     }
@@ -2292,10 +2303,21 @@ class PMEInstance {
         filterAtomsAndBuildSplineCache(parameterAngMom + 1, coordinates);
 
         auto realGrid = spreadParameters(parameterAngMom, parameters);
-        auto gridPtr = forwardTransform(realGrid);
-        Real energy = convolveEV(gridPtr, virial);
-        const auto potentialGrid = inverseTransform(gridPtr);
-        probeGrid(potentialGrid, parameterAngMom, parameters, forces);
+
+        Real energy;
+        if (algorithmType_ == AlgorithmType::PME) {
+            auto gridAddress = forwardTransform(realGrid);
+            energy = convolveEV(gridAddress, virial);
+            auto potentialGrid = inverseTransform(gridAddress);
+            probeGrid(potentialGrid, parameterAngMom, parameters, forces);
+        } else if (algorithmType_ == AlgorithmType::CompressedPME) {
+            auto gridAddress = compressedForwardTransform(realGrid);
+            energy = convolveEV(gridAddress, virial);
+            auto potentialGrid = compressedInverseTransform(gridAddress);
+            probeGrid(potentialGrid, parameterAngMom, parameters, forces);
+        } else {
+            std::logic_error("Unknown algorithm in helpme::computeEFRec");
+        }
 
         return energy;
     }

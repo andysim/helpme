@@ -9,6 +9,15 @@
 #ifndef _HELPME_TENSOR_UTILS_H_
 #define _HELPME_TENSOR_UTILS_H_
 
+#if HAVE_BLAS == 1
+extern "C" {
+extern void dgemm(char *, char *, int *, int *, int *, double *, double *, int *, double *, int *, double *, double *,
+                  int *);
+extern void sgemm(char *, char *, int *, int *, int *, float *, float *, int *, float *, int *, float *, float *,
+                  int *);
+}
+#endif
+
 namespace helpme {
 
 /*!
@@ -55,13 +64,11 @@ void permuteABCtoACB(Real const *__restrict__ abcPtr, int const aDimension, int 
  * \param cDimension the dimension of the C index.
  * \param dDimension the dimension of the D index.
  * \param abdPtr the address of the outgoing ABD tensor.
- * \param the length of the vector registers on the current CPU in bits.
  */
 template <typename Real>
 void contractABxCWithDxC(Real const *__restrict__ abcPtr, Real const *__restrict__ dcPtr, int const abDimension,
-                         int const cDimension, int const dDimension, Real *__restrict__ abdPtr, int vectorLength = 0) {
+                         int const cDimension, int const dDimension, Real *__restrict__ abdPtr) {
     Real acc_C;
-
     for (int AB = 0; AB <= -1 + abDimension; ++AB) {
         for (int D = 0; D <= -1 + dDimension; ++D) {
             acc_C = 0;
@@ -71,6 +78,38 @@ void contractABxCWithDxC(Real const *__restrict__ abcPtr, Real const *__restrict
         }
     }
 }
+
+#if HAVE_BLAS == 1
+template <>
+void contractABxCWithDxC<float>(float const *__restrict__ abcPtr, float const *__restrict__ dcPtr,
+                                int const abDimension, int const cDimension, int const dDimension,
+                                float *__restrict__ abdPtr) {
+    if (abDimension == 0 || cDimension == 0 || dDimension == 0) return;
+
+    char transB = 't';
+    char transA = 'n';
+    float alpha = 1;
+    float beta = 0;
+    sgemm(&transB, &transA, const_cast<int *>(&dDimension), const_cast<int *>(&abDimension),
+          const_cast<int *>(&cDimension), &alpha, const_cast<float *>(dcPtr), const_cast<int *>(&cDimension),
+          const_cast<float *>(abcPtr), const_cast<int *>(&cDimension), &beta, abdPtr, const_cast<int *>(&dDimension));
+}
+
+template <>
+void contractABxCWithDxC<double>(double const *__restrict__ abcPtr, double const *__restrict__ dcPtr,
+                                 int const abDimension, int const cDimension, int const dDimension,
+                                 double *__restrict__ abdPtr) {
+    if (abDimension == 0 || cDimension == 0 || dDimension == 0) return;
+
+    char transB = 't';
+    char transA = 'n';
+    double alpha = 1;
+    double beta = 0;
+    dgemm(&transB, &transA, const_cast<int *>(&dDimension), const_cast<int *>(&abDimension),
+          const_cast<int *>(&cDimension), &alpha, const_cast<double *>(dcPtr), const_cast<int *>(&cDimension),
+          const_cast<double *>(abcPtr), const_cast<int *>(&cDimension), &beta, abdPtr, const_cast<int *>(&dDimension));
+}
+#endif
 
 }  // Namespace helpme
 #endif  // Header guard

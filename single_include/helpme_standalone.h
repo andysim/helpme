@@ -67,6 +67,7 @@
 #include <algorithm>
 #include <complex>
 #include <fstream>
+#include <functional>
 #include <initializer_list>
 #include <iostream>
 #include <iomanip>
@@ -798,9 +799,7 @@ class Matrix {
      * \brief applyOperationToEachElement modifies every element in the matrix by applying an operation.
      * \param function a unary operator describing the operation to perform.
      */
-    void applyOperationToEachElement(const std::function<void(Real&)>& function) {
-        std::for_each(begin(), end(), function);
-    }
+    void applyOperationToEachElement(const std::function<void(Real&)>& fxn) { std::for_each(begin(), end(), fxn); }
 
     /*!
      * \brief applyOperation applies an operation to this matrix using the spectral decomposition,
@@ -2241,6 +2240,15 @@ class BSpline {
 #ifndef _HELPME_TENSOR_UTILS_H_
 #define _HELPME_TENSOR_UTILS_H_
 
+#if HAVE_BLAS == 1
+extern "C" {
+extern void dgemm(char *, char *, int *, int *, int *, double *, double *, int *, double *, int *, double *, double *,
+                  int *);
+extern void sgemm(char *, char *, int *, int *, int *, float *, float *, int *, float *, int *, float *, float *,
+                  int *);
+}
+#endif
+
 namespace helpme {
 
 /*!
@@ -2287,13 +2295,11 @@ void permuteABCtoACB(Real const *__restrict__ abcPtr, int const aDimension, int 
  * \param cDimension the dimension of the C index.
  * \param dDimension the dimension of the D index.
  * \param abdPtr the address of the outgoing ABD tensor.
- * \param the length of the vector registers on the current CPU in bits.
  */
 template <typename Real>
 void contractABxCWithDxC(Real const *__restrict__ abcPtr, Real const *__restrict__ dcPtr, int const abDimension,
-                         int const cDimension, int const dDimension, Real *__restrict__ abdPtr, int vectorLength = 0) {
+                         int const cDimension, int const dDimension, Real *__restrict__ abdPtr) {
     Real acc_C;
-
     for (int AB = 0; AB <= -1 + abDimension; ++AB) {
         for (int D = 0; D <= -1 + dDimension; ++D) {
             acc_C = 0;
@@ -2303,6 +2309,38 @@ void contractABxCWithDxC(Real const *__restrict__ abcPtr, Real const *__restrict
         }
     }
 }
+
+#if HAVE_BLAS == 1
+template <>
+void contractABxCWithDxC<float>(float const *__restrict__ abcPtr, float const *__restrict__ dcPtr,
+                                int const abDimension, int const cDimension, int const dDimension,
+                                float *__restrict__ abdPtr) {
+    if (abDimension == 0 || cDimension == 0 || dDimension == 0) return;
+
+    char transB = 't';
+    char transA = 'n';
+    float alpha = 1;
+    float beta = 0;
+    sgemm(&transB, &transA, const_cast<int *>(&dDimension), const_cast<int *>(&abDimension),
+          const_cast<int *>(&cDimension), &alpha, const_cast<float *>(dcPtr), const_cast<int *>(&cDimension),
+          const_cast<float *>(abcPtr), const_cast<int *>(&cDimension), &beta, abdPtr, const_cast<int *>(&dDimension));
+}
+
+template <>
+void contractABxCWithDxC<double>(double const *__restrict__ abcPtr, double const *__restrict__ dcPtr,
+                                 int const abDimension, int const cDimension, int const dDimension,
+                                 double *__restrict__ abdPtr) {
+    if (abDimension == 0 || cDimension == 0 || dDimension == 0) return;
+
+    char transB = 't';
+    char transA = 'n';
+    double alpha = 1;
+    double beta = 0;
+    dgemm(&transB, &transA, const_cast<int *>(&dDimension), const_cast<int *>(&abDimension),
+          const_cast<int *>(&cDimension), &alpha, const_cast<double *>(dcPtr), const_cast<int *>(&cDimension),
+          const_cast<double *>(abcPtr), const_cast<int *>(&cDimension), &beta, abdPtr, const_cast<int *>(&dDimension));
+}
+#endif
 
 }  // Namespace helpme
 #endif  // Header guard
@@ -3823,7 +3861,7 @@ class PMEInstance {
 
         if (iAmNodeZero) transformedGrid[0] = 0;
 // Writing the three nested loops in one allows for better load balancing in parallel.
-#pragma omp parallel for num_threads(nThreads)
+#pragma omp parallel for reduction(+ : energy) num_threads(nThreads_)
         for (size_t yxz = 0; yxz < nyxz; ++yxz) {
             energy += transformedGrid[yxz] * transformedGrid[yxz] * influenceFunction[yxz];
             transformedGrid[yxz] *= influenceFunction[yxz];
@@ -4059,7 +4097,7 @@ class PMEInstance {
 #ifdef _OPENMP
                 int threadID = omp_get_thread_num();
 #else
-                int threadID = 1;
+                int threadID = 0;
 #endif
                 Real *myScratch = fractionalPhis[threadID % nThreads_];
                 probeGridImpl(atom, potentialGrid, nComponents, nForceComponents, splineA, splineB, splineC, myScratch,
@@ -4514,10 +4552,21 @@ class PMEInstance {
         filterAtomsAndBuildSplineCache(parameterAngMom + 1, coordinates);
 
         auto realGrid = spreadParameters(parameterAngMom, parameters);
-        auto gridAddress = forwardTransform(realGrid);
-        Real energy = convolveE(gridAddress);
-        const auto potentialGrid = inverseTransform(gridAddress);
-        probeGrid(potentialGrid, parameterAngMom, parameters, forces);
+
+        Real energy;
+        if (algorithmType_ == AlgorithmType::PME) {
+            auto gridAddress = forwardTransform(realGrid);
+            energy = convolveE(gridAddress);
+            auto potentialGrid = inverseTransform(gridAddress);
+            probeGrid(potentialGrid, parameterAngMom, parameters, forces);
+        } else if (algorithmType_ == AlgorithmType::CompressedPME) {
+            auto gridAddress = compressedForwardTransform(realGrid);
+            energy = convolveE(gridAddress);
+            auto potentialGrid = compressedInverseTransform(gridAddress);
+            probeGrid(potentialGrid, parameterAngMom, parameters, forces);
+        } else {
+            std::logic_error("Unknown algorithm in helpme::computeEFRec");
+        }
 
         return energy;
     }
@@ -4554,10 +4603,21 @@ class PMEInstance {
         filterAtomsAndBuildSplineCache(parameterAngMom + 1, coordinates);
 
         auto realGrid = spreadParameters(parameterAngMom, parameters);
-        auto gridPtr = forwardTransform(realGrid);
-        Real energy = convolveEV(gridPtr, virial);
-        const auto potentialGrid = inverseTransform(gridPtr);
-        probeGrid(potentialGrid, parameterAngMom, parameters, forces);
+
+        Real energy;
+        if (algorithmType_ == AlgorithmType::PME) {
+            auto gridAddress = forwardTransform(realGrid);
+            energy = convolveEV(gridAddress, virial);
+            auto potentialGrid = inverseTransform(gridAddress);
+            probeGrid(potentialGrid, parameterAngMom, parameters, forces);
+        } else if (algorithmType_ == AlgorithmType::CompressedPME) {
+            auto gridAddress = compressedForwardTransform(realGrid);
+            energy = convolveEV(gridAddress, virial);
+            auto potentialGrid = compressedInverseTransform(gridAddress);
+            probeGrid(potentialGrid, parameterAngMom, parameters, forces);
+        } else {
+            std::logic_error("Unknown algorithm in helpme::computeEFRec");
+        }
 
         return energy;
     }

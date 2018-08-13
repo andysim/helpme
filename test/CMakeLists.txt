@@ -44,7 +44,7 @@ add_custom_target(SingleHeader
 # C example
 add_executable (RunCWrapper fullexample.c)
 add_dependencies(RunCWrapper helpmestatic)
-target_link_libraries(RunCWrapper helpmestatic)
+target_link_libraries(RunCWrapper helpmestatic ${EXTERNAL_LIBRARIES})
 set_target_properties(RunCWrapper PROPERTIES LINKER_LANGUAGE CXX)
 add_test(NAME CWrapperTest COMMAND RunCWrapper)
 
@@ -81,7 +81,7 @@ if(HAVE_MPI)
 
     # C example
     add_executable (RunCMPIWrapper fullexample_parallel.c)
-    target_link_libraries(RunCMPIWrapper helpmestatic)
+    target_link_libraries(RunCMPIWrapper helpmestatic ${EXTERNAL_LIBRARIES})
     set_target_properties(RunCMPIWrapper PROPERTIES LINKER_LANGUAGE CXX)
     add_test(NAME CMPIWrapperTestX
              COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./RunCMPIWrapper 2 1 1 ${MPIEXEC_POSTFLAGS})
@@ -95,7 +95,7 @@ if(HAVE_MPI)
         link_libraries(${MPI_Fortran_LIBRARIES})
         add_executable(RunFortranMPIWrapper ${PROJECT_SOURCE_DIR}/src/helpme.F90 fullexample_parallel.F90 )
         set_target_properties(RunFortranMPIWrapper PROPERTIES LINKER_LANGUAGE Fortran)
-        target_link_libraries(RunFortranMPIWrapper helpmestatic ${cpplib})
+        target_link_libraries(RunFortranMPIWrapper helpmestatic ${cpplib} ${EXTERNAL_LIBRARIES})
         add_test(NAME FortranMPIWrapperTestX
                  COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./RunFortranMPIWrapper 2 1 1 ${MPIEXEC_POSTFLAGS})
         add_test(NAME FortranMPIWrapperTestY
@@ -108,7 +108,7 @@ endif()
 # Fortran example
 if(Fortran_ENABLED)
     add_executable(RunFortranWrapper ${PROJECT_SOURCE_DIR}/src/helpme.F90 fullexample.F90 )
-    target_link_libraries(RunFortranWrapper helpmestatic ${cpplib})
+    target_link_libraries(RunFortranWrapper helpmestatic ${cpplib} ${EXTERNAL_LIBRARIES})
     set_target_properties(RunFortranWrapper PROPERTIES LINKER_LANGUAGE Fortran)
     add_test(NAME FortranWrapper COMMAND RunFortranWrapper)
 endif()

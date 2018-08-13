@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <complex>
 #include <fstream>
+#include <functional>
 #include <initializer_list>
 #include <iostream>
 #include <iomanip>
@@ -343,9 +344,7 @@ class Matrix {
      * \brief applyOperationToEachElement modifies every element in the matrix by applying an operation.
      * \param function a unary operator describing the operation to perform.
      */
-    void applyOperationToEachElement(const std::function<void(Real&)>& function) {
-        std::for_each(begin(), end(), function);
-    }
+    void applyOperationToEachElement(const std::function<void(Real&)>& fxn) { std::for_each(begin(), end(), fxn); }
 
     /*!
      * \brief applyOperation applies an operation to this matrix using the spectral decomposition,
