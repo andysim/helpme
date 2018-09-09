@@ -132,12 +132,37 @@ struct MPIWrapper {
     /*!
      * \brief reduce performs a reduction, with summation as the operation.
      * \param inBuffer the buffer containing input data.
-     * \param outBuffer the buffer to send results to, which will be sent to node 0.
+     * \param outBuffer the buffer to send results to.
      * \param dimension the number of elements to be reduced.
+     * \param node the node to reduce the result to (defaulted to zero).
      */
-    void reduce(Real* inBuffer, Real* outBuffer, int dimension) {
-        if (MPI_Reduce(inBuffer, outBuffer, dimension, types_.realType_, MPI_SUM, 0, mpiCommunicator_) != MPI_SUCCESS)
+    void reduce(Real* inBuffer, Real* outBuffer, int dimension, int node = 0) {
+        if (MPI_Reduce(inBuffer, outBuffer, dimension, types_.realType_, MPI_SUM, node, mpiCommunicator_) !=
+            MPI_SUCCESS)
             throw std::runtime_error("Problem encountered calling MPI reduce.");
+    }
+    /*!
+     * \brief reduce performs a reduction, with summation as the operation, then scatters to all nodes.
+     * \param inBuffer the buffer containing input data.
+     * \param outBuffer the buffer to send results to.
+     * \param dimension the number of elements to be reduced on each node (currently must be the same on all nodes).
+     */
+    void reduceScatter(Real* inBuffer, Real* outBuffer, int dimension) {
+        std::vector<int> dimensions(numNodes_, dimension);
+        if (MPI_Reduce_scatter(inBuffer, outBuffer, dimensions.data(), types_.realType_, MPI_SUM, mpiCommunicator_) !=
+            MPI_SUCCESS)
+            throw std::runtime_error("Problem encountered calling MPI reducescatter.");
+    }
+    /*!
+     * \brief allGather broadcasts a chunk of data from each node to every other node.
+     * \param inBuffer the buffer containing input data.
+     * \param dimension the number of elements to be broadcast.
+     * \param outBuffer the buffer to send results to.
+     */
+    void allGather(Real* inBuffer, Real* outBuffer, int dimension) {
+        if (MPI_Allgather(inBuffer, dimension, types_.realType_, outBuffer, dimension, types_.realType_,
+                          mpiCommunicator_) != MPI_SUCCESS)
+            throw std::runtime_error("Problem encountered calling MPI allgather.");
     }
 
     /*!

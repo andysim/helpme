@@ -109,32 +109,39 @@ class BSpline {
     /*!
      * \brief The modulus of the B-Spline in Fourier space.
      * \param gridDim the dimension of the grid in the dimension this spline is to be used.
+     * \param mValues if provided, provides the ordering of the m values, if not they are
+     *        ordered as 0, 1, 2, ..., Kmax, -Kmax+1, -Kmax+2, ..., -2, -1.
      * \return a gridDim long vector containing the inverse of the Fourier space spline moduli.
      */
-    helpme::vector<Real> invSplineModuli(short gridDim) {
-        helpme::vector<Real> splineMods(gridDim, 0);
+    helpme::vector<Real> invSplineModuli(short gridDim, std::vector<int> mValues = {}) {
+        int nKTerms = mValues.size() ? mValues.size() : gridDim;
+        helpme::vector<Real> splineMods(nKTerms, 0);
         Real prefac = 2 * M_PI / gridDim;
-        for (int i = 0; i < gridDim; ++i) {
+        for (int m = 0; m < nKTerms; ++m) {
             Real real = 0;
             Real imag = 0;
-            for (int j = 0; j < order_; ++j) {
-                Real exparg = i * j * prefac;
-                Real jSpline = splines_(0, j);
+            int mValue = mValues.size() ? mValues[m] : m;
+            for (int n = 0; n < order_; ++n) {
+                Real exparg = mValue * n * prefac;
+                Real jSpline = splines_(0, n);
                 real += jSpline * cos(exparg);
                 imag += jSpline * sin(exparg);
             }
-            splineMods[i] = real * real + imag * imag;
+            splineMods[m] = real * real + imag * imag;
         }
 
-        // Correct tiny values.
-        constexpr Real EPS = 1e-7f;
-        if (splineMods[0] < EPS) splineMods[0] = splineMods[1] / 2;
-        for (int i = 0; i < gridDim - 1; ++i)
-            if (splineMods[i] < EPS) splineMods[i] = (splineMods[i - 1] + splineMods[i + 1]) / 2;
-        if (splineMods[gridDim - 1] < EPS) splineMods[gridDim - 1] = splineMods[gridDim - 2] / 2;
+        // Correct tiny values for conventional PME.
+        if (!mValues.size()) {
+            constexpr Real EPS = 1e-7f;
+            if (splineMods[0] < EPS) splineMods[0] = splineMods[1] / 2;
+            for (int i = 0; i < gridDim - 1; ++i)
+                if (splineMods[i] < EPS) splineMods[i] = (splineMods[i - 1] + splineMods[i + 1]) / 2;
+            if (splineMods[gridDim - 1] < EPS) splineMods[gridDim - 1] = splineMods[gridDim - 2] / 2;
+        }
 
         // Invert, to avoid division later on.
-        for (int i = 0; i < gridDim; ++i) splineMods[i] = 1 / splineMods[i];
+        for (int i = 0; i < nKTerms; ++i) splineMods[i] = 1 / splineMods[i];
+
         return splineMods;
     }
 
