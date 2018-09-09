@@ -20,7 +20,7 @@ inteltest:
   - export PATH=/v/apps/cmake/3.7.1-centos7/bin:$PATH
   - export PATH=/v/apps/intel/composer_xe_2017/compilers_and_libraries_2017.1.132/linux/bin/intel64:$PATH
   - export LM_LICENSE_FILE=/v/apps/intel/licenses/2017_l_PK5BF7J3.lic
-  - export LD_LIBRARY_PATH=/v/apps/intel/composer_xe_2017/compilers_and_libraries_2017.1.132/linux/mkl/lib/intel64_lin:${LD_LIBRARY_PATH}
+  - export LD_LIBRARY_PATH=/v/apps/intel/composer_xe_2017/compilers_and_libraries_2017.1.132/linux/mkl/lib/intel64:${LD_LIBRARY_PATH}
   - export LD_LIBRARY_PATH=/v/apps/intel/composer_xe_2017/compilers_and_libraries_2017.1.132/linux/compiler/lib/intel64:${LD_LIBRARY_PATH}
   - cmake -DPYTHON_EXECUTABLE=/v/apps/python/3.6.0-centos7/bin/python3 -DCMAKE_C_COMPILER=icc -DCMAKE_CXX_COMPILER=icpc -DCMAKE_Fortran_COMPILER=ifort -DCMAKE_PREFIX_PATH=/v/apps/fftw/3.3.7/intel_17.0.1 ..
   - make -j2
