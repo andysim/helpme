@@ -18,7 +18,7 @@ inteltest:
   - rm -rf *
   - export PYTHONPATH=`pwd`/src
   - export PATH=/v/apps/cmake/3.7.1-centos7/bin:$PATH
-  - export PATH=/v/apps/intel/composer_xe_2017/compilers_and_libraries_2017.1.132/linux/mpi/intel64/bin
+  - export PATH=/v/apps/intel/composer_xe_2017/compilers_and_libraries_2017.1.132/linux/mpi/intel64/bin:$PATH
   - export LM_LICENSE_FILE=/v/apps/intel/licenses/2017_l_PK5BF7J3.lic
   - export LD_LIBRARY_PATH=/v/apps/intel/composer_xe_2017/compilers_and_libraries_2017.1.132/linux/mkl/lib/intel64:${LD_LIBRARY_PATH}
   - export LD_LIBRARY_PATH=/v/apps/intel/composer_xe_2017/compilers_and_libraries_2017.1.132/linux/compiler/lib/intel64:${LD_LIBRARY_PATH}
