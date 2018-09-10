@@ -165,6 +165,7 @@ int main(int argc, char *argv[]) {
         std::cout << "Number of runs: " << nCalcs << std::endl;
         std::cout << "Node counts: " << numNodesX << "x" << numNodesY << "x" << numNodesZ << std::endl;
         std::cout << "Grid Dimensions: " << gridA << "x" << gridB << "x" << gridC << std::endl;
+        std::cout << "Spline Order: " << splineOrder << std::endl;
         if(doCompressed) std::cout << "K sum Dimensions: " << maxKA << "x" << maxKB << "x" << maxKC << std::endl;
         std::cout << "Precision model: " << (useFloat ? "Float" : "Double") << std::endl;
     }
