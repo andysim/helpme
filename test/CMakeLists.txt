@@ -48,13 +48,20 @@ target_link_libraries(RunCWrapper helpmestatic ${EXTERNAL_LIBRARIES})
 set_target_properties(RunCWrapper PROPERTIES LINKER_LANGUAGE CXX)
 add_test(NAME CWrapperTest COMMAND RunCWrapper)
 
-# CXX DHFR benchmark example
+# Benchmark examples
 if(HAVE_MPI)
+    # DHFR
     add_executable (DHFRBenchmark dhfr_benchmark.cpp)
     target_link_libraries(DHFRBenchmark ${EXTERNAL_LIBRARIES})
     configure_file(data/dhfr_charges.txt . COPYONLY)
     configure_file(data/dhfr_c6s.txt . COPYONLY)
     configure_file(data/dhfr_coords.txt . COPYONLY)
+    # DMPC3x3
+    add_executable (DMPC3x3Benchmark dmpc3x3_benchmark.cpp)
+    target_link_libraries(DMPC3x3Benchmark ${EXTERNAL_LIBRARIES})
+    configure_file(data/dmpc3x3_charges.txt . COPYONLY)
+    configure_file(data/dmpc3x3_c6s.txt . COPYONLY)
+    configure_file(data/dmpc3x3_coords.txt . COPYONLY)
 endif()
 
 # CXX example

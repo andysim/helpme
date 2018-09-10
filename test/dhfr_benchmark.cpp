@@ -16,4 +16,4 @@
 #define FILENAME "dhfr"
 
 // Make the benchmark from the generic template
-#include "make_benchmark.i"
+#include "make_benchmark.hpp"
