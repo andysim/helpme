@@ -18,8 +18,8 @@ inteltest:
   - rm -rf *
   - export INTEL=/v/apps/intel/composer_xe_2017/compilers_and_libraries_2017.1.132/linux
   - source ${INTEL}/bin/iccvars.sh intel64
-  - source ${INTEL}/mkl/bin/mklvars.sh intel64
   - source ${INTEL}/mpi/intel64/bin/mpivars.sh
+  - source ${INTEL}/mkl/bin/mklvars.sh intel64
   - export LM_LICENSE_FILE=/v/apps/intel/licenses/2017_l_PK5BF7J3.lic
   - export PYTHONPATH=`pwd`/src
   - export PATH=/v/apps/cmake/3.7.1-centos7/bin:$PATH
