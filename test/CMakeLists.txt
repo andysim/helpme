@@ -48,22 +48,21 @@ target_link_libraries(RunCWrapper helpmestatic ${EXTERNAL_LIBRARIES})
 set_target_properties(RunCWrapper PROPERTIES LINKER_LANGUAGE CXX)
 add_test(NAME CWrapperTest COMMAND RunCWrapper)
 
+# Benchmarks need a few steps for building for, e.g. profiling options
+MACRO(MAKE_BENCHMARK testname)
+    string(TOLOWER ${testname} lctestname)
+    add_executable ("${testname}Benchmark" "${lctestname}_benchmark.cpp")
+    target_link_libraries("${testname}Benchmark" ${EXTERNAL_LIBRARIES})
+    set_target_properties("${testname}Benchmark" PROPERTIES COMPILE_FLAGS "-g -O3 -pg")
+    configure_file(data/${lctestname}_charges.txt . COPYONLY)
+    configure_file(data/${lctestname}_c6s.txt . COPYONLY)
+    configure_file(data/${lctestname}_coords.txt . COPYONLY)
+ENDMACRO()
+
 # Benchmark examples
 if(HAVE_MPI)
-    # DHFR
-    add_executable (DHFRBenchmark dhfr_benchmark.cpp)
-    target_link_libraries(DHFRBenchmark ${EXTERNAL_LIBRARIES})
-    set_target_properties(DHFRBenchmark PROPERTIES COMPILE_FLAGS "-g -O3 -pg")
-    configure_file(data/dhfr_charges.txt . COPYONLY)
-    configure_file(data/dhfr_c6s.txt . COPYONLY)
-    configure_file(data/dhfr_coords.txt . COPYONLY)
-    # DMPC3x3
-    add_executable (DMPC3x3Benchmark dmpc3x3_benchmark.cpp)
-    target_link_libraries(DMPC3x3Benchmark ${EXTERNAL_LIBRARIES})
-    set_target_properties(DMPC3x3Benchmark PROPERTIES COMPILE_FLAGS "-g -O3 -pg")
-    configure_file(data/dmpc3x3_charges.txt . COPYONLY)
-    configure_file(data/dmpc3x3_c6s.txt . COPYONLY)
-    configure_file(data/dmpc3x3_coords.txt . COPYONLY)
+    MAKE_BENCHMARK("DHFR")
+    MAKE_BENCHMARK("DMPC3x3")
 endif()
 
 # CXX example
