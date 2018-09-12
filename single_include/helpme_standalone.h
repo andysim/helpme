@@ -1956,14 +1956,13 @@ struct MPIWrapper {
             throw std::runtime_error("Problem encountered calling MPI reduce.");
     }
     /*!
-     * \brief reduce performs a reduction, with summation as the operation, then scatters to all nodes.
+     * \brief reduceScatterBlock performs a reduction, with summation as the operation, then scatters to all nodes.
      * \param inBuffer the buffer containing input data.
      * \param outBuffer the buffer to send results to.
      * \param dimension the number of elements to be reduced on each node (currently must be the same on all nodes).
      */
-    void reduceScatter(Real* inBuffer, Real* outBuffer, int dimension) {
-        std::vector<int> dimensions(numNodes_, dimension);
-        if (MPI_Reduce_scatter(inBuffer, outBuffer, dimensions.data(), types_.realType_, MPI_SUM, mpiCommunicator_) !=
+    void reduceScatterBlock(Real* inBuffer, Real* outBuffer, int dimension) {
+        if (MPI_Reduce_scatter_block(inBuffer, outBuffer, dimension, types_.realType_, MPI_SUM, mpiCommunicator_) !=
             MPI_SUCCESS)
             throw std::runtime_error("Problem encountered calling MPI reducescatter.");
     }
@@ -3040,7 +3039,7 @@ class PMEInstance {
             // To compute it we need sum_ij c(i)c(j), which can be obtained from the structure factor norm.
             Real prefac = 2 * scaleFactor * PI * SQRTPI * pow(kappa, rPower - 3) /
                           ((rPower - 3) * gammaComputer<Real, rPower>::value * volume);
-            energy += prefac * std::norm(gridPtr[0]);
+            energy += prefac * (gridPtr[0].real() * gridPtr[0].real() + gridPtr[0].imag() * gridPtr[0].imag());
         }
         // Ensure the m=0 term convolution product is zeroed for the backtransform; it's been accounted for above.
         if (nodeZero) gridPtr[0] = Complex(0, 0);
@@ -3076,7 +3075,7 @@ class PMEInstance {
             Real eGamma = std::get<0>(gammas);
             Real vGamma = std::get<1>(gammas);
             Complex &gridVal = gridPtr[yxz];
-            Real structFacNorm = std::norm(gridVal);
+            Real structFacNorm = gridVal.real() * gridVal.real() + gridVal.imag() * gridVal.imag();
             Real totalPrefac = volPrefac * mTerm * yMods[ky] * xMods[kx] * zMods[kz];
             Real influenceFunction = totalPrefac * eGamma;
             gridVal *= influenceFunction;
@@ -3146,7 +3145,7 @@ class PMEInstance {
             // To compute it we need sum_ij c(i)c(j), which can be obtained from the structure factor norm.
             Real prefac = 2 * scaleFactor * PI * SQRTPI * pow(kappa, rPower - 3) /
                           ((rPower - 3) * gammaComputer<Real, rPower>::value * volume);
-            energy += prefac * std::norm(gridPtrIn[0]);
+            energy += prefac * gridPtrIn[0] * gridPtrIn[0];
         }
         // Ensure the m=0 term convolution product is zeroed for the backtransform; it's been accounted for above.
         if (nodeZero) gridPtrOut[0] = 0;
@@ -3171,10 +3170,6 @@ class PMEInstance {
             const int &mx = xMVals[kx];
             const int &my = yMVals[ky];
             const int &mz = zMVals[kz];
-            Real permPrefac = 1;
-            permPrefac *= mx ? 2 : 1;
-            permPrefac *= my ? 2 : 1;
-            permPrefac *= mz ? 2 : 1;
             Real mVecX = boxPtr[0] * mx + boxPtr[1] * my + boxPtr[2] * mz;
             Real mVecY = boxPtr[3] * mx + boxPtr[4] * my + boxPtr[5] * mz;
             Real mVecZ = boxPtr[6] * mx + boxPtr[7] * my + boxPtr[8] * mz;
@@ -3191,7 +3186,7 @@ class PMEInstance {
             size_t addressXY = minusKy * nxz + minusKx * myNz + kz;
             size_t addressXZ = ky * nxz + minusKx * myNz + minusKz;
             size_t addressYZ = minusKy * nxz + kx * myNz + minusKz;
-            Real totalPrefac = permPrefac * volPrefac * mTerm * yMods[ky] * xMods[kx] * zMods[kz];
+            Real totalPrefac = volPrefac * mTerm * yMods[ky] * xMods[kx] * zMods[kz];
             Real influenceFunction = totalPrefac * eGamma;
             gridPtrOut[yxz] = gridVal * influenceFunction;
             Real eTerm = influenceFunction * gridVal * gridVal;
@@ -3444,7 +3439,8 @@ class PMEInstance {
         splineOrderHasChanged_ = splineOrder_ != splineOrder;
         scaleFactorHasChanged_ = scaleFactor_ != scaleFactor;
         if (kappaHasChanged_ || rPowerHasChanged_ || gridDimensionHasChanged_ || splineOrderHasChanged_ ||
-            numNodesHasChanged_ || scaleFactorHasChanged_ || requestedNumberOfThreads_ != nThreads) {
+            numNodesHasChanged_ || scaleFactorHasChanged_ || algorithmHasChanged_ ||
+            requestedNumberOfThreads_ != nThreads) {
             numNodesA_ = numNodesA;
             numNodesB_ = numNodesB;
             numNodesC_ = numNodesC;
@@ -3597,8 +3593,8 @@ class PMEInstance {
                         Real *rowPtr = compressionCoefficientsA_[offset + 2 * (fullM - offset)];
                         for (int n = 0; n < myGridDimensionA_; ++n) {
                             Real exponent = 2 * PI * fullM * (n + myFirstGridPointA_) / gridDimensionA_;
-                            rowPtr[n] = std::cos(exponent);
-                            rowPtr[n + myGridDimensionA_] = std::sin(exponent);
+                            rowPtr[n] = std::sqrt(2) * std::cos(exponent);
+                            rowPtr[n + myGridDimensionA_] = std::sqrt(2) * std::sin(exponent);
                         }
                     }
                 }
@@ -3610,8 +3606,8 @@ class PMEInstance {
                         Real *rowPtr = compressionCoefficientsB_[offset + 2 * (fullM - offset)];
                         for (int n = 0; n < myGridDimensionB_; ++n) {
                             Real exponent = 2 * PI * fullM * (n + myFirstGridPointB_) / gridDimensionB_;
-                            rowPtr[n] = std::cos(exponent);
-                            rowPtr[n + myGridDimensionB_] = std::sin(exponent);
+                            rowPtr[n] = std::sqrt(2) * std::cos(exponent);
+                            rowPtr[n + myGridDimensionB_] = std::sqrt(2) * std::sin(exponent);
                         }
                     }
                 }
@@ -3623,8 +3619,8 @@ class PMEInstance {
                         Real *rowPtr = compressionCoefficientsC_[offset + 2 * (fullM - offset)];
                         for (int n = 0; n < myGridDimensionC_; ++n) {
                             Real exponent = 2 * PI * fullM * (n + myFirstGridPointC_) / gridDimensionC_;
-                            rowPtr[n] = std::cos(exponent);
-                            rowPtr[n + myGridDimensionC_] = std::sin(exponent);
+                            rowPtr[n] = std::sqrt(2) * std::cos(exponent);
+                            rowPtr[n + myGridDimensionC_] = std::sqrt(2) * std::sin(exponent);
                         }
                     }
                 }
@@ -3844,7 +3840,8 @@ class PMEInstance {
                     }
                 }
             }
-            mpiCommunicator_->reduceScatter(buffer2, buffer1, myNumKSumTermsA_ * myNumKSumTermsB_ * myNumKSumTermsC_);
+            mpiCommunicator_->reduceScatterBlock(buffer2, buffer1,
+                                                 myNumKSumTermsA_ * myNumKSumTermsB_ * myNumKSumTermsC_);
         }
 #endif
         return buffer1;
@@ -4233,19 +4230,8 @@ class PMEInstance {
 // Writing the three nested loops in one allows for better load balancing in parallel.
 #pragma omp parallel for reduction(+ : energy) num_threads(nThreads_)
         for (size_t yxz = 0; yxz < nyxz; ++yxz) {
-            size_t xz = yxz % nxz;
-            int ky = yxz / nxz;
-            int kx = xz / myNumKSumTermsC_;
-            int kz = xz % myNumKSumTermsC_;
-            int mx = mValsA_[kx];
-            int my = mValsB_[ky];
-            int mz = mValsC_[kz];
-            Real permutationalPrefac = 1;
-            permutationalPrefac *= mx ? 2 : 1;
-            permutationalPrefac *= my ? 2 : 1;
-            permutationalPrefac *= mz ? 2 : 1;
-            energy += permutationalPrefac * transformedGrid[yxz] * transformedGrid[yxz] * influenceFunction[yxz];
-            transformedGrid[yxz] *= permutationalPrefac * influenceFunction[yxz];
+            energy += transformedGrid[yxz] * transformedGrid[yxz] * influenceFunction[yxz];
+            transformedGrid[yxz] *= influenceFunction[yxz];
         }
         return energy / 2;
     }
@@ -4272,14 +4258,16 @@ class PMEInstance {
             energy += prefac * std::norm(transformedGrid[0]);
         }
         if (iAmNodeZero) transformedGrid[0] = Complex(0, 0);
+        const size_t numCTerms(myNumKSumTermsC_);
 #pragma omp parallel for reduction(+ : energy) num_threads(nThreads_)
         for (size_t yxz = 0; yxz < nyxz; ++yxz) {
             size_t xz = yxz % nxz;
-            int kx = firstKSumTermA_ + xz / myNumKSumTermsC_;
+            int kx = firstKSumTermA_ + xz / numCTerms;
             // We only loop over the first nx/2+1 x values; this
             // accounts for the "missing" complex conjugate values.
             Real permPrefac = useConjugateSymmetry && kx != 0 && kx != complexGridDimensionA_ - 1 ? 2 : 1;
-            Real structFactorNorm = std::norm(transformedGrid[yxz]);
+            Real structFactorNorm = transformedGrid[yxz].real() * transformedGrid[yxz].real() +
+                                    transformedGrid[yxz].imag() * transformedGrid[yxz].imag();
             energy += permPrefac * structFactorNorm * influenceFunction[yxz];
             transformedGrid[yxz] *= influenceFunction[yxz];
         }

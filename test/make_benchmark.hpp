@@ -163,9 +163,6 @@ int main(int argc, char *argv[]) {
 
     if (useFloat) {
         auto pme = std::unique_ptr<PMEInstanceF>(new PMEInstanceF());
-        pme->setupCompressedParallel(rPower, beta, splineOrder, gridA, gridB, gridC, maxKA, maxKB, maxKC, scaleFactor,
-                                     0, MPI_COMM_WORLD, PMEInstanceF::NodeOrder::ZYX, numNodesX, numNodesY, numNodesZ);
-        pme->setLatticeVectors(boxDimX, boxDimY, boxDimZ, 90, 90, 90, PMEInstanceF::LatticeType::XAligned);
         helpme::Matrix<float> coordsF = coordsD.cast<float>();
         helpme::Matrix<float> paramsF = paramsD.cast<float>();
         helpme::Matrix<float> forces(coordsD.nRows(), coordsD.nCols());
@@ -174,10 +171,21 @@ int main(int argc, char *argv[]) {
         helpme::Matrix<float> nodeVirial(6, 1);
         float nodeEnergy, energy;
         if (computeVirial) {
-            for (int n = 0; n < nCalcs; ++n)
+            for (int n = 0; n < nCalcs; ++n) {
+                pme->setupCompressedParallel(rPower, beta, splineOrder, gridA, gridB, gridC, maxKA, maxKB, maxKC,
+                                             scaleFactor, 0, MPI_COMM_WORLD, PMEInstanceF::NodeOrder::ZYX, numNodesX,
+                                             numNodesY, numNodesZ);
+                pme->setLatticeVectors(boxDimX, boxDimY, boxDimZ, 90, 90, 90, PMEInstanceF::LatticeType::XAligned);
                 nodeEnergy = pme->computeEFVRec(0, paramsF, coordsF, nodeForces, nodeVirial);
+            }
         } else {
-            for (int n = 0; n < nCalcs; ++n) nodeEnergy = pme->computeEFRec(0, paramsF, coordsF, nodeForces);
+            for (int n = 0; n < nCalcs; ++n) {
+                pme->setupCompressedParallel(rPower, beta, splineOrder, gridA, gridB, gridC, maxKA, maxKB, maxKC,
+                                             scaleFactor, 0, MPI_COMM_WORLD, PMEInstanceF::NodeOrder::ZYX, numNodesX,
+                                             numNodesY, numNodesZ);
+                pme->setLatticeVectors(boxDimX, boxDimY, boxDimZ, 90, 90, 90, PMEInstanceF::LatticeType::XAligned);
+                nodeEnergy = pme->computeEFRec(0, paramsF, coordsF, nodeForces);
+            }
         }
         MPI_Reduce(&nodeEnergy, &energy, 1, MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
         MPI_Reduce(nodeForces[0], forces[0], 6 * 3, MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
@@ -190,19 +198,27 @@ int main(int argc, char *argv[]) {
         pme.reset();
     } else {
         auto pme = std::unique_ptr<PMEInstanceD>(new PMEInstanceD());
-        pme->setupCompressedParallel(rPower, beta, splineOrder, gridA, gridB, gridC, maxKA, maxKB, maxKC, scaleFactor,
-                                     0, MPI_COMM_WORLD, PMEInstanceD::NodeOrder::ZYX, numNodesX, numNodesY, numNodesZ);
-        pme->setLatticeVectors(boxDimX, boxDimY, boxDimZ, 90, 90, 90, PMEInstanceD::LatticeType::XAligned);
         helpme::Matrix<double> forces(coordsD.nRows(), coordsD.nCols());
         helpme::Matrix<double> nodeForces(coordsD.nRows(), coordsD.nCols());
         helpme::Matrix<double> virial(6, 1);
         helpme::Matrix<double> nodeVirial(6, 1);
         double nodeEnergy, energy;
         if (computeVirial) {
-            for (int n = 0; n < nCalcs; ++n)
+            for (int n = 0; n < nCalcs; ++n) {
+                pme->setupCompressedParallel(rPower, beta, splineOrder, gridA, gridB, gridC, maxKA, maxKB, maxKC,
+                                             scaleFactor, 0, MPI_COMM_WORLD, PMEInstanceD::NodeOrder::ZYX, numNodesX,
+                                             numNodesY, numNodesZ);
+                pme->setLatticeVectors(boxDimX, boxDimY, boxDimZ, 90, 90, 90, PMEInstanceD::LatticeType::XAligned);
                 nodeEnergy = pme->computeEFVRec(0, paramsD, coordsD, nodeForces, nodeVirial);
+            }
         } else {
-            for (int n = 0; n < nCalcs; ++n) nodeEnergy = pme->computeEFRec(0, paramsD, coordsD, nodeForces);
+            for (int n = 0; n < nCalcs; ++n) {
+                pme->setupCompressedParallel(rPower, beta, splineOrder, gridA, gridB, gridC, maxKA, maxKB, maxKC,
+                                             scaleFactor, 0, MPI_COMM_WORLD, PMEInstanceD::NodeOrder::ZYX, numNodesX,
+                                             numNodesY, numNodesZ);
+                pme->setLatticeVectors(boxDimX, boxDimY, boxDimZ, 90, 90, 90, PMEInstanceD::LatticeType::XAligned);
+                nodeEnergy = pme->computeEFRec(0, paramsD, coordsD, nodeForces);
+            }
         }
         MPI_Reduce(&nodeEnergy, &energy, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
         MPI_Reduce(nodeForces[0], forces[0], 6 * 3, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
