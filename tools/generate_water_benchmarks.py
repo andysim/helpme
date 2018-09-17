@@ -65,7 +65,7 @@ for dim in range(16, 60, 4):
     print('\tMinimizing...')
     simulation.minimizeEnergy(tolerance = 100*unit.kilojoule/unit.mole)
     simulation.reporters.append(app.StateDataReporter(sys.stdout, 250, step=True, potentialEnergy=True, temperature=True))
-    simulation.step(25000)
+    simulation.step(50000)
     state = simulation.context.getState(getPositions=True)
     positions = state.getPositions()
 
@@ -78,8 +78,8 @@ for dim in range(16, 60, 4):
             fp.write("%16.10f%16.10f%16.10f\n" % (x, y, z))
 
     with open(cppfile, 'w') as fp:
-        box_length = int(grid_density * box_vectors[0][0].value_in_unit(unit.angstroms))
-        grid_dim = find_grid_size(box_length)
+        box_length = box_vectors[0][0].value_in_unit(unit.angstroms)
+        grid_dim = find_grid_size(int(grid_density * box_length))
         fp.write("""\
 // BEGINLICENSE
 //
