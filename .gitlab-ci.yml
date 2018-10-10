@@ -7,7 +7,7 @@ stages:
 formatcheck:
   stage: formatcheck
   script:
-    - export CLANG_FORMAT_DIR=/u/andysim/anaconda3/envs/clang/bin/
+    - export CLANG_FORMAT_DIR=/u/andysim/anaconda3/bin/
     - ./tools/check_style.sh 
 
 inteltest:
