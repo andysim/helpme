@@ -474,6 +474,22 @@ class Matrix {
     }
 
     /*!
+     * \brief writeToFile formats the matrix and writes to an ASCII file.
+     * \param fileName the name of the file to save to.
+     * \param width the width of each matrix element's formatted representation.
+     * \param precision the precision of each matrix element's formatted representation.
+     * \param printDimensions whether to print the dimensions at the top of the file.
+     */
+    void writeToFile(const std::string& filename, int width = 20, int precision = 14,
+                     bool printDimensions = false) const {
+        std::ofstream file;
+        file.open(filename, std::ios::out);
+        if (printDimensions) file << nRows_ << "  " << nCols_ << std::endl;
+        file << stringify(data_, nRows_ * nCols_, nCols_, width, precision);
+        file.close();
+    }
+
+    /*!
      * \brief write formatted matrix to a stream object.
      * \param os stream object to write to.
      * \return modified stream object.

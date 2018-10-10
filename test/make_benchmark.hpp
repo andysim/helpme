@@ -188,12 +188,13 @@ int main(int argc, char *argv[]) {
             }
         }
         MPI_Reduce(&nodeEnergy, &energy, 1, MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
-        MPI_Reduce(nodeForces[0], forces[0], 6 * 3, MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
+        MPI_Reduce(nodeForces[0], forces[0], nAtoms * 3, MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
         MPI_Reduce(nodeVirial[0], virial[0], 6, MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
         virial.applyOperationToEachElement([&](float &v) { v *= (1.0f / nCalcs); });
         if (myRank == 0) {
             std::cout << "Energy: " << std::setw(16) << std::setprecision(12) << energy << std::endl;
             if (computeVirial) std::cout << "Virial:" << std::endl << virial << std::endl;
+            forces.writeToFile("forces.dat");
         }
         pme.reset();
     } else {
@@ -221,12 +222,13 @@ int main(int argc, char *argv[]) {
             }
         }
         MPI_Reduce(&nodeEnergy, &energy, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-        MPI_Reduce(nodeForces[0], forces[0], 6 * 3, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+        MPI_Reduce(nodeForces[0], forces[0], nAtoms * 3, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
         MPI_Reduce(nodeVirial[0], virial[0], 6, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
         virial.applyOperationToEachElement([&](double &v) { v *= (1.0 / nCalcs); });
         if (myRank == 0) {
             std::cout << "Energy: " << std::setw(16) << std::setprecision(12) << energy << std::endl;
             if (computeVirial) std::cout << "Virial:" << std::endl << virial << std::endl;
+            forces.writeToFile("forces.dat");
         }
         pme.reset();
     }
