@@ -1105,7 +1105,7 @@ void matrixVectorProduct(const Matrix<Real> &transformer, const Real *inputVecto
  *        components being the fast running index.
  */
 template <typename Real>
-Matrix<Real> cartesianTransform(int maxAngularMomentum, const Matrix<Real> &transformer, Matrix<Real> &transformee) {
+Matrix<Real> cartesianTransform(int maxAngularMomentum, const Matrix<Real> &transformer, const Matrix<Real> &transformee) {
     Matrix<Real> transformed = transformee.clone();
     int offset = 1;
     int nAtoms = transformee.nRows();
