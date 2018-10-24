@@ -16,7 +16,6 @@
 import io
 import os
 import re
-import sys
 
 includere = re.compile(r'\s*#\s*include\s*[<"](.*)[">]\s*')
 

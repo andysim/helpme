@@ -1,0 +1,30 @@
+path_classifiers:
+  test:
+    - "test/*.cpp"
+    - "test/unittests/*.cpp"
+  docs:
+    - README.md
+    - LICENSE
+extraction:
+  cpp:
+    prepare:
+      packages:
+        - g++-6
+    after_prepare:    # Customizable step used by all languages.
+      - mkdir -p $LGTM_WORKSPACE/latest-gcc-symlinks
+      - ln -s /usr/bin/g++-6 $LGTM_WORKSPACE/latest-gcc-symlinks/g++
+      - ln -s /usr/bin/gcc-6 $LGTM_WORKSPACE/latest-gcc-symlinks/gcc
+      - export PATH=$LGTM_WORKSPACE/latest-gcc-symlinks:$PATH
+      - export GNU_MAKE=make
+      - export GIT=true
+    configure:    # Customizable step used only by C/C++ extraction.
+      command:
+        - cmake .
+    before_index:    # Customizable step used by all languages.
+      - export BOOST_DIR=$LGTM_SRC/boost
+      - export GTEST_DIR=$LGTM_SRC/googletest
+      - export HUNSPELL_DIR=$LGTM_SRC/hunspell
+      - export CRYPTOPP_DIR=$LGTM_SRC/cryptopp
+    index:    # Customizable step used by all languages.
+      build_command:
+        - $GNU_MAKE -j2 -s 
