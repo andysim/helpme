@@ -28,3 +28,5 @@ extraction:
     index:    # Customizable step used by all languages.
       build_command:
         - $GNU_MAKE -j2 -s 
+      include:
+        - "src/*.h"
