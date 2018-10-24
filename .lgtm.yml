@@ -19,7 +19,7 @@ extraction:
       - export GIT=true
     configure:    # Customizable step used only by C/C++ extraction.
       command:
-        - cmake .
+        - cmake -Bbuild -H.
     before_index:    # Customizable step used by all languages.
       - export BOOST_DIR=$LGTM_SRC/boost
       - export GTEST_DIR=$LGTM_SRC/googletest
@@ -27,6 +27,7 @@ extraction:
       - export CRYPTOPP_DIR=$LGTM_SRC/cryptopp
     index:    # Customizable step used by all languages.
       build_command:
+        - cd build
         - $GNU_MAKE -j2 -s 
       include:
         - "src/*.h"
