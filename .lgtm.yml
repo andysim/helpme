@@ -10,6 +10,7 @@ extraction:
     prepare:
       packages:
         - g++-6
+        - cmake
     after_prepare:    # Customizable step used by all languages.
       - mkdir -p $LGTM_WORKSPACE/latest-gcc-symlinks
       - ln -s /usr/bin/g++-6 $LGTM_WORKSPACE/latest-gcc-symlinks/g++
@@ -20,11 +21,6 @@ extraction:
     configure:    # Customizable step used only by C/C++ extraction.
       command:
         - cmake -Bbuild -H.
-    before_index:    # Customizable step used by all languages.
-      - export BOOST_DIR=$LGTM_SRC/boost
-      - export GTEST_DIR=$LGTM_SRC/googletest
-      - export HUNSPELL_DIR=$LGTM_SRC/hunspell
-      - export CRYPTOPP_DIR=$LGTM_SRC/cryptopp
     index:    # Customizable step used by all languages.
       build_command:
         - cd build
