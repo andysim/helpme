@@ -11,6 +11,8 @@ extraction:
       packages:
         - g++-6
         - cmake
+        - libfftw3-dev
+        - gfortran
     after_prepare:    # Customizable step used by all languages.
       - mkdir -p $LGTM_WORKSPACE/latest-gcc-symlinks
       - ln -s /usr/bin/g++-6 $LGTM_WORKSPACE/latest-gcc-symlinks/g++
