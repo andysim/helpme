@@ -9,6 +9,7 @@
 #ifndef _HELPME_MATRIX_H_
 #define _HELPME_MATRIX_H_
 
+#include <functional>
 #include <algorithm>
 #include <complex>
 #include <fstream>
