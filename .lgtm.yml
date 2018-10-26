@@ -27,5 +27,3 @@ extraction:
       build_command:
         - cd build
         - $GNU_MAKE -j2 -s 
-      include:
-        - "src/*.h"
