@@ -18,4 +18,4 @@ extraction:
     index:    # Customizable step used by all languages.
       build_command:
         - cd build
-        - $GNU_MAKE -j2 -s 
+        - make -j2
