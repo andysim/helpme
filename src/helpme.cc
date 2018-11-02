@@ -91,6 +91,32 @@ void helpme_setupF(PMEInstanceF* pme, short rPower, float kappa, int splineOrder
     }
 }
 
+void helpme_setup_compressedD(PMEInstanceD* pme, short rPower, double kappa, int splineOrder, int aDim, int bDim,
+                              int cDim, int maxKA, int maxKB, int maxKC, double scaleFactor, int nThreads) {
+    try {
+        pme->setupCompressed(rPower, kappa, splineOrder, aDim, bDim, cDim, maxKA, maxKB, maxKC, scaleFactor, nThreads);
+    } catch (std::runtime_error& e) {
+        std::cerr << e.what() << std::endl;
+        exit(1);
+    } catch (...) {
+        std::cerr << "An unknown error occured in helpme_setup_compressedD" << std::endl;
+        exit(1);
+    }
+}
+
+void helpme_setup_compressedF(PMEInstanceF* pme, short rPower, float kappa, int splineOrder, int aDim, int bDim,
+                              int cDim, int maxKA, int maxKB, int maxKC, float scaleFactor, int nThreads) {
+    try {
+        pme->setupCompressed(rPower, kappa, splineOrder, aDim, bDim, cDim, maxKA, maxKB, maxKC, scaleFactor, nThreads);
+    } catch (std::runtime_error& e) {
+        std::cerr << e.what() << std::endl;
+        exit(1);
+    } catch (...) {
+        std::cerr << "An unknown error occured in helpme_setup_compressedF" << std::endl;
+        exit(1);
+    }
+}
+
 #if HAVE_MPI == 1
 void helpme_setup_parallelD(PMEInstanceD* pme, int rPower, double kappa, int splineOrder, int dimA, int dimB, int dimC,
                             double scaleFactor, int nThreads, MPI_Comm communicator, NodeOrder nodeOrder, int numNodesA,

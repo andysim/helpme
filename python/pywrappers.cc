@@ -40,6 +40,7 @@ void declarePMEInstance(py::module& mod, std::string const& suffix) {
     py::class_<PME> pme(mod, ("PMEInstance" + suffix).c_str());
     pme.def(py::init<>(), "Construct PMEInstance object");
     pme.def("setup", &PME::setup, "Set up PMEInstance object for a serial run");
+    pme.def("setup_compressed", &PME::setupCompressed, "Set up PMEInstance object for a serial compressed run");
     pme.def("set_lattice_vectors", &PME::setLatticeVectors,
             "Set the lattice vectors for the unit cell: A, B, C, alpha, beta, gamma, Orietation.");
     pme.def("compute_E_rec", &PME::computeERec, py::arg("parameterAngMom"),

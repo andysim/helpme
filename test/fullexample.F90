@@ -187,7 +187,36 @@ program testfortran
     enddo
     write(*,*)
 
-    call helpme_destroyD(pmeD)
+    call check_value_D(expectedEnergy, energyD, toleranceD,&
+                      __FILE__, __LINE__)
+    call check_matrix_D(3, 6, expectedForces, forcesD, toleranceD,&
+                      __FILE__, __LINE__)
+    call check_matrix_D(6, 1, expectedVirial, virialD, toleranceD,&
+                      __FILE__, __LINE__)
+    call check_matrix_D(4, 6, expectedPotential, potentialAndGradientD, toleranceD,&
+                      __FILE__, __LINE__)
+
+    ! Repeat the calculation using the compressed PME approximation
+    energyD = 0d0
+    virialD = 0d0
+    forcesD = 0d0
+    potentialAndGradientD = 0d0
+    call helpme_setup_compressedD(pmeD, rPower, alphaD, splineOrder, aDim, bDim, cDim, 9, 9, 9, scaleFactorD, 1)
+    call helpme_set_lattice_vectorsD(pmeD, 20d0, 20d0, 20d0, 90d0, 90d0, 90d0, XAligned)
+    call print_results_D(nAtoms, "Before helpme_compute_E_recD", energyD, forcesD, virialD)
+    energyD = helpme_compute_E_recD(pmeD, nAtoms, angMom, c_loc(chargesD), c_loc(coordsD))
+    call print_results_D(nAtoms, "After helpme_compute_E_recD", energyD, forcesD, virialD)
+    energyD = helpme_compute_EF_recD(pmeD, nAtoms, angMom, c_loc(chargesD), c_loc(coordsD), c_loc(forcesD))
+    call print_results_D(nAtoms, "After helpme_compute_EF_recD", energyD, forcesD, virialD)
+    energyD = helpme_compute_EFV_recD(pmeD, nAtoms, angMom, c_loc(chargesD), c_loc(coordsD), c_loc(forcesD), c_loc(virialD))
+    call print_results_D(nAtoms, "After helpme_compute_EFV_recD", energyD, forcesD, virialD)
+    call helpme_compute_P_recD(pmeD, nAtoms, 0, c_loc(chargesD), c_loc(coordsD), nAtoms,&
+                               c_loc(coordsD), 1, c_loc(potentialAndGradientD));
+    write(*,*) "Potential and its gradient:"
+    do atom = 1,nAtoms
+        write(*,'(4F16.10)') potentialAndGradientD(:,atom)
+    enddo
+    write(*,*)
 
     call check_value_D(expectedEnergy, energyD, toleranceD,&
                       __FILE__, __LINE__)
@@ -197,6 +226,7 @@ program testfortran
                       __FILE__, __LINE__)
     call check_matrix_D(4, 6, expectedPotential, potentialAndGradientD, toleranceD,&
                       __FILE__, __LINE__)
+    call helpme_destroyD(pmeD)
 
 
     !
@@ -231,7 +261,6 @@ program testfortran
     enddo
     write(*,*)
 
-    call helpme_destroyF(pmeF)
 
     call check_value_F(real(expectedEnergy, c_float), energyF, toleranceF,&
                       __FILE__, __LINE__)
@@ -242,6 +271,38 @@ program testfortran
     call check_matrix_F(4, 6, real(expectedPotential, c_float), potentialAndGradientF, toleranceF,&
                       __FILE__, __LINE__)
 
+    ! Repeat the calculation using the compressed PME approximation
+    energyF = 0d0
+    virialF = 0d0
+    forcesF = 0d0
+    potentialAndGradientF = 0d0
+    call helpme_setup_compressedF(pmeF, rPower, alphaF, splineOrder, aDim, bDim, cDim, 9, 9, 9, scaleFactorF, 1)
+    call helpme_set_lattice_vectorsF(pmeF, 20.0, 20.0, 20.0, 90.0, 90.0, 90.0, XAligned)
+    call print_results_F(nAtoms, "Before helpme_compute_E_recF", energyF, forcesF, virialF)
+    energyF = helpme_compute_E_recF(pmeF, nAtoms, angMom, c_loc(chargesF), c_loc(coordsF))
+    call print_results_F(nAtoms, "After helpme_compute_E_recF", energyF, forcesF, virialF)
+    energyF = helpme_compute_EF_recF(pmeF, nAtoms, angMom, c_loc(chargesF), c_loc(coordsF), c_loc(forcesF))
+    call print_results_F(nAtoms, "After helpme_compute_EF_recF", energyF, forcesF, virialF)
+    energyF = helpme_compute_EFV_recF(pmeF, nAtoms, angMom, c_loc(chargesF), c_loc(coordsF), c_loc(forcesF), c_loc(virialF))
+    call print_results_F(nAtoms, "After helpme_compute_EFV_recF", energyF, forcesF, virialF)
+    call helpme_compute_P_recF(pmeF, nAtoms, 0, c_loc(chargesF), c_loc(coordsF), nAtoms,&
+                               c_loc(coordsF), 1, c_loc(potentialAndGradientF));
+    write(*,*) "Potential and its gradient:"
+    do atom = 1,nAtoms
+        write(*,'(4F16.10)') potentialAndGradientF(:,atom)
+    enddo
+    write(*,*)
+
+    call check_value_F(real(expectedEnergy, c_float), energyF, toleranceF,&
+                      __FILE__, __LINE__)
+    call check_matrix_F(3, 6, real(expectedForces, c_float), forcesF, toleranceF,&
+                      __FILE__, __LINE__)
+    call check_matrix_F(6, 1, real(expectedVirial, c_float), virialF, toleranceF,&
+                      __FILE__, __LINE__)
+    call check_matrix_F(4, 6, real(expectedPotential, c_float), potentialAndGradientF, toleranceF,&
+                      __FILE__, __LINE__)
+
+    call helpme_destroyF(pmeF)
 
     deallocate(coordsD, chargesD, forcesD, potentialAndGradientD)
     deallocate(coordsF, chargesF, forcesF, potentialAndGradientF)

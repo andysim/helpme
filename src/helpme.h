@@ -2511,9 +2511,18 @@ class PMEInstance {
         // easy to write some logic to check whether gridPoints and coordinates are the same, and
         // handle that special case using spline cacheing machinery for efficiency.
         auto realGrid = spreadParameters(parameterAngMom, parameters, coordinates);
-        auto gridAddress = forwardTransform(realGrid);
-        convolveE(gridAddress);
-        const auto potentialGrid = inverseTransform(gridAddress);
+        Real *potentialGrid;
+        if (algorithmType_ == AlgorithmType::PME) {
+            auto gridAddress = forwardTransform(realGrid);
+            convolveE(gridAddress);
+            potentialGrid = inverseTransform(gridAddress);
+        } else if (algorithmType_ == AlgorithmType::CompressedPME) {
+            auto gridAddress = compressedForwardTransform(realGrid);
+            convolveE(gridAddress);
+            potentialGrid = compressedInverseTransform(gridAddress);
+        } else {
+            std::logic_error("Unknown algorithm in helpme::computePRec");
+        }
         auto fracPotential = potential.clone();
         int nPotentialComponents = nCartesian(derivativeLevel);
         size_t nPoints = gridPoints.nRows();
@@ -2902,6 +2911,12 @@ extern void helpme_setupD(struct PMEInstance *pme, int rPower, double kappa, int
                           int cDim, double scaleFactor, int nThreads);
 extern void helpme_setupF(struct PMEInstance *pme, int rPower, float kappa, int splineOrder, int aDim, int bDim,
                           int cDim, float scaleFactor, int nThreads);
+extern void helpme_setup_compressedD(struct PMEInstance *pme, int rPower, double kappa, int splineOrder, int aDim,
+                                     int bDim, int cDim, int maxKA, int maxKB, int maxKC, double scaleFactor,
+                                     int nThreads);
+extern void helpme_setup_compressedF(struct PMEInstance *pme, int rPower, float kappa, int splineOrder, int aDim,
+                                     int bDim, int cDim, int maxKA, int maxKB, int maxKC, float scaleFactor,
+                                     int nThreads);
 #if HAVE_MPI == 1
 extern void helpme_setup_parallelD(PMEInstance *pme, int rPower, double kappa, int splineOrder, int dimA, int dimB,
                                    int dimC, double scaleFactor, int nThreads, MPI_Comm communicator,

@@ -53,6 +53,24 @@ module helpme
             real(c_float), value :: kappa, scaleFactor
         end subroutine
 
+        subroutine helpme_setup_compressedD(pme, rPower, kappa, splineOrder, aDim, bDim, cDim, maxKA, maxKB, maxKC,&
+                                            scaleFactor, nThreads)&
+                            bind(C, name="helpme_setup_compressedD")
+            use iso_c_binding
+            type(c_ptr), value :: pme
+            integer(c_int), value :: rPower, splineOrder, aDim, bDim, cDim, maxKA, maxKB, maxKC, nThreads
+            real(c_double), value :: kappa, scaleFactor
+        end subroutine
+
+        subroutine helpme_setup_compressedF(pme, rPower, kappa, splineOrder, aDim, bDim, cDim, maxKA, maxKB, maxKC,&
+                                            scaleFactor, nThreads)&
+                            bind(C, name="helpme_setup_compressedF")
+            use iso_c_binding
+            type(c_ptr), value :: pme
+            integer(c_int), value :: rPower, splineOrder, aDim, bDim, cDim, maxKA, maxKB, maxKC, nThreads
+            real(c_float), value :: kappa, scaleFactor
+        end subroutine
+
 #if HAVE_MPI == 1
         subroutine helpme_setup_parallelD_impl(pme, rPower, kappa, splineOrder, aDim, bDim, cDim, scaleFactor,&
                                           nThreads, communicator, nodeOrder, numNodesA, numNodesB, numNodesC)&
