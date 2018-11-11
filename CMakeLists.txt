@@ -1,4 +1,5 @@
-cmake_minimum_required(VERSION 3.3 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.12 FATAL_ERROR)
+cmake_policy(SET CMP0074 NEW)
 
 ################  Options: Overview and Not Otherwise Mentioned  ###############
 #
@@ -137,14 +138,20 @@ endif()
 set(EXTERNAL_LIBRARIES ${FFTW_LIBRARIES} ${cpplib})
 
 # Documentation
-find_package(Doxygen)
-find_package(Sphinx)
-find_package(Latex)
-if(DOXYGEN_EXECUTABLE)
+if (BUILD_SPHINX)
+    find_package(Sphinx)
+    find_package(Latex)
+endif()
+if (BUILD_DOXYGEN)
+    find_package(Doxygen)
+    if (NOT DOXYGEN_FOUND)
+        message (FATAL_ERROR "Doxygen is needed to build the documentation. Please install it correctly.")
+    endif()
     if(SPHINX_EXECUTABLE)
         add_subdirectory(docs)
     endif()
 endif()
+
 add_subdirectory(src)
 
 

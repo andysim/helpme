@@ -16,6 +16,8 @@
 #   FFTW_INCLUDE_DIR        ... fftw include directory
 #
 
+cmake_policy(SET CMP0074 NEW)
+
 #If environment variable FFTWDIR is specified, it has same effect as FFTW_ROOT
 if( NOT FFTW_ROOT AND EXISTS "$ENV{FFTW_ROOT}")
   set( FFTW_ROOT $ENV{FFTW_ROOT} )

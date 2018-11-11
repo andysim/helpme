@@ -3,7 +3,7 @@ set(sources_list
         )
 
 include_directories(${FFTW_INCLUDES})
-add_library(helpmestatic STATIC ${sources_list})
+add_library(helpmestatic ${sources_list})
 target_link_libraries(helpmestatic ${FFTW_LIBRARIES})
 
 if(Fortran_ENABLED AND CMAKE_Fortran_COMPILER_ID MATCHES Intel)
