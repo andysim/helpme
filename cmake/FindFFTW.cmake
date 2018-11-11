@@ -32,30 +32,39 @@ endif()
 set( CMAKE_FIND_LIBRARY_SUFFIXES_SAV ${CMAKE_FIND_LIBRARY_SUFFIXES} )
 set( CMAKE_FIND_LIBRARY_SUFFIXES ${CMAKE_STATIC_LIBRARY_SUFFIX}  ${CMAKE_SHARED_LIBRARY_SUFFIX} )
 
+include(CheckTypeSize)
+CHECK_TYPE_SIZE("void*" SIZE_OF_VOIDP)
+if ("${SIZE_OF_VOIDP}" EQUAL 8)
+  set(MKL_LIB_DIR_SUFFIX "intel64")
+else()
+  set(MKL_LIB_DIR_SUFFIX "ia32")
+endif()
+
 if( FFTW_ROOT )
-message( "Searching for FFTW in " ${FFTW_ROOT})
+  message( "Searching for FFTW in " ${FFTW_ROOT})
+
   #find libs
   find_library(
     FFTW_LIB
-    NAMES "fftw3"
+    NAMES "fftw3" "mkl_rt"
     PATHS ${FFTW_ROOT}
-    PATH_SUFFIXES "lib" "lib64"
+    PATH_SUFFIXES "lib" "lib64" "lib/${MKL_LIB_DIR_SUFFIX}"
     NO_DEFAULT_PATH
   )
 
   find_library(
     FFTWF_LIB
-    NAMES "fftw3f"
+    NAMES "fftw3f" "mkl_rt"
     PATHS ${FFTW_ROOT}
-    PATH_SUFFIXES "lib" "lib64"
+    PATH_SUFFIXES "lib" "lib64" "lib/${MKL_LIB_DIR_SUFFIX}"
     NO_DEFAULT_PATH
   )
 
   find_library(
     FFTWL_LIB
-    NAMES "fftw3l"
+    NAMES "fftw3l" # N.B. MKL does not support long double precision
     PATHS ${FFTW_ROOT}
-    PATH_SUFFIXES "lib" "lib64"
+    PATH_SUFFIXES "lib" "lib64" "lib/${MKL_LIB_DIR_SUFFIX}"
     NO_DEFAULT_PATH
   )
 
@@ -64,7 +73,7 @@ message( "Searching for FFTW in " ${FFTW_ROOT})
     FFTW_INCLUDES
     NAMES "fftw3.h"
     PATHS ${FFTW_ROOT}
-    PATH_SUFFIXES "include"
+    PATH_SUFFIXES "include" "include/fftw"
     NO_DEFAULT_PATH
   )
 
