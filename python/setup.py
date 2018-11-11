@@ -182,4 +182,5 @@ setup(
         'Bug Reports': 'https://github.com/andysim/helpme/issues',
         'Source': 'https://github.com/andysim/helpme/',
     },
+    zip_safe=False,
 )
