@@ -5,6 +5,7 @@ set(sources_list
 include_directories(${FFTW_INCLUDES})
 add_library(helpmestatic ${sources_list})
 target_link_libraries(helpmestatic ${FFTW_LIBRARIES})
+target_link_libraries(helpmestatic OpenMP::OpenMP_CXX)
 
 if(Fortran_ENABLED AND CMAKE_Fortran_COMPILER_ID MATCHES Intel)
     #Enable call to for_rtl_init_() which is required if using the

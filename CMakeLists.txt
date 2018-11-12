@@ -1,5 +1,4 @@
-cmake_minimum_required(VERSION 3.12 FATAL_ERROR)
-cmake_policy(SET CMP0074 NEW)
+cmake_minimum_required(VERSION 3.11 FATAL_ERROR)
 
 ################  Options: Overview and Not Otherwise Mentioned  ###############
 #
@@ -43,11 +42,12 @@ set (CMAKE_CXX_STANDARD 11)
 # Language bindings options
 #
 include(custom_color_messages)
-option(ENABLE_fortran "Enables the building of Fortran bindings (needs Fortran compiler)" ON)
-if(ENABLE_fortran)
+option(ENABLE_Fortran "Enables the building of Fortran bindings (needs Fortran compiler)" ON)
+if(ENABLE_Fortran)
     enable_language(Fortran)
     set(Fortran_ENABLED ON)
 endif()
+option(INSTALL_PYMOD "Additionally installs as independent python module in PYMOD_INSTALL_LIBDIR" OFF)
 
 #
 # Build options
@@ -75,7 +75,6 @@ option_with_print(BUILD_SHARED_LIBS "Build final library as shared, not static" 
 option_with_default(CMAKE_INSTALL_LIBDIR "Directory to which libraries installed" lib)
 option_with_default(PYMOD_INSTALL_LIBDIR "Location within CMAKE_INSTALL_LIBDIR to which python modules are installed
                                           Must start with: / . Used to imitate python install: /python3.6/site-packages ." /)
-option_with_print(INSTALL_PYMOD "Additionally installs as independent python module in PYMOD_INSTALL_LIBDIR" OFF)
 
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0")
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -O0")
@@ -95,20 +94,12 @@ endif()
 
 # OpenMP
 if(ENABLE_OPENMP)
-    find_package(OpenMP)
-endif()
+    find_package(OpenMP MODULE REQUIRED COMPONENTS CXX)
 
-if(OPENMP_FOUND)
-    add_definitions(-DHAVE_OPENMP)
-    if(DEFINED CMAKE_C_COMPILER_ID)
-        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
-    endif()
-    if(DEFINED CMAKE_CXX_COMPILER_ID)
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
-    endif()
-    if(DEFINED CMAKE_Fortran_COMPILER_ID)
-        set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} ${OpenMP_Fortran_FLAGS}")
-    endif()
+include(CMakePrintHelpers)
+cmake_print_properties(TARGETS OpenMP::OpenMP_CXX #OpenMP::OpenMP
+                       PROPERTIES INTERFACE_COMPILE_DEFINITIONS INTERFACE_COMPILE_OPTIONS INTERFACE_INCLUDE_DIRS INTERFACE_LINK_LIBRARIES)
+
 endif()
 
 # MPI
