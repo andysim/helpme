@@ -82,24 +82,19 @@ set(CMAKE_Fortran_FLAGS_DEBUG "${CMAKE_Fortran_FLAGS_DEBUG} -O0")
 
 # FFTW
 find_package(FFTW REQUIRED)
-if(HAVE_FFTWF)
-    add_definitions(-DHAVE_FFTWF=1)
+if(TARGET fftw::fftwf)
+    add_compile_definitions($<TARGET_PROPERTY:fftw::fftwf,INTERFACE_COMPILE_DEFINITIONS>)
 endif()
-if(HAVE_FFTWD)
-    add_definitions(-DHAVE_FFTWD=1)
+if(TARGET fftw::fftwd)
+    add_compile_definitions($<TARGET_PROPERTY:fftw::fftwd,INTERFACE_COMPILE_DEFINITIONS>)
 endif()
-if(HAVE_FFTWL)
-    add_definitions(-DHAVE_FFTWL=1)
+if(TARGET fftw::fftwl)
+    add_compile_definitions($<TARGET_PROPERTY:fftw::fftwl,INTERFACE_COMPILE_DEFINITIONS>)
 endif()
 
 # OpenMP
 if(ENABLE_OPENMP)
     find_package(OpenMP MODULE REQUIRED COMPONENTS CXX)
-
-include(CMakePrintHelpers)
-cmake_print_properties(TARGETS OpenMP::OpenMP_CXX #OpenMP::OpenMP
-                       PROPERTIES INTERFACE_COMPILE_DEFINITIONS INTERFACE_COMPILE_OPTIONS INTERFACE_INCLUDE_DIRS INTERFACE_LINK_LIBRARIES)
-
 endif()
 
 # MPI
@@ -137,7 +132,7 @@ else()
 endif()
 
 # The C++ library is linked explicitly because exception handling on macOS appears to be broken otherwise.
-set(EXTERNAL_LIBRARIES ${FFTW_LIBRARIES} ${cpplib})
+set(EXTERNAL_LIBRARIES fftw::fftw ${cpplib})
 
 # Documentation
 if (BUILD_SPHINX)

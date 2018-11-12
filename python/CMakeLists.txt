@@ -17,9 +17,8 @@ add_custom_target(update_version ALL
 #)
 
 include_directories(../src)
-include_directories(${FFTW_INCLUDES})
-link_libraries(${FFTW_LIBRARIES})
 pybind11_add_module(helpmecore pywrappers.cc)
+target_link_libraries(helpmecore PRIVATE fftw::fftw)
 
 configure_file(../test/fullexample.py ./tests/TestSerial.py COPYONLY)
 
