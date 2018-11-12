@@ -12,12 +12,18 @@ if(Fortran_ENABLED AND CMAKE_Fortran_COMPILER_ID MATCHES Intel)
     target_compile_definitions(helpmestatic PRIVATE -DINTEL_Fortran_ENABLED)
 endif()
 
-set_target_properties(helpmestatic PROPERTIES OUTPUT_NAME helpme EXPORT_NAME helpme)
+set_target_properties(helpmestatic PROPERTIES OUTPUT_NAME helpme
+                                              EXPORT_NAME helpme)
 
-# Make sure headers are installed
-install(DIRECTORY . DESTINATION include FILES_MATCHING PATTERN "*.h")
+set(PN ${PROJECT_NAME})
+
+install(DIRECTORY .
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${PN}
+        FILES_MATCHING PATTERN "*.h")
 
 install(TARGETS helpmestatic
-        RUNTIME DESTINATION bin
-        LIBRARY DESTINATION lib
-        ARCHIVE DESTINATION lib)
+        EXPORT "${PN}Targets"
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
+

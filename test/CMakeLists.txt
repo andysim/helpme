@@ -114,11 +114,14 @@ if(Fortran_ENABLED)
 endif()
 
 # Add python tests
-if(Python_ENABLED)
+if(${INSTALL_PYMOD})
     add_test(NAME PythonWrappers
-        COMMAND ${PYTHON_EXECUTABLE} setup.py test
-        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/../python
+             #COMMAND ${PYTHON_EXECUTABLE} setup.py test
+             COMMAND ${PYTHON_EXECUTABLE} -m unittest
+             #WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/../python
     )
+    install(FILES fullexample.py
+            DESTINATION ${CMAKE_INSTALL_LIBDIR}${PYMOD_INSTALL_LIBDIR}/helpme/tests)
 endif()
 
 # Make sure examples are installed
@@ -126,4 +129,5 @@ set(EXAMPLEFILES fullexample.c fullexample.cpp fullexample.F90 fullexample.py)
 if(HAVE_MPI)
     set(EXAMPLEFILES ${EXAMPLEFILES} fullexample_parallel.c fullexample_parallel.cpp fullexample_parallel.F90)
 endif()
-install(FILES ${EXAMPLEFILES} DESTINATION examples)
+install(FILES ${EXAMPLEFILES}
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/helpme/examples)

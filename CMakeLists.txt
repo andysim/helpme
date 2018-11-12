@@ -67,6 +67,15 @@ option_with_flags(ENABLE_TSAN "Enables thread sanitizer" OFF
                   "-fsanitize=thread" "-fno-omit-frame-pointer -pie")
 option_with_flags(ENABLE_UBSAN "Enables undefined behavior sanitizer" OFF
                   "-fsanitize=undefined" "-fno-omit-frame-pointer")
+option_with_default(CMAKE_BUILD_TYPE "Build type (Release or Debug)" Release)
+option_with_flags(ENABLE_XHOST "Enables processor-specific optimization" ON
+                  "-xHost" "-march=native")
+option_with_default(BUILD_FPIC "Libraries will be compiled with position independent code" ON)
+option_with_print(BUILD_SHARED_LIBS "Build final library as shared, not static" ON)
+option_with_default(CMAKE_INSTALL_LIBDIR "Directory to which libraries installed" lib)
+option_with_default(PYMOD_INSTALL_LIBDIR "Location within CMAKE_INSTALL_LIBDIR to which python modules are installed
+                                          Must start with: / . Used to imitate python install: /python3.6/site-packages ." /)
+option_with_print(INSTALL_PYMOD "Additionally installs as independent python module in PYMOD_INSTALL_LIBDIR" OFF)
 
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0")
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -O0")
@@ -119,13 +128,15 @@ else()
     endif()
 endif()
 
+include(GNUInstallDirs)
 # Find Python
-set(Python_ADDITIONAL_VERSIONS 3.7 3.6 3.5)
-find_package(PythonLibsNew 2.7 REQUIRED)
-message(STATUS "${Cyan}Found Python ${PYTHON_VERSION_MAJOR}.${PYTHON_VERSION_MINOR}${ColourReset}: ${PYTHON_EXECUTABLE} (found version ${PYTHON_VERSION_STRING})")
-set(Python_ENABLED ON) # For now, we just always assume this is on
-add_subdirectory(external/pybind11)
-add_subdirectory(python)
+if(${INSTALL_PYMOD})
+    set(Python_ADDITIONAL_VERSIONS 3.7 3.6 3.5)
+    find_package(PythonLibsNew 2.7 REQUIRED)
+    message(STATUS "${Cyan}Found Python ${PYTHON_VERSION_MAJOR}.${PYTHON_VERSION_MINOR}${ColourReset}: ${PYTHON_EXECUTABLE} (found version ${PYTHON_VERSION_STRING})")
+    add_subdirectory(external/pybind11)
+    add_subdirectory(python)
+endif()
 
 # Handle different C++ libraries
 if(CMAKE_CXX_COMPILER_ID MATCHES "AppleClang")
