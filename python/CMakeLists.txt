@@ -19,11 +19,11 @@ add_custom_target(update_version ALL
 include_directories(../src)
 include_directories(${FFTW_INCLUDES})
 link_libraries(${FFTW_LIBRARIES})
-pybind11_add_module(helpmelib pywrappers.cc)
+pybind11_add_module(helpmecore pywrappers.cc)
 
 configure_file(../test/fullexample.py ./tests/TestSerial.py COPYONLY)
 
-install(FILES $<TARGET_FILE:helpmelib>
+install(FILES $<TARGET_FILE:helpmecore>
               __init__.py
               ${CMAKE_CURRENT_BINARY_DIR}/metadata.py
         DESTINATION ${CMAKE_INSTALL_LIBDIR}${PYMOD_INSTALL_LIBDIR}/helpme)

@@ -7,5 +7,5 @@
 #
 # ENDLICENSE
 
-from .helpmelib import *
+from .helpmecore import *
 from .metadata import __version__, version_formatter
