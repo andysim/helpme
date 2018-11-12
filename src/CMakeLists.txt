@@ -5,7 +5,7 @@ set(sources_list
 
 include_directories(${FFTW_INCLUDES})
 add_library(helpmestatic ${sources_list})
-target_link_libraries(helpmestatic ${FFTW_LIBRARIES})
+target_link_libraries(helpmestatic PUBLIC ${FFTW_LIBRARIES})
 target_link_libraries(helpmestatic PUBLIC OpenMP::OpenMP_CXX)
 
 if(Fortran_ENABLED AND CMAKE_Fortran_COMPILER_ID MATCHES Intel)
