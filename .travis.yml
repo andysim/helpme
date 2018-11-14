@@ -35,12 +35,14 @@ jobs:
       - python -V
       - python -c 'import numpy; print(numpy.version.version)'
       - cd ${TRAVIS_BUILD_DIR}
+      - curl https://cmake.org/files/v3.12/cmake-3.12.4-Linux-x86_64.tar.gz --output cmake.tgz
+      - tar -xzvf cmake.tgz
       - export CTEST_OUTPUT_ON_FAILURE=1
       - ${CXX_COMPILER} --version
       - ${Fortran_COMPILER} --version
       - ${C_COMPILER} --version
       - >
-          cmake -Bbuild -H.
+          ./cmake-3.12.4-Linux-x86_64/bin/cmake -Bbuild -H.
           -DCMAKE_BUILD_TYPE=${BUILD_TYPE}
           -DCMAKE_CXX_COMPILER=${CXX_COMPILER}
           -DCMAKE_C_COMPILER=${C_COMPILER}
