@@ -7,5 +7,5 @@
 #
 # ENDLICENSE
 
-from .helpmecore import *
+from .pymod import *
 from .metadata import __version__, version_formatter

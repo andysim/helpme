@@ -64,7 +64,7 @@ void declarePMEInstance(py::module& mod, std::string const& suffix) {
 }
 }  // namespace
 
-PYBIND11_MODULE(helpmecore, m) {
+PYBIND11_MODULE(pymod, m) {
     m.doc() = R"pbdoc(
         helpme: an efficient library for particle mesh Ewald
                  ----------

@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.11 FATAL_ERROR)
 
+if(POLICY CMP0074)
+    cmake_policy(SET CMP0074 NEW)  # 3.12
+endif()
+
 ################  Options: Overview and Not Otherwise Mentioned  ###############
 #
 #  <<<  CMake build overview  >>>
@@ -82,15 +86,6 @@ set(CMAKE_Fortran_FLAGS_DEBUG "${CMAKE_Fortran_FLAGS_DEBUG} -O0")
 
 # FFTW
 find_package(FFTW REQUIRED)
-if(TARGET fftw::fftwf)
-    add_compile_definitions($<TARGET_PROPERTY:fftw::fftwf,INTERFACE_COMPILE_DEFINITIONS>)
-endif()
-if(TARGET fftw::fftwd)
-    add_compile_definitions($<TARGET_PROPERTY:fftw::fftwd,INTERFACE_COMPILE_DEFINITIONS>)
-endif()
-if(TARGET fftw::fftwl)
-    add_compile_definitions($<TARGET_PROPERTY:fftw::fftwl,INTERFACE_COMPILE_DEFINITIONS>)
-endif()
 
 # OpenMP
 if(ENABLE_OPENMP)
