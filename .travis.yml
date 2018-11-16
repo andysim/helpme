@@ -10,7 +10,7 @@ jobs:
       script: ./tools/check_style.sh
 
     #
-    # Serial Py36 / Clang36 / Release
+    # Serial Py36 / Clang38 / Release
     #
     - stage: build and test
       python: "3.6"
@@ -18,17 +18,17 @@ jobs:
       addons:
         apt:
           sources:
-          - llvm-toolchain-precise-3.7
+          - llvm-toolchain-precise-3.8
           - ubuntu-toolchain-r-test
           packages:
           - liblapack-dev
           - libfftw3-dev
-          - clang-3.7
+          - clang-3.8
           - gfortran
       env:
         - NAME='clang'
-        - CXX_COMPILER='/usr/bin/clang++-3.7'
-        - C_COMPILER='/usr/bin/clang-3.7'
+        - CXX_COMPILER='/usr/bin/clang++-3.8'
+        - C_COMPILER='/usr/bin/clang-3.8'
         - Fortran_COMPILER='/usr/bin/gfortran'
         - BUILD_TYPE='Release'
       before_script:
