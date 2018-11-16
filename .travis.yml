@@ -25,6 +25,7 @@ jobs:
           - libfftw3-dev
           - clang-3.8
           - gfortran
+          - libiomp-dev
       env:
         - NAME='clang'
         - CXX_COMPILER='/usr/bin/clang++-3.8'
