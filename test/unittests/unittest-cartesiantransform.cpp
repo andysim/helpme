@@ -31,7 +31,7 @@ TEST_CASE("test cartesian rotation machinery.") {
              -0.01154724, 0.04553389,  -0.08733614, -0.06874441, -0.04726690, 0.07506839,  0.03189454,
              -0.11997046, 0.03724920,  0.09888346,  0.02321037,  0.01537234,  0.04490211,  -0.06045958}};
         SECTION("transform up to hexadecapoles") {
-            auto transformed = cartesianTransform(4, R1, labFrame);
+            auto transformed = cartesianTransform(4, false, R1, labFrame);
             REQUIRE(transformed.almostEquals(refTransformed));
         }
 
