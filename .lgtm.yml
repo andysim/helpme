@@ -1,4 +1,6 @@
 path_classifiers:
+  generated:
+    - "single_include/helpme_standalone.h"
   test:
     - "test/*.cpp"
     - "test/unittests/*.cpp"

@@ -100,18 +100,20 @@ void matrixVectorProduct(const Matrix<Real> &transformer, const Real *inputVecto
  * \brief cartesianTransform transforms a list of a cartesian quantities to a different basis.
  *        Assumes a list of quantities are to be transformed (in place) and all angular momentum
  *        components up to and including the specified maximum are present in ascending A.M. order.
- * \param maxAngularMomentum the maximum angular momentum of the incoming quantity.
+ * \param maxAngularMomentum the angular momentum of the incoming quantity.
+ * \param transformOnlyThisShell if true, only the shell with angular momentum specified will be transformed
  * \param transformer the matrix R to do the transform defined for a dipole as µ_new = R . µ_old.
  * \param transformee the quantity to be transformed, stored as nAtoms X nComponents, with
  *        components being the fast running index.
  */
 template <typename Real>
-Matrix<Real> cartesianTransform(int maxAngularMomentum, const Matrix<Real> &transformer,
+Matrix<Real> cartesianTransform(int maxAngularMomentum, bool transformOnlyThisShell, const Matrix<Real> &transformer,
                                 const Matrix<Real> &transformee) {
     Matrix<Real> transformed = transformee.clone();
-    int offset = 1;
+    int offset = transformOnlyThisShell ? 0 : 1;
     int nAtoms = transformee.nRows();
-    for (int angularMomentum = 1; angularMomentum <= maxAngularMomentum; ++angularMomentum) {
+    int firstShell = transformOnlyThisShell ? maxAngularMomentum : 1;
+    for (int angularMomentum = firstShell; angularMomentum <= maxAngularMomentum; ++angularMomentum) {
         auto rotationMatrix = makeCartesianRotationMatrix(angularMomentum, transformer);
         for (int atom = 0; atom < nAtoms; ++atom) {
             const Real *inputData = transformee[atom];
