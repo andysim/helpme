@@ -2293,7 +2293,7 @@ struct SplineCacheEntry {
  * electrostatic and attractive dispersion terms using PME to handle long-range interactions.
  * \tparam Real the floating point type to use for arithmetic.
  */
-template <typename Real>
+template <typename Real, typename std::enable_if<std::is_floating_point<Real>::value, int>::type = 0>
 class PMEInstance {
     using GridIterator = std::vector<std::vector<std::pair<short, short>>>;
     using Complex = std::complex<Real>;
