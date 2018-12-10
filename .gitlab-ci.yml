@@ -23,7 +23,7 @@ inteltest:
   - export LM_LICENSE_FILE=/v/apps/intel/licenses/2017_l_PK5BF7J3.lic
   - export PYTHONPATH=`pwd`/src
   - export PATH=/v/apps/cmake/3.7.1-centos7/bin:$PATH
-  - cmake -DPYTHON_EXECUTABLE=/u/andysim/anaconda3/bin/python -DCMAKE_C_COMPILER=mpiicc -DCMAKE_CXX_COMPILER=mpiicpc -DCMAKE_Fortran_COMPILER=mpiifort -DFFTW_ROOT={MKLROOT}
+  - cmake -DPYTHON_EXECUTABLE=/u/andysim/anaconda3/bin/python -DCMAKE_C_COMPILER=mpiicc -DCMAKE_CXX_COMPILER=mpiicpc -DCMAKE_Fortran_COMPILER=mpiifort -DFFTW_ROOT={MKLROOT} ..
   - make -j2
   - ctest -VV
   - cd ..

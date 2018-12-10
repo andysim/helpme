@@ -148,6 +148,40 @@ void helpme_setup_parallelF(PMEInstanceF* pme, int rPower, float kappa, int spli
     }
 }
 
+void helpme_setup_compressed_parallelD(PMEInstanceD* pme, int rPower, double kappa, int splineOrder, int dimA, int dimB,
+                                       int dimC, int maxKA, int maxKB, int maxKC, double scaleFactor, int nThreads,
+                                       MPI_Comm communicator, NodeOrder nodeOrder, int numNodesA, int numNodesB,
+                                       int numNodesC) {
+    try {
+        pme->setupCompressedParallel(rPower, kappa, splineOrder, dimA, dimB, dimC, maxKA, maxKB, maxKC, scaleFactor,
+                                     nThreads, communicator, PMEInstanceD::NodeOrder(nodeOrder), numNodesA, numNodesB,
+                                     numNodesC);
+    } catch (std::runtime_error& e) {
+        std::cerr << e.what() << std::endl;
+        exit(1);
+    } catch (...) {
+        std::cerr << "An unknown error occured in helpme_setup_parallelD" << std::endl;
+        exit(1);
+    }
+}
+
+void helpme_setup_compressed_parallelF(PMEInstanceF* pme, int rPower, float kappa, int splineOrder, int dimA, int dimB,
+                                       int dimC, int maxKA, int maxKB, int maxKC, float scaleFactor, int nThreads,
+                                       MPI_Comm communicator, NodeOrder nodeOrder, int numNodesA, int numNodesB,
+                                       int numNodesC) {
+    try {
+        pme->setupCompressedParallel(rPower, kappa, splineOrder, dimA, dimB, dimC, maxKA, maxKB, maxKC, scaleFactor,
+                                     nThreads, communicator, PMEInstanceF::NodeOrder(nodeOrder), numNodesA, numNodesB,
+                                     numNodesC);
+    } catch (std::runtime_error& e) {
+        std::cerr << e.what() << std::endl;
+        exit(1);
+    } catch (...) {
+        std::cerr << "An unknown error occured in helpme_setup_parallelF" << std::endl;
+        exit(1);
+    }
+}
+
 // Provide a wrapper to MPI_Comm_f2c; the C implementation may be a macro and is thus not callable from Fortran.
 MPI_Comm f_MPI_Comm_f2c(int Fcomm) { return MPI_Comm_f2c(Fcomm); }
 

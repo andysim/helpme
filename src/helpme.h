@@ -2924,6 +2924,14 @@ extern void helpme_setup_parallelD(PMEInstance *pme, int rPower, double kappa, i
 extern void helpme_setup_parallelF(PMEInstance *pme, int rPower, float kappa, int splineOrder, int dimA, int dimB,
                                    int dimC, float scaleFactor, int nThreads, MPI_Comm communicator,
                                    NodeOrder nodeOrder, int numNodesA, int numNodesB, int numNodesC);
+extern void helpme_setup_compressed_parallelD(PMEInstance *pme, int rPower, double kappa, int splineOrder, int dimA,
+                                              int dimB, int dimC, int maxKA, int maxKB, int maxKC, double scaleFactor,
+                                              int nThreads, MPI_Comm communicator, NodeOrder nodeOrder, int numNodesA,
+                                              int numNodesB, int numNodesC);
+extern void helpme_setup_compressed_parallelF(PMEInstance *pme, int rPower, float kappa, int splineOrder, int dimA,
+                                              int dimB, int dimC, int maxKA, int maxKB, int maxKC, float scaleFactor,
+                                              int nThreads, MPI_Comm communicator, NodeOrder nodeOrder, int numNodesA,
+                                              int numNodesB, int numNodesC);
 #endif  // HAVE_MPI
 extern void helpme_set_lattice_vectorsD(struct PMEInstance *pme, double A, double B, double C, double kappa,
                                         double beta, double gamma, LatticeType latticeType);
