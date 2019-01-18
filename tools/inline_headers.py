@@ -33,11 +33,21 @@ def canonicalize_include(name):
     else:
         return None
 
+def cleanup_file(name):
+    """ Sanitize included files before inlining them """
+    output = []
+    for line in io.open(name, encoding="utf-8").readlines():
+        # Look for header guards and make sure that LGTM ignores them in the inlined version
+        if line.startswith('#ifndef'):
+            line = line.strip() + '   /* lgtm [cpp/duplicate-include-guard] */ \n'
+        output.append(line)
+    return output
+
 #
 # Make the partially inlined version of the header, which still needs Eigen
 #
 output_array = ["// original file: ../src/helpme.h\n\n"]
-output_array.extend(io.open('../src/helpme.h', encoding="utf-8").readlines())
+output_array.extend(cleanup_file('../src/helpme.h'))
 
 offset = 0
 changes_made = True
@@ -56,7 +66,7 @@ while changes_made:
                 else:
                     # We need to include this header
                     replacement_text = ["// original file: %s\n\n" % helpme_filename]
-                    replacement_text.extend(io.open(helpme_filename, encoding="utf-8").readlines()) 
+                    replacement_text.extend(cleanup_file(helpme_filename))
                     output_array[abs_line_number:abs_line_number+1] = replacement_text
                     already_added.append(helpme_filename)
                 changes_made = True

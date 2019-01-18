@@ -4,9 +4,8 @@ path_classifiers:
   test:
     - "test/*.cpp"
     - "test/unittests/*.cpp"
+
 extraction:
-  exclude:
-    - "single_include/helpme_standalone.h"
   cpp:
     prepare:
       packages:
