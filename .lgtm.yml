@@ -17,9 +17,9 @@ extraction:
     configure:    # Customizable step used only by C/C++ extraction.
       command:
         - cmake -Bbuild -DENABLE_MPI=Off -H.
+    exclude:
+      - "single_include/helpme_standalone.h"
     index:    # Customizable step used by all languages.
-      exclude:
-        - "single_include/helpme_standalone.h"
       build_command:
         - cd build
         - make -j2
