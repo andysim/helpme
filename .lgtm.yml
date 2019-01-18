@@ -5,6 +5,8 @@ path_classifiers:
     - "test/*.cpp"
     - "test/unittests/*.cpp"
 extraction:
+  exclude:
+    - "single_include/helpme_standalone.h"
   cpp:
     prepare:
       packages:
@@ -17,8 +19,6 @@ extraction:
     configure:    # Customizable step used only by C/C++ extraction.
       command:
         - cmake -Bbuild -DENABLE_MPI=Off -H.
-    exclude:
-      - "single_include/helpme_standalone.h"
     index:    # Customizable step used by all languages.
       build_command:
         - cd build
