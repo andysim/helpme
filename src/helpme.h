@@ -1906,6 +1906,7 @@ class PMEInstance {
         Real *realGrid = reinterpret_cast<Real *>(workSpace1_.data());
         std::fill(workSpace1_.begin(), workSpace1_.end(), 0);
         updateAngMomIterator(parameterAngMom);
+        auto fractionalParameters = cartesianTransform(parameterAngMom, onlyOneShellForInput, scaledRecVecs_, parameters);
         int nComponents = nCartesian(parameterAngMom) - cartesianOffset;
         size_t nAtoms = coordinates.nRows();
         for (size_t atom = 0; atom < nAtoms; ++atom) {
@@ -1926,7 +1927,7 @@ class PMEInstance {
             const auto *iteratorDataC = cGridIterator.data();
             for (int component = 0; component < nComponents; ++component) {
                 const auto &quanta = angMomIterator_[component + cartesianOffset];
-                Real param = parameters(atom, component);
+                Real param = fractionalParameters(atom, component);
                 const Real *splineValsA = splineA[quanta[0]];
                 const Real *splineValsB = splineB[quanta[1]];
                 const Real *splineValsC = splineC[quanta[2]];
