@@ -15,7 +15,7 @@
 // Author: Andrew C. Simmonett
 //
 // ENDLICENSE
-#ifndef _HELPME_HELPME_H_
+#ifndef _HELPME_HELPME_H_   /* lgtm [cpp/duplicate-include-guard] */ 
 #define _HELPME_HELPME_H_
 
 #if __cplusplus || DOXYGEN
@@ -48,7 +48,7 @@
 // Author: Andrew C. Simmonett
 //
 // ENDLICENSE
-#ifndef _HELPME_CARTESIANTRANSFORM_H_
+#ifndef _HELPME_CARTESIANTRANSFORM_H_   /* lgtm [cpp/duplicate-include-guard] */ 
 #define _HELPME_CARTESIANTRANSFORM_H_
 
 // original file: ../src/matrix.h
@@ -61,7 +61,7 @@
 // Author: Andrew C. Simmonett
 //
 // ENDLICENSE
-#ifndef _HELPME_MATRIX_H_
+#ifndef _HELPME_MATRIX_H_   /* lgtm [cpp/duplicate-include-guard] */ 
 #define _HELPME_MATRIX_H_
 
 #include <functional>
@@ -90,7 +90,7 @@
 //
 // http://www.mymathlib.com/c_source/matrices/eigen/jacobi_cyclic_method.c
 //
-#ifndef _HELPME_LAPACK_WRAPPER_H_
+#ifndef _HELPME_LAPACK_WRAPPER_H_   /* lgtm [cpp/duplicate-include-guard] */ 
 #define _HELPME_LAPACK_WRAPPER_H_
 
 #include <cmath>
@@ -323,7 +323,7 @@ void JacobiCyclicDiagonalization(Real *eigenvalues, Real *eigenvectors, const Re
 // Author: Andrew C. Simmonett
 //
 // ENDLICENSE
-#ifndef _HELPME_STRING_UTIL_H_
+#ifndef _HELPME_STRING_UTIL_H_   /* lgtm [cpp/duplicate-include-guard] */ 
 #define _HELPME_STRING_UTIL_H_
 
 #include <complex>
@@ -398,7 +398,7 @@ std::string stringify(T *data, size_t size, size_t rowDim, int width = 14, int p
 // Author: Andrew C. Simmonett
 //
 // ENDLICENSE
-#ifndef _HELPME_MEMORY_H_
+#ifndef _HELPME_MEMORY_H_   /* lgtm [cpp/duplicate-include-guard] */ 
 #define _HELPME_MEMORY_H_
 
 #include <stdexcept>
@@ -1137,7 +1137,7 @@ Matrix<Real> cartesianTransform(int maxAngularMomentum, bool transformOnlyThisSh
 // Author: Andrew C. Simmonett
 //
 // ENDLICENSE
-#ifndef _HELPME_FFTW_WRAPPER_H_
+#ifndef _HELPME_FFTW_WRAPPER_H_   /* lgtm [cpp/duplicate-include-guard] */ 
 #define _HELPME_FFTW_WRAPPER_H_
 
 #include <complex>
@@ -1353,7 +1353,7 @@ class FFTWWrapper {
 // Author: Andrew C. Simmonett
 //
 // ENDLICENSE
-#ifndef _HELPME_GAMMA_H_
+#ifndef _HELPME_GAMMA_H_   /* lgtm [cpp/duplicate-include-guard] */ 
 #define _HELPME_GAMMA_H_
 
 #include <cmath>
@@ -1748,7 +1748,7 @@ Real nonTemplateGammaComputer(int twoS) {
 // Author: Andrew C. Simmonett
 //
 // ENDLICENSE
-#ifndef _HELPME_GRIDSIZE_H_
+#ifndef _HELPME_GRIDSIZE_H_   /* lgtm [cpp/duplicate-include-guard] */ 
 #define _HELPME_GRIDSIZE_H_
 
 #include <algorithm>
@@ -1823,7 +1823,7 @@ int findGridSize(T inputSize, const std::initializer_list<T> &requiredDivisors) 
 // Author: Andrew C. Simmonett
 //
 // ENDLICENSE
-#ifndef _HELPME_MPI_WRAPPER_H_
+#ifndef _HELPME_MPI_WRAPPER_H_   /* lgtm [cpp/duplicate-include-guard] */ 
 #define _HELPME_MPI_WRAPPER_H_
 
 #include <mpi.h>
@@ -2001,7 +2001,7 @@ typedef struct ompi_communicator_t *MPI_Comm;
 // Author: Andrew C. Simmonett
 //
 // ENDLICENSE
-#ifndef _HELPME_POWERS_H_
+#ifndef _HELPME_POWERS_H_   /* lgtm [cpp/duplicate-include-guard] */ 
 #define _HELPME_POWERS_H_
 
 #include <cmath>
@@ -2076,7 +2076,7 @@ struct raiseNormToIntegerPower {
 // Author: Andrew C. Simmonett
 //
 // ENDLICENSE
-#ifndef _HELPME_SPLINES_H_
+#ifndef _HELPME_SPLINES_H_   /* lgtm [cpp/duplicate-include-guard] */ 
 #define _HELPME_SPLINES_H_
 
 // #include "matrix.h"
@@ -4093,6 +4093,8 @@ class PMEInstance {
         Real *realGrid = reinterpret_cast<Real *>(workSpace1_.data());
         std::fill(workSpace1_.begin(), workSpace1_.end(), 0);
         updateAngMomIterator(parameterAngMom);
+        auto fractionalParameters =
+            cartesianTransform(parameterAngMom, onlyOneShellForInput, scaledRecVecs_, parameters);
         int nComponents = nCartesian(parameterAngMom) - cartesianOffset;
         size_t nAtoms = coordinates.nRows();
         for (size_t atom = 0; atom < nAtoms; ++atom) {
@@ -4113,7 +4115,7 @@ class PMEInstance {
             const auto *iteratorDataC = cGridIterator.data();
             for (int component = 0; component < nComponents; ++component) {
                 const auto &quanta = angMomIterator_[component + cartesianOffset];
-                Real param = parameters(atom, component);
+                Real param = fractionalParameters(atom, component);
                 const Real *splineValsA = splineA[quanta[0]];
                 const Real *splineValsB = splineB[quanta[1]];
                 const Real *splineValsC = splineC[quanta[2]];
