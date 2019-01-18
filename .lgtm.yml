@@ -18,6 +18,8 @@ extraction:
       command:
         - cmake -Bbuild -DENABLE_MPI=Off -H.
     index:    # Customizable step used by all languages.
+      exclude:
+        - "single_include/helpme_standalone.h"
       build_command:
         - cd build
         - make -j2
