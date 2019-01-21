@@ -15,8 +15,8 @@
 // Author: Andrew C. Simmonett
 //
 // ENDLICENSE
-#ifndef _HELPME_HELPME_H_   /* lgtm [cpp/duplicate-include-guard] */ 
-#define _HELPME_HELPME_H_
+#ifndef _HELPME_STANDALONE_HELPME_H_
+#define _HELPME_STANDALONE_HELPME_H_
 
 #if __cplusplus || DOXYGEN
 
@@ -48,8 +48,8 @@
 // Author: Andrew C. Simmonett
 //
 // ENDLICENSE
-#ifndef _HELPME_CARTESIANTRANSFORM_H_   /* lgtm [cpp/duplicate-include-guard] */ 
-#define _HELPME_CARTESIANTRANSFORM_H_
+#ifndef _HELPME_STANDALONE_CARTESIANTRANSFORM_H_
+#define _HELPME_STANDALONE_CARTESIANTRANSFORM_H_
 
 // original file: ../src/matrix.h
 
@@ -61,8 +61,8 @@
 // Author: Andrew C. Simmonett
 //
 // ENDLICENSE
-#ifndef _HELPME_MATRIX_H_   /* lgtm [cpp/duplicate-include-guard] */ 
-#define _HELPME_MATRIX_H_
+#ifndef _HELPME_STANDALONE_MATRIX_H_
+#define _HELPME_STANDALONE_MATRIX_H_
 
 #include <functional>
 #include <algorithm>
@@ -90,8 +90,8 @@
 //
 // http://www.mymathlib.com/c_source/matrices/eigen/jacobi_cyclic_method.c
 //
-#ifndef _HELPME_LAPACK_WRAPPER_H_   /* lgtm [cpp/duplicate-include-guard] */ 
-#define _HELPME_LAPACK_WRAPPER_H_
+#ifndef _HELPME_STANDALONE_LAPACK_WRAPPER_H_
+#define _HELPME_STANDALONE_LAPACK_WRAPPER_H_
 
 #include <cmath>
 #include <limits>
@@ -323,8 +323,8 @@ void JacobiCyclicDiagonalization(Real *eigenvalues, Real *eigenvectors, const Re
 // Author: Andrew C. Simmonett
 //
 // ENDLICENSE
-#ifndef _HELPME_STRING_UTIL_H_   /* lgtm [cpp/duplicate-include-guard] */ 
-#define _HELPME_STRING_UTIL_H_
+#ifndef _HELPME_STANDALONE_STRING_UTIL_H_
+#define _HELPME_STANDALONE_STRING_UTIL_H_
 
 #include <complex>
 #include <iomanip>
@@ -398,8 +398,8 @@ std::string stringify(T *data, size_t size, size_t rowDim, int width = 14, int p
 // Author: Andrew C. Simmonett
 //
 // ENDLICENSE
-#ifndef _HELPME_MEMORY_H_   /* lgtm [cpp/duplicate-include-guard] */ 
-#define _HELPME_MEMORY_H_
+#ifndef _HELPME_STANDALONE_MEMORY_H_
+#define _HELPME_STANDALONE_MEMORY_H_
 
 #include <stdexcept>
 #include <vector>
@@ -1137,8 +1137,8 @@ Matrix<Real> cartesianTransform(int maxAngularMomentum, bool transformOnlyThisSh
 // Author: Andrew C. Simmonett
 //
 // ENDLICENSE
-#ifndef _HELPME_FFTW_WRAPPER_H_   /* lgtm [cpp/duplicate-include-guard] */ 
-#define _HELPME_FFTW_WRAPPER_H_
+#ifndef _HELPME_STANDALONE_FFTW_WRAPPER_H_
+#define _HELPME_STANDALONE_FFTW_WRAPPER_H_
 
 #include <complex>
 #include <iostream>
@@ -1353,8 +1353,8 @@ class FFTWWrapper {
 // Author: Andrew C. Simmonett
 //
 // ENDLICENSE
-#ifndef _HELPME_GAMMA_H_   /* lgtm [cpp/duplicate-include-guard] */ 
-#define _HELPME_GAMMA_H_
+#ifndef _HELPME_STANDALONE_GAMMA_H_
+#define _HELPME_STANDALONE_GAMMA_H_
 
 #include <cmath>
 #include <limits>
@@ -1748,8 +1748,8 @@ Real nonTemplateGammaComputer(int twoS) {
 // Author: Andrew C. Simmonett
 //
 // ENDLICENSE
-#ifndef _HELPME_GRIDSIZE_H_   /* lgtm [cpp/duplicate-include-guard] */ 
-#define _HELPME_GRIDSIZE_H_
+#ifndef _HELPME_STANDALONE_GRIDSIZE_H_
+#define _HELPME_STANDALONE_GRIDSIZE_H_
 
 #include <algorithm>
 #include <cmath>
@@ -1823,8 +1823,8 @@ int findGridSize(T inputSize, const std::initializer_list<T> &requiredDivisors) 
 // Author: Andrew C. Simmonett
 //
 // ENDLICENSE
-#ifndef _HELPME_MPI_WRAPPER_H_   /* lgtm [cpp/duplicate-include-guard] */ 
-#define _HELPME_MPI_WRAPPER_H_
+#ifndef _HELPME_STANDALONE_MPI_WRAPPER_H_
+#define _HELPME_STANDALONE_MPI_WRAPPER_H_
 
 #include <mpi.h>
 
@@ -2001,8 +2001,8 @@ typedef struct ompi_communicator_t *MPI_Comm;
 // Author: Andrew C. Simmonett
 //
 // ENDLICENSE
-#ifndef _HELPME_POWERS_H_   /* lgtm [cpp/duplicate-include-guard] */ 
-#define _HELPME_POWERS_H_
+#ifndef _HELPME_STANDALONE_POWERS_H_
+#define _HELPME_STANDALONE_POWERS_H_
 
 #include <cmath>
 
@@ -2076,8 +2076,8 @@ struct raiseNormToIntegerPower {
 // Author: Andrew C. Simmonett
 //
 // ENDLICENSE
-#ifndef _HELPME_SPLINES_H_   /* lgtm [cpp/duplicate-include-guard] */ 
-#define _HELPME_SPLINES_H_
+#ifndef _HELPME_STANDALONE_SPLINES_H_
+#define _HELPME_STANDALONE_SPLINES_H_
 
 // #include "matrix.h"
 

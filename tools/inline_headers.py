@@ -18,6 +18,7 @@ import os
 import re
 
 includere = re.compile(r'\s*#\s*include\s*[<"](.*)[">]\s*')
+headerguardre = re.compile(r'\s*#((define)|(ifndef)) _HELPME_(.*)_H_')
 
 warning = u"""
 //
@@ -37,9 +38,11 @@ def cleanup_file(name):
     """ Sanitize included files before inlining them """
     output = []
     for line in io.open(name, encoding="utf-8").readlines():
-        # Look for header guards and make sure that LGTM ignores them in the inlined version
-        if line.startswith('#ifndef'):
-            line = line.strip() + '   /* lgtm [cpp/duplicate-include-guard] */ \n'
+        # Look for header guards and relabel them to make LGTM's analyzer happy
+        match = headerguardre.match(line)
+        if match:
+            incname = ' _HELPME_STANDALONE_' + match.groups()[3] + '_H_\n'
+            line = '#' + match.group(1) + incname
         output.append(line)
     return output
 
