@@ -1,6 +1,6 @@
 import unittest
 
-import helpmelib as pme
+import helpme as pme
 import numpy as np
 
 def print_results(label, e, f, v):

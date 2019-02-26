@@ -16,6 +16,9 @@
 #   FFTW_INCLUDE_DIR        ... fftw include directory
 #
 
+cmake_policy(PUSH)
+cmake_policy(SET CMP0074 NEW)  # 3.12
+
 #If environment variable FFTWDIR is specified, it has same effect as FFTW_ROOT
 if( NOT FFTW_ROOT AND EXISTS "$ENV{FFTW_ROOT}")
   set( FFTW_ROOT $ENV{FFTW_ROOT} )
@@ -109,29 +112,53 @@ set( CMAKE_FIND_LIBRARY_SUFFIXES ${CMAKE_FIND_LIBRARY_SUFFIXES_SAV} )
 
 if(FFTWF_LIB)
     message(STATUS "${Cyan}Found single precision FFTW: ${FFTWF_LIB}${ColourReset}")
-    set(FFTW_LIBRARIES ${FFTW_LIBRARIES} ${FFTWF_LIB})
-    set(HAVE_FFTWF TRUE)
+    add_library(fftw::fftwf INTERFACE IMPORTED)
+    set_property(TARGET fftw::fftwf PROPERTY INTERFACE_LINK_LIBRARIES ${FFTWF_LIB})
+    set_property(TARGET fftw::fftwf PROPERTY INTERFACE_INCLUDE_DIRECTORIES ${FFTW_INCLUDES})
+    set_property(TARGET fftw::fftwf PROPERTY INTERFACE_COMPILE_DEFINITIONS HAVE_FFTWF=1)
 else()
     message(STATUS "${Red}Single precision FFTW not found${ColourReset}")
 endif()
 
 if(FFTW_LIB)
     message(STATUS "${Cyan}Found double precision FFTW: ${FFTW_LIB}${ColourReset}")
-    set(FFTW_LIBRARIES ${FFTW_LIBRARIES} ${FFTW_LIB})
-    set(HAVE_FFTWD TRUE)
+    add_library(fftw::fftwd INTERFACE IMPORTED)
+    set_property(TARGET fftw::fftwd PROPERTY INTERFACE_LINK_LIBRARIES ${FFTW_LIB})
+    set_property(TARGET fftw::fftwd PROPERTY INTERFACE_INCLUDE_DIRECTORIES ${FFTW_INCLUDES})
+    set_property(TARGET fftw::fftwd PROPERTY INTERFACE_COMPILE_DEFINITIONS HAVE_FFTWD=1)
 else()
     message(STATUS "${Red}Double precision FFTW not found${ColourReset}")
 endif()
 
 if(FFTWL_LIB)
     message(STATUS "${Cyan}Found long double precision FFTW: ${FFTWL_LIB}${ColourReset}")
-    set(FFTW_LIBRARIES ${FFTW_LIBRARIES} ${FFTWL_LIB})
-    set(HAVE_FFTWL TRUE)
+    add_library(fftw::fftwl INTERFACE IMPORTED)
+    set_property(TARGET fftw::fftwl PROPERTY INTERFACE_LINK_LIBRARIES ${FFTWL_LIB})
+    set_property(TARGET fftw::fftwl PROPERTY INTERFACE_INCLUDE_DIRECTORIES ${FFTW_INCLUDES})
+    set_property(TARGET fftw::fftwl PROPERTY INTERFACE_COMPILE_DEFINITIONS HAVE_FFTWL=1)
 else()
     message(STATUS "${Red}Long double precision FFTW not found${ColourReset}")
+endif()
+
+# not the official target name and no separate F/D/L targets
+#   looks like this is done properly upstream, just no one distributes the pkg
+#   build from cmake
+add_library(fftw::fftw INTERFACE IMPORTED)
+if(TARGET fftw::fftwd)
+    set_property(TARGET fftw::fftw APPEND PROPERTY INTERFACE_LINK_LIBRARIES fftw::fftwd)
+    set(FFTW_LIBRARIES ${FFTW_LIBRARIES} $<TARGET_PROPERTY:fftw::fftwd,INTERFACE_LINK_LIBRARIES>)
+endif()
+if(TARGET fftw::fftwf)
+    set_property(TARGET fftw::fftw APPEND PROPERTY INTERFACE_LINK_LIBRARIES fftw::fftwf)
+    set(FFTW_LIBRARIES ${FFTW_LIBRARIES} $<TARGET_PROPERTY:fftw::fftwf,INTERFACE_LINK_LIBRARIES>)
+endif()
+if(TARGET fftw::fftwl)
+    set_property(TARGET fftw::fftw APPEND PROPERTY INTERFACE_LINK_LIBRARIES fftw::fftwl)
+    set(FFTW_LIBRARIES ${FFTW_LIBRARIES} $<TARGET_PROPERTY:fftw::fftwl,INTERFACE_LINK_LIBRARIES>)
 endif()
 
 include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(FFTW DEFAULT_MSG
                                   FFTW_INCLUDES FFTW_LIBRARIES)
 mark_as_advanced(FFTW_INCLUDES FFTW_LIBRARIES FFTW_LIB FFTWF_LIB FFTWL_LIB)
+cmake_policy(POP)

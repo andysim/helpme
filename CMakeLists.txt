@@ -1,4 +1,8 @@
-cmake_minimum_required(VERSION 3.3 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.11 FATAL_ERROR)
+
+if(POLICY CMP0074)
+    cmake_policy(SET CMP0074 NEW)  # 3.12
+endif()
 
 ################  Options: Overview and Not Otherwise Mentioned  ###############
 #
@@ -42,11 +46,12 @@ set (CMAKE_CXX_STANDARD 11)
 # Language bindings options
 #
 include(custom_color_messages)
-option(ENABLE_fortran "Enables the building of Fortran bindings (needs Fortran compiler)" ON)
-if(ENABLE_fortran)
+option(ENABLE_Fortran "Enables the building of Fortran bindings (needs Fortran compiler)" ON)
+if(ENABLE_Fortran)
     enable_language(Fortran)
     set(Fortran_ENABLED ON)
 endif()
+option(INSTALL_PYMOD "Additionally installs as independent python module in PYMOD_INSTALL_LIBDIR" OFF)
 
 #
 # Build options
@@ -66,6 +71,14 @@ option_with_flags(ENABLE_TSAN "Enables thread sanitizer" OFF
                   "-fsanitize=thread" "-fno-omit-frame-pointer -pie")
 option_with_flags(ENABLE_UBSAN "Enables undefined behavior sanitizer" OFF
                   "-fsanitize=undefined" "-fno-omit-frame-pointer")
+option_with_default(CMAKE_BUILD_TYPE "Build type (Release or Debug)" Release)
+option_with_flags(ENABLE_XHOST "Enables processor-specific optimization" ON
+                  "-xHost" "-march=native")
+option_with_default(BUILD_FPIC "Libraries will be compiled with position independent code" ON)
+option_with_print(BUILD_SHARED_LIBS "Build final library as shared, not static" ON)
+option_with_default(CMAKE_INSTALL_LIBDIR "Directory to which libraries installed" lib)
+option_with_default(PYMOD_INSTALL_LIBDIR "Location within CMAKE_INSTALL_LIBDIR to which python modules are installed
+                                          Must start with: / . Used to imitate python install: /python3.6/site-packages ." /)
 
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0")
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -O0")
@@ -73,32 +86,10 @@ set(CMAKE_Fortran_FLAGS_DEBUG "${CMAKE_Fortran_FLAGS_DEBUG} -O0")
 
 # FFTW
 find_package(FFTW REQUIRED)
-if(HAVE_FFTWF)
-    add_definitions(-DHAVE_FFTWF=1)
-endif()
-if(HAVE_FFTWD)
-    add_definitions(-DHAVE_FFTWD=1)
-endif()
-if(HAVE_FFTWL)
-    add_definitions(-DHAVE_FFTWL=1)
-endif()
 
 # OpenMP
 if(ENABLE_OPENMP)
-    find_package(OpenMP)
-endif()
-
-if(OPENMP_FOUND)
-    add_definitions(-DHAVE_OPENMP)
-    if(DEFINED CMAKE_C_COMPILER_ID)
-        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
-    endif()
-    if(DEFINED CMAKE_CXX_COMPILER_ID)
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
-    endif()
-    if(DEFINED CMAKE_Fortran_COMPILER_ID)
-        set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} ${OpenMP_Fortran_FLAGS}")
-    endif()
+    find_package(OpenMP MODULE REQUIRED COMPONENTS CXX)
 endif()
 
 # MPI
@@ -118,13 +109,15 @@ else()
     endif()
 endif()
 
+include(GNUInstallDirs)
 # Find Python
-set(Python_ADDITIONAL_VERSIONS 3.7 3.6 3.5)
-find_package(PythonLibsNew 2.7 REQUIRED)
-message(STATUS "${Cyan}Found Python ${PYTHON_VERSION_MAJOR}.${PYTHON_VERSION_MINOR}${ColourReset}: ${PYTHON_EXECUTABLE} (found version ${PYTHON_VERSION_STRING})")
-set(Python_ENABLED ON) # For now, we just always assume this is on
-add_subdirectory(external/pybind11)
-add_subdirectory(python)
+if(${INSTALL_PYMOD})
+    set(Python_ADDITIONAL_VERSIONS 3.7 3.6 3.5)
+    find_package(PythonLibsNew 2.7 REQUIRED)
+    message(STATUS "${Cyan}Found Python ${PYTHON_VERSION_MAJOR}.${PYTHON_VERSION_MINOR}${ColourReset}: ${PYTHON_EXECUTABLE} (found version ${PYTHON_VERSION_STRING})")
+    add_subdirectory(external/pybind11)
+    add_subdirectory(python)
+endif()
 
 # Handle different C++ libraries
 if(CMAKE_CXX_COMPILER_ID MATCHES "AppleClang")
@@ -134,17 +127,23 @@ else()
 endif()
 
 # The C++ library is linked explicitly because exception handling on macOS appears to be broken otherwise.
-set(EXTERNAL_LIBRARIES ${FFTW_LIBRARIES} ${cpplib})
+set(EXTERNAL_LIBRARIES fftw::fftw ${cpplib})
 
 # Documentation
-find_package(Doxygen)
-find_package(Sphinx)
-find_package(Latex)
-if(DOXYGEN_EXECUTABLE)
+if (BUILD_SPHINX)
+    find_package(Sphinx)
+    find_package(Latex)
+endif()
+if (BUILD_DOXYGEN)
+    find_package(Doxygen)
+    if (NOT DOXYGEN_FOUND)
+        message (FATAL_ERROR "Doxygen is needed to build the documentation. Please install it correctly.")
+    endif()
     if(SPHINX_EXECUTABLE)
         add_subdirectory(docs)
     endif()
 endif()
+
 add_subdirectory(src)
 
 

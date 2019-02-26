@@ -64,7 +64,7 @@ void declarePMEInstance(py::module& mod, std::string const& suffix) {
 }
 }  // namespace
 
-PYBIND11_MODULE(helpmelib, m) {
+PYBIND11_MODULE(pymod, m) {
     m.doc() = R"pbdoc(
         helpme: an efficient library for particle mesh Ewald
                  ----------
@@ -79,10 +79,4 @@ PYBIND11_MODULE(helpmelib, m) {
 
     declarePMEInstance<double>(m, "D");
     declarePMEInstance<float>(m, "F");
-
-#ifdef VERSION_INFO
-    m.attr("__version__") = py::str(VERSION_INFO);
-#else
-    m.attr("__version__") = py::str("dev");
-#endif
 }

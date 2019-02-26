@@ -1,0 +1,63 @@
+# helpmeConfig.cmake
+# ------------------
+#
+# helPME cmake module.
+# This module sets the following variables in your project::
+#
+#   helpme_FOUND - true if helPME and all required components found on the system
+#   helpme_VERSION - helPME version in format Major.Minor.Release
+#   helpme_PYMOD - path to helPME python modules
+#
+#
+# Available components::
+#
+#   Python - Python module installed, so helpme::python is available.
+#
+#
+# Exported targets::
+#
+# If helPME is found, this module defines the following :prop_tgt:`IMPORTED`
+## target. Target is always shared _or_ static, so, for both, use separate, not
+## overlapping, installations. ::
+#
+#   helpme::pymod - the main Python module library.
+#   helpme::helpme - the main helPME C++ library with FFTW attached.
+#   helpme::intf_C - interface target for C linkage with main helpme library attached.
+#   helpme::intf_CXX -
+#   helpme::intf_Fortran
+#
+#
+# Suggested usage::
+#
+#   find_package(helpme)
+#   find_package(helpme 0.1 EXACT CONFIG REQUIRED COMPONENTS Python)
+#
+#
+# The following variables can be set to guide the search for this package::
+#
+#   helpme_DIR - CMake variable, set to directory containing this Config file
+#   CMAKE_PREFIX_PATH - CMake variable, set to root directory of this package
+##   PATH - environment variable, set to bin directory of this package
+#   CMAKE_DISABLE_FIND_PACKAGE_helpme - CMake variable, disables
+#     find_package(helpm3) when not REQUIRED, perhaps to force internal build
+
+@PACKAGE_INIT@
+
+set(PN helpme)
+
+set(${PN}_PYMOD "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_LIBDIR@@PYMOD_INSTALL_LIBDIR@")
+
+if(@INSTALL_PYMOD@)
+    set(${PN}_Python_FOUND 1)
+endif()
+
+check_required_components(${PN})
+
+#-----------------------------------------------------------------------------
+# Don't include targets if this file is being picked up by another
+# project which has already built this as a subproject
+#-----------------------------------------------------------------------------
+if(NOT TARGET ${PN}::helpme)
+    include("${CMAKE_CURRENT_LIST_DIR}/${PN}Targets.cmake")
+endif()
+
