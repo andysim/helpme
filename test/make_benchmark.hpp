@@ -13,6 +13,8 @@
 #include <stdlib.h>
 #include <getopt.h>
 
+#define TIME_COMPONENTS 1
+
 int main(int argc, char *argv[]) {
     // Defaults!
     bool useFloat = false;
@@ -30,6 +32,14 @@ int main(int argc, char *argv[]) {
     int numNodesX = 1;
     int numNodesY = 1;
     int numNodesZ = 1;
+
+#if TIME_COMPONENTS
+    std::chrono::duration<double> splineTime;
+    std::chrono::duration<double> spreadTime;
+    std::chrono::duration<double> transformTime;
+    std::chrono::duration<double> convolveTime;
+    std::chrono::duration<double> probeTime;
+#endif
 
     MPI_Init(NULL, NULL);
     int foundNumNodes;
@@ -176,7 +186,60 @@ int main(int argc, char *argv[]) {
                                              scaleFactor, 0, MPI_COMM_WORLD, PMEInstanceF::NodeOrder::ZYX, numNodesX,
                                              numNodesY, numNodesZ);
                 pme->setLatticeVectors(boxDimX, boxDimY, boxDimZ, 90, 90, 90, PMEInstanceF::LatticeType::XAligned);
-                nodeEnergy = pme->computeEFVRec(0, paramsF, coordsF, nodeForces, nodeVirial);
+#if TIME_COMPONENTS
+                auto localStart = std::chrono::system_clock::now();
+#endif
+                pme->filterAtomsAndBuildSplineCache(1, coordsF);
+#if TIME_COMPONENTS
+                auto localStop = std::chrono::system_clock::now();
+                splineTime += localStop - localStart;
+                localStart = std::chrono::system_clock::now();
+#endif
+                auto realGrid = pme->spreadParameters(0, paramsF);
+#if TIME_COMPONENTS
+                localStop = std::chrono::system_clock::now();
+                spreadTime += localStop - localStart;
+                localStart = std::chrono::system_clock::now();
+#endif
+                std::complex<float> *gridAddress;
+                float *gridAddressCompressed;
+                if (doCompressed) {
+                    gridAddressCompressed = pme->compressedForwardTransform(realGrid);
+                } else {
+                    gridAddress = pme->forwardTransform(realGrid);
+                }
+#if TIME_COMPONENTS
+                localStop = std::chrono::system_clock::now();
+                transformTime += localStop - localStart;
+                localStart = std::chrono::system_clock::now();
+#endif
+                float *convolvedGridFloat;
+                if (doCompressed) {
+                    nodeEnergy = pme->convolveEV(gridAddressCompressed, convolvedGridFloat, nodeVirial);
+                } else {
+                    nodeEnergy = pme->convolveEV(gridAddress, nodeVirial);
+                }
+#if TIME_COMPONENTS
+                localStop = std::chrono::system_clock::now();
+                convolveTime += localStop - localStart;
+                localStart = std::chrono::system_clock::now();
+#endif
+                float *potentialGrid;
+                if (doCompressed) {
+                    potentialGrid = pme->compressedInverseTransform(convolvedGridFloat);
+                } else {
+                    potentialGrid = pme->inverseTransform(gridAddress);
+                }
+#if TIME_COMPONENTS
+                localStop = std::chrono::system_clock::now();
+                transformTime += localStop - localStart;
+                localStart = std::chrono::system_clock::now();
+#endif
+                pme->probeGrid(potentialGrid, 0, paramsF, nodeForces);
+#if TIME_COMPONENTS
+                localStop = std::chrono::system_clock::now();
+                probeTime += localStop - localStart;
+#endif
             }
         } else {
             for (int n = 0; n < nCalcs; ++n) {
@@ -184,7 +247,59 @@ int main(int argc, char *argv[]) {
                                              scaleFactor, 0, MPI_COMM_WORLD, PMEInstanceF::NodeOrder::ZYX, numNodesX,
                                              numNodesY, numNodesZ);
                 pme->setLatticeVectors(boxDimX, boxDimY, boxDimZ, 90, 90, 90, PMEInstanceF::LatticeType::XAligned);
-                nodeEnergy = pme->computeEFRec(0, paramsF, coordsF, nodeForces);
+#if TIME_COMPONENTS
+                auto localStart = std::chrono::system_clock::now();
+#endif
+                pme->filterAtomsAndBuildSplineCache(1, coordsF);
+#if TIME_COMPONENTS
+                auto localStop = std::chrono::system_clock::now();
+                splineTime += localStop - localStart;
+                localStart = std::chrono::system_clock::now();
+#endif
+                auto realGrid = pme->spreadParameters(0, paramsF);
+#if TIME_COMPONENTS
+                localStop = std::chrono::system_clock::now();
+                spreadTime += localStop - localStart;
+                localStart = std::chrono::system_clock::now();
+#endif
+                std::complex<float> *gridAddress;
+                float *gridAddressCompressed;
+                if (doCompressed) {
+                    gridAddressCompressed = pme->compressedForwardTransform(realGrid);
+                } else {
+                    gridAddress = pme->forwardTransform(realGrid);
+                }
+#if TIME_COMPONENTS
+                localStop = std::chrono::system_clock::now();
+                transformTime += localStop - localStart;
+                localStart = std::chrono::system_clock::now();
+#endif
+                if (doCompressed) {
+                    nodeEnergy = pme->convolveE(gridAddressCompressed);
+                } else {
+                    nodeEnergy = pme->convolveE(gridAddress);
+                }
+#if TIME_COMPONENTS
+                localStop = std::chrono::system_clock::now();
+                convolveTime += localStop - localStart;
+                localStart = std::chrono::system_clock::now();
+#endif
+                float *potentialGrid;
+                if (doCompressed) {
+                    potentialGrid = pme->compressedInverseTransform(gridAddressCompressed);
+                } else {
+                    potentialGrid = pme->inverseTransform(gridAddress);
+                }
+#if TIME_COMPONENTS
+                localStop = std::chrono::system_clock::now();
+                transformTime += localStop - localStart;
+                localStart = std::chrono::system_clock::now();
+#endif
+                pme->probeGrid(potentialGrid, 0, paramsF, nodeForces);
+#if TIME_COMPONENTS
+                localStop = std::chrono::system_clock::now();
+                probeTime += localStop - localStart;
+#endif
             }
         }
         MPI_Reduce(&nodeEnergy, &energy, 1, MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
@@ -210,7 +325,60 @@ int main(int argc, char *argv[]) {
                                              scaleFactor, 0, MPI_COMM_WORLD, PMEInstanceD::NodeOrder::ZYX, numNodesX,
                                              numNodesY, numNodesZ);
                 pme->setLatticeVectors(boxDimX, boxDimY, boxDimZ, 90, 90, 90, PMEInstanceD::LatticeType::XAligned);
-                nodeEnergy = pme->computeEFVRec(0, paramsD, coordsD, nodeForces, nodeVirial);
+#if TIME_COMPONENTS
+                auto localStart = std::chrono::system_clock::now();
+#endif
+                pme->filterAtomsAndBuildSplineCache(1, coordsD);
+#if TIME_COMPONENTS
+                auto localStop = std::chrono::system_clock::now();
+                splineTime += localStop - localStart;
+                localStart = std::chrono::system_clock::now();
+#endif
+                auto realGrid = pme->spreadParameters(0, paramsD);
+#if TIME_COMPONENTS
+                localStop = std::chrono::system_clock::now();
+                spreadTime += localStop - localStart;
+                localStart = std::chrono::system_clock::now();
+#endif
+                double *gridAddressCompressed;
+                std::complex<double> *gridAddress;
+                if (doCompressed) {
+                    gridAddressCompressed = pme->compressedForwardTransform(realGrid);
+                } else {
+                    gridAddress = pme->forwardTransform(realGrid);
+                }
+#if TIME_COMPONENTS
+                localStop = std::chrono::system_clock::now();
+                transformTime += localStop - localStart;
+                localStart = std::chrono::system_clock::now();
+#endif
+                double *convolvedGridFloat;
+                if (doCompressed) {
+                    nodeEnergy = pme->convolveEV(gridAddressCompressed, convolvedGridFloat, nodeVirial);
+                } else {
+                    nodeEnergy = pme->convolveEV(gridAddress, nodeVirial);
+                }
+#if TIME_COMPONENTS
+                localStop = std::chrono::system_clock::now();
+                convolveTime += localStop - localStart;
+                localStart = std::chrono::system_clock::now();
+#endif
+                double *potentialGrid;
+                if (doCompressed) {
+                    potentialGrid = pme->compressedInverseTransform(convolvedGridFloat);
+                } else {
+                    potentialGrid = pme->inverseTransform(gridAddress);
+                }
+#if TIME_COMPONENTS
+                localStop = std::chrono::system_clock::now();
+                transformTime += localStop - localStart;
+                localStart = std::chrono::system_clock::now();
+#endif
+                pme->probeGrid(potentialGrid, 0, paramsD, nodeForces);
+#if TIME_COMPONENTS
+                localStop = std::chrono::system_clock::now();
+                probeTime += localStop - localStart;
+#endif
             }
         } else {
             for (int n = 0; n < nCalcs; ++n) {
@@ -218,7 +386,59 @@ int main(int argc, char *argv[]) {
                                              scaleFactor, 0, MPI_COMM_WORLD, PMEInstanceD::NodeOrder::ZYX, numNodesX,
                                              numNodesY, numNodesZ);
                 pme->setLatticeVectors(boxDimX, boxDimY, boxDimZ, 90, 90, 90, PMEInstanceD::LatticeType::XAligned);
-                nodeEnergy = pme->computeEFRec(0, paramsD, coordsD, nodeForces);
+#if TIME_COMPONENTS
+                auto localStart = std::chrono::system_clock::now();
+#endif
+                pme->filterAtomsAndBuildSplineCache(1, coordsD);
+#if TIME_COMPONENTS
+                auto localStop = std::chrono::system_clock::now();
+                splineTime += localStop - localStart;
+                localStart = std::chrono::system_clock::now();
+#endif
+                auto realGrid = pme->spreadParameters(0, paramsD);
+#if TIME_COMPONENTS
+                localStop = std::chrono::system_clock::now();
+                spreadTime += localStop - localStart;
+                localStart = std::chrono::system_clock::now();
+#endif
+                double *gridAddressCompressed;
+                std::complex<double> *gridAddress;
+                if (doCompressed) {
+                    gridAddressCompressed = pme->compressedForwardTransform(realGrid);
+                } else {
+                    gridAddress = pme->forwardTransform(realGrid);
+                }
+#if TIME_COMPONENTS
+                localStop = std::chrono::system_clock::now();
+                transformTime += localStop - localStart;
+                localStart = std::chrono::system_clock::now();
+#endif
+                if (doCompressed) {
+                    nodeEnergy = pme->convolveE(gridAddressCompressed);
+                } else {
+                    nodeEnergy = pme->convolveE(gridAddress);
+                }
+#if TIME_COMPONENTS
+                localStop = std::chrono::system_clock::now();
+                convolveTime += localStop - localStart;
+                localStart = std::chrono::system_clock::now();
+#endif
+                double *potentialGrid;
+                if (doCompressed) {
+                    potentialGrid = pme->compressedInverseTransform(gridAddressCompressed);
+                } else {
+                    potentialGrid = pme->inverseTransform(gridAddress);
+                }
+#if TIME_COMPONENTS
+                localStop = std::chrono::system_clock::now();
+                transformTime += localStop - localStart;
+                localStart = std::chrono::system_clock::now();
+#endif
+                pme->probeGrid(potentialGrid, 0, paramsD, nodeForces);
+#if TIME_COMPONENTS
+                localStop = std::chrono::system_clock::now();
+                probeTime += localStop - localStart;
+#endif
             }
         }
         MPI_Reduce(&nodeEnergy, &energy, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
@@ -235,9 +455,27 @@ int main(int argc, char *argv[]) {
     auto endTime = std::chrono::system_clock::now();
     std::chrono::duration<double> runTime = endTime - startTime;
     auto totalTime = runTime.count();
-    if (myRank == 0)
+    if (myRank == 0) {
+#if TIME_COMPONENTS
+        auto splineTimeCount = splineTime.count();
+        std::cout << "Spline run time: " << splineTimeCount << "s (" << 1000 * splineTimeCount / nCalcs
+                  << " ms per calculation)" << std::endl;
+        auto spreadTimeCount = spreadTime.count();
+        std::cout << "Spreading run time: " << spreadTimeCount << "s (" << 1000 * spreadTimeCount / nCalcs
+                  << " ms per calculation)" << std::endl;
+        auto transformTimeCount = transformTime.count();
+        std::cout << "Transforming run time: " << transformTimeCount << "s (" << 1000 * transformTimeCount / nCalcs
+                  << " ms per calculation)" << std::endl;
+        auto convolveTimeCount = convolveTime.count();
+        std::cout << "Convolve run time: " << convolveTimeCount << "s (" << 1000 * convolveTimeCount / nCalcs
+                  << " ms per calculation)" << std::endl;
+        auto probeTimeCount = probeTime.count();
+        std::cout << "Probe run time: " << probeTimeCount << "s (" << 1000 * probeTimeCount / nCalcs
+                  << " ms per calculation)" << std::endl;
+#endif
         std::cout << "Total run time: " << totalTime << "s (" << 1000 * totalTime / nCalcs << " ms per calculation)"
                   << std::endl;
+    }
 
     MPI_Finalize();
 }
