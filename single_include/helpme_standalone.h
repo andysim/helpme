@@ -2703,72 +2703,6 @@ class PMEInstance {
     }
 
     /*!
-     * \brief filterAtomsAndBuildSplineCache builds a list of BSplines for only the atoms to be handled by this node.
-     * \param splineDerivativeLevel the derivative level (parameter angular momentum + energy derivative level) of the
-     *                              BSplines.
-     * \param coordinates the cartesian coordinates, ordered in memory as {x1,y1,z1,x2,y2,z2,....xN,yN,zN}.
-     */
-    void filterAtomsAndBuildSplineCache(int splineDerivativeLevel, const RealMat &coords) {
-        assertInitialized();
-
-        atomList_.clear();
-        size_t nAtoms = coords.nRows();
-        for (int atom = 0; atom < nAtoms; ++atom) {
-            const Real *atomCoords = coords[atom];
-            constexpr float EPS = 1e-6;
-            Real aCoord =
-                atomCoords[0] * recVecs_(0, 0) + atomCoords[1] * recVecs_(1, 0) + atomCoords[2] * recVecs_(2, 0) - EPS;
-            Real bCoord =
-                atomCoords[0] * recVecs_(0, 1) + atomCoords[1] * recVecs_(1, 1) + atomCoords[2] * recVecs_(2, 1) - EPS;
-            Real cCoord =
-                atomCoords[0] * recVecs_(0, 2) + atomCoords[1] * recVecs_(1, 2) + atomCoords[2] * recVecs_(2, 2) - EPS;
-            // Make sure the fractional coordinates fall in the range 0 <= s < 1
-            aCoord -= floor(aCoord);
-            bCoord -= floor(bCoord);
-            cCoord -= floor(cCoord);
-            short aStartingGridPoint = gridDimensionA_ * aCoord;
-            short bStartingGridPoint = gridDimensionB_ * bCoord;
-            short cStartingGridPoint = gridDimensionC_ * cCoord;
-            const auto &aGridIterator = gridIteratorA_[aStartingGridPoint];
-            const auto &bGridIterator = gridIteratorB_[bStartingGridPoint];
-            const auto &cGridIterator = gridIteratorC_[cStartingGridPoint];
-            if (aGridIterator.size() && bGridIterator.size() && cGridIterator.size()) {
-                atomList_.emplace_back(atom, aCoord, bCoord, cCoord);
-            }
-        }
-
-        // Now we know how many atoms we loop over the dense list, redefining nAtoms accordingly.
-        // The first stage above is to get the number of atoms, so we can avoid calling push_back
-        // and thus avoid the many memory allocations.  If the cache is too small, grow it by a
-        // certain scale factor to try and minimize allocations in a not-too-wasteful manner.
-        nAtoms = atomList_.size();
-        if (splineCache_.size() < nAtoms) {
-            size_t newSize = static_cast<size_t>(1.2 * nAtoms);
-            for (int atom = splineCache_.size(); atom < newSize; ++atom)
-                splineCache_.emplace_back(splineOrder_, splineDerivativeLevel);
-        }
-
-        for (int atomListNum = 0; atomListNum < nAtoms; ++atomListNum) {
-            const auto &entry = atomList_[atomListNum];
-            const int absoluteAtomNumber = std::get<0>(entry);
-            const Real aCoord = std::get<1>(entry);
-            const Real bCoord = std::get<2>(entry);
-            const Real cCoord = std::get<3>(entry);
-            short aStartingGridPoint = gridDimensionA_ * aCoord;
-            short bStartingGridPoint = gridDimensionB_ * bCoord;
-            short cStartingGridPoint = gridDimensionC_ * cCoord;
-            auto &atomSplines = splineCache_[atomListNum];
-            atomSplines.absoluteAtomNumber = absoluteAtomNumber;
-            atomSplines.aSpline.update(aStartingGridPoint, gridDimensionA_ * aCoord - aStartingGridPoint, splineOrder_,
-                                       splineDerivativeLevel);
-            atomSplines.bSpline.update(bStartingGridPoint, gridDimensionB_ * bCoord - bStartingGridPoint, splineOrder_,
-                                       splineDerivativeLevel);
-            atomSplines.cSpline.update(cStartingGridPoint, gridDimensionC_ * cCoord - cStartingGridPoint, splineOrder_,
-                                       splineDerivativeLevel);
-        }
-    }
-
-    /*!
      * \brief Spreads parameters onto the grid for a single atom
      * \param atom the absolute atom number.
      * \param realGrid pointer to the array containing the grid in CBA order
@@ -3665,6 +3599,12 @@ class PMEInstance {
                 auto fullSplineModA = spline.invSplineModuli(gridDimensionA_);
                 auto fullSplineModB = spline.invSplineModuli(gridDimensionB_);
                 auto fullSplineModC = spline.invSplineModuli(gridDimensionC_);
+
+                scaledRecVecs_ = recVecs_.clone();
+                scaledRecVecs_.row(0) *= gridDimensionA_;
+                scaledRecVecs_.row(1) *= gridDimensionB_;
+                scaledRecVecs_.row(2) *= gridDimensionC_;
+
                 splineModA_.resize(myNumKSumTermsA_);
                 splineModB_.resize(myNumKSumTermsB_);
                 splineModC_.resize(myNumKSumTermsC_);
@@ -3726,6 +3666,72 @@ class PMEInstance {
           cellBeta_(0),
           cellGamma_(0) {}
 
+    /*!
+     * \brief filterAtomsAndBuildSplineCache builds a list of BSplines for only the atoms to be handled by this node.
+     *        N.B. This is public only to allow access for benchmarking and should never be called!
+     * \param splineDerivativeLevel the derivative level (parameter angular momentum + energy derivative level) of the
+     *                              BSplines.
+     * \param coordinates the cartesian coordinates, ordered in memory as {x1,y1,z1,x2,y2,z2,....xN,yN,zN}.
+     */
+    void filterAtomsAndBuildSplineCache(int splineDerivativeLevel, const RealMat &coords) {
+        assertInitialized();
+
+        atomList_.clear();
+        size_t nAtoms = coords.nRows();
+        for (int atom = 0; atom < nAtoms; ++atom) {
+            const Real *atomCoords = coords[atom];
+            constexpr float EPS = 1e-6;
+            Real aCoord =
+                atomCoords[0] * recVecs_(0, 0) + atomCoords[1] * recVecs_(1, 0) + atomCoords[2] * recVecs_(2, 0) - EPS;
+            Real bCoord =
+                atomCoords[0] * recVecs_(0, 1) + atomCoords[1] * recVecs_(1, 1) + atomCoords[2] * recVecs_(2, 1) - EPS;
+            Real cCoord =
+                atomCoords[0] * recVecs_(0, 2) + atomCoords[1] * recVecs_(1, 2) + atomCoords[2] * recVecs_(2, 2) - EPS;
+            // Make sure the fractional coordinates fall in the range 0 <= s < 1
+            aCoord -= floor(aCoord);
+            bCoord -= floor(bCoord);
+            cCoord -= floor(cCoord);
+            short aStartingGridPoint = gridDimensionA_ * aCoord;
+            short bStartingGridPoint = gridDimensionB_ * bCoord;
+            short cStartingGridPoint = gridDimensionC_ * cCoord;
+            const auto &aGridIterator = gridIteratorA_[aStartingGridPoint];
+            const auto &bGridIterator = gridIteratorB_[bStartingGridPoint];
+            const auto &cGridIterator = gridIteratorC_[cStartingGridPoint];
+            if (aGridIterator.size() && bGridIterator.size() && cGridIterator.size()) {
+                atomList_.emplace_back(atom, aCoord, bCoord, cCoord);
+            }
+        }
+
+        // Now we know how many atoms we loop over the dense list, redefining nAtoms accordingly.
+        // The first stage above is to get the number of atoms, so we can avoid calling push_back
+        // and thus avoid the many memory allocations.  If the cache is too small, grow it by a
+        // certain scale factor to try and minimize allocations in a not-too-wasteful manner.
+        nAtoms = atomList_.size();
+        if (splineCache_.size() < nAtoms) {
+            size_t newSize = static_cast<size_t>(1.2 * nAtoms);
+            for (int atom = splineCache_.size(); atom < newSize; ++atom)
+                splineCache_.emplace_back(splineOrder_, splineDerivativeLevel);
+        }
+
+        for (int atomListNum = 0; atomListNum < nAtoms; ++atomListNum) {
+            const auto &entry = atomList_[atomListNum];
+            const int absoluteAtomNumber = std::get<0>(entry);
+            const Real aCoord = std::get<1>(entry);
+            const Real bCoord = std::get<2>(entry);
+            const Real cCoord = std::get<3>(entry);
+            short aStartingGridPoint = gridDimensionA_ * aCoord;
+            short bStartingGridPoint = gridDimensionB_ * bCoord;
+            short cStartingGridPoint = gridDimensionC_ * cCoord;
+            auto &atomSplines = splineCache_[atomListNum];
+            atomSplines.absoluteAtomNumber = absoluteAtomNumber;
+            atomSplines.aSpline.update(aStartingGridPoint, gridDimensionA_ * aCoord - aStartingGridPoint, splineOrder_,
+                                       splineDerivativeLevel);
+            atomSplines.bSpline.update(bStartingGridPoint, gridDimensionB_ * bCoord - bStartingGridPoint, splineOrder_,
+                                       splineDerivativeLevel);
+            atomSplines.cSpline.update(cStartingGridPoint, gridDimensionC_ * cCoord - cStartingGridPoint, splineOrder_,
+                                       splineDerivativeLevel);
+        }
+    }
     /*!
      * \brief cellVolume Compute the volume of the unit cell.
      * \return volume in units consistent with those used to define the lattice vectors.
