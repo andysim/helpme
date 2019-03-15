@@ -11,9 +11,9 @@
 
 #if HAVE_BLAS == 1
 extern "C" {
-extern void dgemm(char *, char *, int *, int *, int *, double *, double *, int *, double *, int *, double *, double *,
+extern void dgemm_(char *, char *, int *, int *, int *, double *, double *, int *, double *, int *, double *, double *,
                   int *);
-extern void sgemm(char *, char *, int *, int *, int *, float *, float *, int *, float *, int *, float *, float *,
+extern void sgemm_(char *, char *, int *, int *, int *, float *, float *, int *, float *, int *, float *, float *,
                   int *);
 }
 #endif
@@ -90,7 +90,7 @@ void contractABxCWithDxC<float>(float const *__restrict__ abcPtr, float const *_
     char transA = 'n';
     float alpha = 1;
     float beta = 0;
-    sgemm(&transB, &transA, const_cast<int *>(&dDimension), const_cast<int *>(&abDimension),
+    sgemm_(&transB, &transA, const_cast<int *>(&dDimension), const_cast<int *>(&abDimension),
           const_cast<int *>(&cDimension), &alpha, const_cast<float *>(dcPtr), const_cast<int *>(&cDimension),
           const_cast<float *>(abcPtr), const_cast<int *>(&cDimension), &beta, abdPtr, const_cast<int *>(&dDimension));
 }
@@ -105,7 +105,7 @@ void contractABxCWithDxC<double>(double const *__restrict__ abcPtr, double const
     char transA = 'n';
     double alpha = 1;
     double beta = 0;
-    dgemm(&transB, &transA, const_cast<int *>(&dDimension), const_cast<int *>(&abDimension),
+    dgemm_(&transB, &transA, const_cast<int *>(&dDimension), const_cast<int *>(&abDimension),
           const_cast<int *>(&cDimension), &alpha, const_cast<double *>(dcPtr), const_cast<int *>(&cDimension),
           const_cast<double *>(abcPtr), const_cast<int *>(&cDimension), &beta, abdPtr, const_cast<int *>(&dDimension));
 }
