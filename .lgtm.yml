@@ -1,0 +1,24 @@
+path_classifiers:
+  generated:
+    - "single_include/helpme_standalone.h"
+  test:
+    - "test/*.cpp"
+    - "test/unittests/*.cpp"
+
+extraction:
+  cpp:
+    prepare:
+      packages:
+        - g++-6
+        - cmake
+        - libfftw3-dev
+        - gfortran
+    after_prepare:    # Customizable step used by all languages.
+      - export GIT=true
+    configure:    # Customizable step used only by C/C++ extraction.
+      command:
+        - cmake -Bbuild -DENABLE_MPI=Off -H.
+    index:    # Customizable step used by all languages.
+      build_command:
+        - cd build
+        - make -j2

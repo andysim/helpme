@@ -214,7 +214,8 @@ TEST_CASE("Full run with a small toy system, comprising two water molecules.") {
         auto pmeD = std::unique_ptr<PMEInstanceD>(new PMEInstanceD);
         pmeD->setupCompressed(1, 0.3, splineOrder, nfftx, nffty, nfftz, kMaxX, kMaxY, kMaxZ, ccelec, 1);
         pmeD->setLatticeVectors(20, 20, 20, 90, 90, 90, PMEInstanceD::LatticeType::XAligned);
-        auto realGrid = pmeD->spreadParameters(0, chargesD, coordsD);
+        pmeD->filterAtomsAndBuildSplineCache(1, coordsD);
+        auto realGrid = pmeD->spreadParameters(0, chargesD);
         helpme::Matrix<double> chargeGrid(realGrid, nfftz * nffty, nfftx);
         REQUIRE(refChargeGridD.almostEquals(chargeGrid, TOL));
 
@@ -230,7 +231,7 @@ TEST_CASE("Full run with a small toy system, comprising two water molecules.") {
         helpme::Matrix<double> potentialGrid(realGrid, nfftz * nffty, nfftx);
         REQUIRE(refPotentialGridD.almostEquals(potentialGrid, TOL));
 
-        pmeD->probeGrid(realGrid, 0, chargesD, coordsD, forcesD);
+        pmeD->probeGrid(realGrid, 0, chargesD, forcesD);
         REQUIRE(refForcesD.almostEquals(forcesD, TOL));
         REQUIRE(refRecEnergy == Approx(energy).margin(TOL));
     }
@@ -244,7 +245,8 @@ TEST_CASE("Full run with a small toy system, comprising two water molecules.") {
         auto pmeD = std::unique_ptr<PMEInstanceD>(new PMEInstanceD);
         pmeD->setupCompressed(1, 0.3, splineOrder, nfftx, nffty, nfftz, kMaxX, kMaxY, kMaxZ, ccelec, 1);
         pmeD->setLatticeVectors(20, 20, 20, 90, 90, 90, PMEInstanceD::LatticeType::XAligned);
-        auto realGrid = pmeD->spreadParameters(0, chargesD, coordsD);
+        pmeD->filterAtomsAndBuildSplineCache(1, coordsD);
+        auto realGrid = pmeD->spreadParameters(0, chargesD);
         helpme::Matrix<double> chargeGrid(realGrid, nfftz * nffty, nfftx);
         REQUIRE(refChargeGridD.almostEquals(chargeGrid, TOL));
 
@@ -264,7 +266,7 @@ TEST_CASE("Full run with a small toy system, comprising two water molecules.") {
         helpme::Matrix<double> potentialGrid(realGrid, nfftz * nffty, nfftx);
         REQUIRE(refPotentialGridD.almostEquals(potentialGrid, TOL));
 
-        pmeD->probeGrid(realGrid, 0, chargesD, coordsD, forcesD);
+        pmeD->probeGrid(realGrid, 0, chargesD, forcesD);
 
         REQUIRE(refForcesD.almostEquals(forcesD, TOL));
         REQUIRE(refRecEnergy == Approx(energy).margin(TOL));
@@ -279,7 +281,8 @@ TEST_CASE("Full run with a small toy system, comprising two water molecules.") {
         auto pmeF = std::unique_ptr<PMEInstanceF>(new PMEInstanceF);
         pmeF->setupCompressed(1, 0.3, splineOrder, nfftx, nffty, nfftz, kMaxX, kMaxY, kMaxZ, ccelec, 1);
         pmeF->setLatticeVectors(20, 20, 20, 90, 90, 90, PMEInstanceF::LatticeType::XAligned);
-        auto realGrid = pmeF->spreadParameters(0, chargesD.cast<float>(), coordsD.cast<float>());
+        pmeF->filterAtomsAndBuildSplineCache(1, coordsD.cast<float>());
+        auto realGrid = pmeF->spreadParameters(0, chargesD.cast<float>());
         helpme::Matrix<float> chargeGrid(realGrid, nfftz * nffty, nfftx);
         REQUIRE(refChargeGridD.cast<float>().almostEquals(chargeGrid, TOL));
 
@@ -295,7 +298,7 @@ TEST_CASE("Full run with a small toy system, comprising two water molecules.") {
         helpme::Matrix<float> potentialGrid(realGrid, nfftz * nffty, nfftx);
         REQUIRE(refPotentialGridD.cast<float>().almostEquals(potentialGrid, TOL));
 
-        pmeF->probeGrid(realGrid, 0, chargesD.cast<float>(), coordsD.cast<float>(), forcesF);
+        pmeF->probeGrid(realGrid, 0, chargesD.cast<float>(), forcesF);
         REQUIRE(refForcesD.cast<float>().almostEquals(forcesF, TOL));
         REQUIRE(refRecEnergy == Approx(energy).margin(TOL));
     }
@@ -309,7 +312,8 @@ TEST_CASE("Full run with a small toy system, comprising two water molecules.") {
         auto pmeF = std::unique_ptr<PMEInstanceF>(new PMEInstanceF);
         pmeF->setupCompressed(1, 0.3, splineOrder, nfftx, nffty, nfftz, kMaxX, kMaxY, kMaxZ, ccelec, 1);
         pmeF->setLatticeVectors(20, 20, 20, 90, 90, 90, PMEInstanceF::LatticeType::XAligned);
-        auto realGrid = pmeF->spreadParameters(0, chargesD.cast<float>(), coordsD.cast<float>());
+        pmeF->filterAtomsAndBuildSplineCache(1, coordsD.cast<float>());
+        auto realGrid = pmeF->spreadParameters(0, chargesD.cast<float>());
         helpme::Matrix<float> chargeGrid(realGrid, nfftz * nffty, nfftx);
         REQUIRE(refChargeGridD.cast<float>().almostEquals(chargeGrid, TOL));
 
@@ -328,7 +332,7 @@ TEST_CASE("Full run with a small toy system, comprising two water molecules.") {
         helpme::Matrix<float> potentialGrid(realGrid, nfftz * nffty, nfftx);
         REQUIRE(refPotentialGridD.cast<float>().almostEquals(potentialGrid, TOL));
 
-        pmeF->probeGrid(realGrid, 0, chargesD.cast<float>(), coordsD.cast<float>(), forcesF);
+        pmeF->probeGrid(realGrid, 0, chargesD.cast<float>(), forcesF);
         REQUIRE(refForcesD.cast<float>().almostEquals(forcesF, TOL));
         REQUIRE(refRecEnergy == Approx(energy).margin(TOL));
     }

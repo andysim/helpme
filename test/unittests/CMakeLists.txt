@@ -6,8 +6,10 @@ set( SOURCES_UNITTESTS_TESTS
     unittest-fft.cpp
     unittest-fullrun.cpp
     unittest-fullrun-compressed.cpp
+    unittest-fullrun-multipoles.cpp
     unittest-gammafunction.cpp
     unittest-gridsize.cpp
+    unittest-individualshells.cpp
     unittest-lattice.cpp
     unittest-latticeupdates.cpp
     unittest-matrix.cpp
