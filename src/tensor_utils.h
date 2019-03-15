@@ -12,9 +12,9 @@
 #if HAVE_BLAS == 1
 extern "C" {
 extern void dgemm_(char *, char *, int *, int *, int *, double *, double *, int *, double *, int *, double *, double *,
-                  int *);
+                   int *);
 extern void sgemm_(char *, char *, int *, int *, int *, float *, float *, int *, float *, int *, float *, float *,
-                  int *);
+                   int *);
 }
 #endif
 
@@ -91,8 +91,8 @@ void contractABxCWithDxC<float>(float const *__restrict__ abcPtr, float const *_
     float alpha = 1;
     float beta = 0;
     sgemm_(&transB, &transA, const_cast<int *>(&dDimension), const_cast<int *>(&abDimension),
-          const_cast<int *>(&cDimension), &alpha, const_cast<float *>(dcPtr), const_cast<int *>(&cDimension),
-          const_cast<float *>(abcPtr), const_cast<int *>(&cDimension), &beta, abdPtr, const_cast<int *>(&dDimension));
+           const_cast<int *>(&cDimension), &alpha, const_cast<float *>(dcPtr), const_cast<int *>(&cDimension),
+           const_cast<float *>(abcPtr), const_cast<int *>(&cDimension), &beta, abdPtr, const_cast<int *>(&dDimension));
 }
 
 template <>
@@ -106,8 +106,8 @@ void contractABxCWithDxC<double>(double const *__restrict__ abcPtr, double const
     double alpha = 1;
     double beta = 0;
     dgemm_(&transB, &transA, const_cast<int *>(&dDimension), const_cast<int *>(&abDimension),
-          const_cast<int *>(&cDimension), &alpha, const_cast<double *>(dcPtr), const_cast<int *>(&cDimension),
-          const_cast<double *>(abcPtr), const_cast<int *>(&cDimension), &beta, abdPtr, const_cast<int *>(&dDimension));
+           const_cast<int *>(&cDimension), &alpha, const_cast<double *>(dcPtr), const_cast<int *>(&cDimension),
+           const_cast<double *>(abcPtr), const_cast<int *>(&cDimension), &beta, abdPtr, const_cast<int *>(&dDimension));
 }
 #endif
 
