@@ -11,6 +11,7 @@ extraction:
       packages:
         - g++-6
         - cmake
+        - libblas-dev
         - libfftw3-dev
         - gfortran
     after_prepare:    # Customizable step used by all languages.
