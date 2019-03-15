@@ -10,6 +10,7 @@
 #include <mpi.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "helpme.h"
 #include "print_results.h"
@@ -77,6 +78,24 @@ int main(int argc, char *argv[]) {
         char nodesStr[80];
         sprintf(&nodesStr[0], "Parallel results (nProcs = %d, %d, %d):", nx, ny, nz);
         if (myRank == 0) {
+            print_resultsD(6, &nodesStr[0], parallelEnergy, parallelForces, parallelVirial);
+
+            assert_close(1, &energyS, (void*) &parallelEnergy, tolerance, sizeof(double),  __FILE__, __LINE__);
+            assert_close(18, forcesS, (void*) parallelForces, tolerance, sizeof(double),  __FILE__, __LINE__);
+            assert_close(6, virialS, (void*) parallelVirial, tolerance, sizeof(double),  __FILE__, __LINE__);
+        }
+        // Now the compressed version
+        memset(nodeForces, 0, 18 * sizeof(double));
+        memset(nodeVirial, 0, 6 * sizeof(double));
+        helpme_setup_compressed_parallelD(pmeP, 1, kappa, splineOrder, gridX, gridY, gridZ, 9, 9, 9, scaleFactor, 1, MPI_COMM_WORLD, ZYX, nx, ny, nz);
+        helpme_set_lattice_vectorsD(pmeP, 20, 20, 20, 90, 90, 90, XAligned);
+        nodeEnergy = helpme_compute_EFV_recD(pmeP, 6, 0, &charges[0], &coords[0], &nodeForces[0], &nodeVirial[0]);
+        MPI_Reduce(&nodeEnergy, &parallelEnergy, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+        MPI_Reduce(&nodeForces[0], &parallelForces[0], 6 * 3, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+        MPI_Reduce(&nodeVirial[0], &parallelVirial[0], 6, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+        sprintf(&nodesStr[0], "Parallel results (nProcs = %d, %d, %d):", nx, ny, nz);
+        if (myRank == 0) {
+            printf("\nCompressed\n");
             print_resultsD(6, &nodesStr[0], parallelEnergy, parallelForces, parallelVirial);
 
             assert_close(1, &energyS, (void*) &parallelEnergy, tolerance, sizeof(double),  __FILE__, __LINE__);

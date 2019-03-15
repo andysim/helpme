@@ -84,6 +84,34 @@ int main(int argc, char *argv[]) {
     assert((forcesD.almostEquals(expectedForces, toleranceD)));
     assert((virialD.almostEquals(expectedVirial, toleranceD)));
 
+    // Repeat the calculation using the compressed PME approximation
+    energyD = 0;
+    forcesD.setZero();
+    virialD.setZero();
+    potentialAndGradientD.setZero();
+    std::cout << std::endl << "COMPRESSED" << std::endl << std::endl;
+    pmeD->setupCompressed(1, 0.3, 5, 32, 32, 32, 9, 9, 9, scaleFactorD, 1);
+    pmeD->setLatticeVectors(20, 20, 20, 90, 90, 90, PMEInstanceD::LatticeType::XAligned);
+    // Compute just the energy
+    printResults("Before computeEFRec double", energyD, forcesD, virialD);
+    energyD = pmeD->computeERec(0, chargesD, coordsD);
+    printResults("After computeEFRec double", energyD, forcesD, virialD);
+    // Compute the energy and forces
+    energyD = pmeD->computeEFRec(0, chargesD, coordsD, forcesD);
+    printResults("After computeEFRec double", energyD, forcesD, virialD);
+    // Compute the energy, forces, and virial
+    energyD = pmeD->computeEFVRec(0, chargesD, coordsD, forcesD, virialD);
+    printResults("After computeEFVRec double", energyD, forcesD, virialD);
+    // Compute the reciprocal space potential and field at the atoms' coordinates
+    pmeD->computePRec(0, chargesD, coordsD, coordsD, 1, potentialAndGradientD);
+    std::cout << "Potential and its gradient:" << std::endl;
+    std::cout << potentialAndGradientD << std::endl;
+
+    assert((std::abs(energyD - expectedEnergy) < toleranceD));
+    assert((potentialAndGradientD.almostEquals(expectedPotential, toleranceD)));
+    assert((forcesD.almostEquals(expectedForces, toleranceD)));
+    assert((virialD.almostEquals(expectedVirial, toleranceD)));
+
     /*
      *  Instantiate single precision PME object
      */
@@ -119,5 +147,34 @@ int main(int argc, char *argv[]) {
     assert((potentialAndGradientF.almostEquals(expectedPotential.cast<float>(), toleranceF)));
     assert((forcesF.almostEquals(expectedForces.cast<float>(), toleranceF)));
     assert((virialF.almostEquals(expectedVirial.cast<float>(), toleranceF)));
+
+    // Repeat the calculation using the compressed PME approximation
+    energyF = 0;
+    forcesF.setZero();
+    virialF.setZero();
+    potentialAndGradientF.setZero();
+    std::cout << std::endl << "COMPRESSED" << std::endl << std::endl;
+    pmeF->setupCompressed(1, 0.3, 5, 32, 32, 32, 9, 9, 9, scaleFactorF, 1);
+    pmeF->setLatticeVectors(20, 20, 20, 90, 90, 90, PMEInstanceF::LatticeType::XAligned);
+    // Compute just the energy
+    printResults("Before computeEFRec float", energyF, forcesF, virialF);
+    energyF = pmeF->computeERec(0, chargesF, coordsF);
+    printResults("After computeEFRec float", energyF, forcesF, virialF);
+    // Compute the energy and forces
+    energyF = pmeF->computeEFRec(0, chargesF, coordsF, forcesF);
+    printResults("After computeEFRec float", energyF, forcesF, virialF);
+    // Compute the energy, forces, and virial
+    energyF = pmeF->computeEFVRec(0, chargesF, coordsF, forcesF, virialF);
+    printResults("After computeEFVRec float", energyF, forcesF, virialF);
+    // Compute the reciprocal space potential and its gradient at the atoms' coordinates
+    pmeF->computePRec(0, chargesF, coordsF, coordsF, 1, potentialAndGradientF);
+    std::cout << "Potential and its gradient:" << std::endl;
+    std::cout << potentialAndGradientF << std::endl;
+
+    assert((std::abs(energyF - expectedEnergy) < toleranceF));
+    assert((potentialAndGradientF.almostEquals(expectedPotential.cast<float>(), toleranceF)));
+    assert((forcesF.almostEquals(expectedForces.cast<float>(), toleranceF)));
+    assert((virialF.almostEquals(expectedVirial.cast<float>(), toleranceF)));
+
     return 0;
 }

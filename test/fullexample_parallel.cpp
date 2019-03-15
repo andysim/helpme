@@ -30,6 +30,9 @@ int main(int argc, char *argv[]) {
     int gridX = 32;
     int gridY = 32;
     int gridZ = 32;
+    int kMaxX = 9;
+    int kMaxY = 9;
+    int kMaxZ = 9;
     int splineOrder = 6;
 
     helpme::Matrix<double> coords(
@@ -74,6 +77,27 @@ int main(int argc, char *argv[]) {
         MPI_Reduce(nodeForces[0], parallelForces[0], 6 * 3, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
         MPI_Reduce(nodeVirial[0], parallelVirial[0], 6, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
         if (myRank == 0) {
+            std::cout << "Parallel results (nProcs = " << nx << ", " << ny << ", " << nz << "):" << std::endl;
+            std::cout << "Total rec energy " << parallelEnergy << std::endl;
+            std::cout << "Total forces " << std::endl << parallelForces << std::endl;
+            std::cout << "Total virial " << std::endl << parallelVirial << std::endl;
+
+            assert((std::abs(energyS - parallelEnergy) < tolerance));
+            assert((serialForces.almostEquals(parallelForces, tolerance)));
+            assert((serialVirial.almostEquals(parallelVirial, tolerance)));
+        }
+        // Now the compressed version
+        nodeForces.setZero();
+        nodeVirial.setZero();
+        pmeP->setupCompressedParallel(1, kappa, splineOrder, gridX, gridY, gridZ, kMaxX, kMaxY, kMaxZ, scaleFactor, 1,
+                                      MPI_COMM_WORLD, PMEInstanceD::NodeOrder::ZYX, nx, ny, nz);
+        pmeP->setLatticeVectors(20, 20, 20, 90, 90, 90, PMEInstanceD::LatticeType::XAligned);
+        nodeEnergy = pmeP->computeEFVRec(0, charges, coords, nodeForces, nodeVirial);
+        MPI_Reduce(&nodeEnergy, &parallelEnergy, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+        MPI_Reduce(nodeForces[0], parallelForces[0], 6 * 3, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+        MPI_Reduce(nodeVirial[0], parallelVirial[0], 6, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+        if (myRank == 0) {
+            std::cout << std::endl << "Compressed" << std::endl;
             std::cout << "Parallel results (nProcs = " << nx << ", " << ny << ", " << nz << "):" << std::endl;
             std::cout << "Total rec energy " << parallelEnergy << std::endl;
             std::cout << "Total forces " << std::endl << parallelForces << std::endl;

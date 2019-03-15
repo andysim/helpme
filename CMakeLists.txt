@@ -54,6 +54,7 @@ endif()
 include(optionsTools)
 option_with_print(ENABLE_OPENMP "Enables OpenMP parallelization" ON)
 option_with_print(ENABLE_MPI "Enables MPI parallelization" ON)
+option_with_print(ENABLE_BLAS "Enables BLAS usage" ON)
 option_with_flags(ENABLE_CODE_COVERAGE "Enables details on code coverage" OFF
                   "-ftest-coverage -fprofile-arcs -fPIC -O0 -g")
 option_with_flags(ENABLE_BOUNDS_CHECK "Enables bounds check in Fortran" OFF
@@ -70,6 +71,31 @@ option_with_flags(ENABLE_UBSAN "Enables undefined behavior sanitizer" OFF
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0")
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -O0")
 set(CMAKE_Fortran_FLAGS_DEBUG "${CMAKE_Fortran_FLAGS_DEBUG} -O0")
+
+# BLAS
+if(ENABLE_BLAS)
+    # Attempt to distinguish MKL from other BLAS routines.  This doesn't work as-is :(
+    include(FindMKL)
+    find_package(MKL QUIET)
+    if(MKL_FOUND)
+        set(HAVE_MKL TRUE)
+        set(BLAS_FOUND TRUE)
+        set(BLAS_LIBRARIES ${MKL_GNU} ${MKL_SEQUENTIAL} ${MKL_CORE})
+    else()
+        find_package(BLAS QUIET)
+    endif()
+endif()
+
+if(BLAS_FOUND)
+    add_definitions(-DHAVE_BLAS)
+    message(STATUS "${Cyan}Found BLAS: ${BLAS_LIBRARIES}${ColourReset}")
+else()
+    if(ENABLE_BLAS)
+        message(STATUS "${Red}BLAS not found${ColourReset}")
+    else()
+        message(STATUS "${Red}BLAS not searched for${ColourReset}")
+    endif()
+endif()
 
 # FFTW
 find_package(FFTW REQUIRED)
@@ -118,14 +144,6 @@ else()
     endif()
 endif()
 
-# Find Python
-set(Python_ADDITIONAL_VERSIONS 3.7 3.6 3.5)
-find_package(PythonLibsNew 2.7 REQUIRED)
-message(STATUS "${Cyan}Found Python ${PYTHON_VERSION_MAJOR}.${PYTHON_VERSION_MINOR}${ColourReset}: ${PYTHON_EXECUTABLE} (found version ${PYTHON_VERSION_STRING})")
-set(Python_ENABLED ON) # For now, we just always assume this is on
-add_subdirectory(external/pybind11)
-add_subdirectory(python)
-
 # Handle different C++ libraries
 if(CMAKE_CXX_COMPILER_ID MATCHES "AppleClang")
     set(cpplib c++)
@@ -134,7 +152,15 @@ else()
 endif()
 
 # The C++ library is linked explicitly because exception handling on macOS appears to be broken otherwise.
-set(EXTERNAL_LIBRARIES ${FFTW_LIBRARIES} ${cpplib})
+set(EXTERNAL_LIBRARIES ${BLAS_LIBRARIES} ${FFTW_LIBRARIES} ${cpplib})
+
+# Find Python
+set(Python_ADDITIONAL_VERSIONS 3.7 3.6 3.5)
+find_package(PythonLibsNew 2.7 REQUIRED)
+message(STATUS "${Cyan}Found Python ${PYTHON_VERSION_MAJOR}.${PYTHON_VERSION_MINOR}${ColourReset}: ${PYTHON_EXECUTABLE} (found version ${PYTHON_VERSION_STRING})")
+set(Python_ENABLED ON) # For now, we just always assume this is on
+add_subdirectory(external/pybind11)
+add_subdirectory(python)
 
 # Documentation
 find_package(Doxygen)

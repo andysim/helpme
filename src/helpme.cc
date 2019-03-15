@@ -91,6 +91,32 @@ void helpme_setupF(PMEInstanceF* pme, short rPower, float kappa, int splineOrder
     }
 }
 
+void helpme_setup_compressedD(PMEInstanceD* pme, short rPower, double kappa, int splineOrder, int aDim, int bDim,
+                              int cDim, int maxKA, int maxKB, int maxKC, double scaleFactor, int nThreads) {
+    try {
+        pme->setupCompressed(rPower, kappa, splineOrder, aDim, bDim, cDim, maxKA, maxKB, maxKC, scaleFactor, nThreads);
+    } catch (std::runtime_error& e) {
+        std::cerr << e.what() << std::endl;
+        exit(1);
+    } catch (...) {
+        std::cerr << "An unknown error occured in helpme_setup_compressedD" << std::endl;
+        exit(1);
+    }
+}
+
+void helpme_setup_compressedF(PMEInstanceF* pme, short rPower, float kappa, int splineOrder, int aDim, int bDim,
+                              int cDim, int maxKA, int maxKB, int maxKC, float scaleFactor, int nThreads) {
+    try {
+        pme->setupCompressed(rPower, kappa, splineOrder, aDim, bDim, cDim, maxKA, maxKB, maxKC, scaleFactor, nThreads);
+    } catch (std::runtime_error& e) {
+        std::cerr << e.what() << std::endl;
+        exit(1);
+    } catch (...) {
+        std::cerr << "An unknown error occured in helpme_setup_compressedF" << std::endl;
+        exit(1);
+    }
+}
+
 #if HAVE_MPI == 1
 void helpme_setup_parallelD(PMEInstanceD* pme, int rPower, double kappa, int splineOrder, int dimA, int dimB, int dimC,
                             double scaleFactor, int nThreads, MPI_Comm communicator, NodeOrder nodeOrder, int numNodesA,
@@ -113,6 +139,40 @@ void helpme_setup_parallelF(PMEInstanceF* pme, int rPower, float kappa, int spli
     try {
         pme->setupParallel(rPower, kappa, splineOrder, dimA, dimB, dimC, scaleFactor, nThreads, communicator,
                            PMEInstanceF::NodeOrder(nodeOrder), numNodesA, numNodesB, numNodesC);
+    } catch (std::runtime_error& e) {
+        std::cerr << e.what() << std::endl;
+        exit(1);
+    } catch (...) {
+        std::cerr << "An unknown error occured in helpme_setup_parallelF" << std::endl;
+        exit(1);
+    }
+}
+
+void helpme_setup_compressed_parallelD(PMEInstanceD* pme, int rPower, double kappa, int splineOrder, int dimA, int dimB,
+                                       int dimC, int maxKA, int maxKB, int maxKC, double scaleFactor, int nThreads,
+                                       MPI_Comm communicator, NodeOrder nodeOrder, int numNodesA, int numNodesB,
+                                       int numNodesC) {
+    try {
+        pme->setupCompressedParallel(rPower, kappa, splineOrder, dimA, dimB, dimC, maxKA, maxKB, maxKC, scaleFactor,
+                                     nThreads, communicator, PMEInstanceD::NodeOrder(nodeOrder), numNodesA, numNodesB,
+                                     numNodesC);
+    } catch (std::runtime_error& e) {
+        std::cerr << e.what() << std::endl;
+        exit(1);
+    } catch (...) {
+        std::cerr << "An unknown error occured in helpme_setup_parallelD" << std::endl;
+        exit(1);
+    }
+}
+
+void helpme_setup_compressed_parallelF(PMEInstanceF* pme, int rPower, float kappa, int splineOrder, int dimA, int dimB,
+                                       int dimC, int maxKA, int maxKB, int maxKC, float scaleFactor, int nThreads,
+                                       MPI_Comm communicator, NodeOrder nodeOrder, int numNodesA, int numNodesB,
+                                       int numNodesC) {
+    try {
+        pme->setupCompressedParallel(rPower, kappa, splineOrder, dimA, dimB, dimC, maxKA, maxKB, maxKC, scaleFactor,
+                                     nThreads, communicator, PMEInstanceF::NodeOrder(nodeOrder), numNodesA, numNodesB,
+                                     numNodesC);
     } catch (std::runtime_error& e) {
         std::cerr << e.what() << std::endl;
         exit(1);

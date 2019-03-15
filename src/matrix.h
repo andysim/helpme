@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <complex>
 #include <fstream>
+#include <functional>
 #include <initializer_list>
 #include <iostream>
 #include <iomanip>
@@ -344,9 +345,7 @@ class Matrix {
      * \brief applyOperationToEachElement modifies every element in the matrix by applying an operation.
      * \param function a unary operator describing the operation to perform.
      */
-    void applyOperationToEachElement(const std::function<void(Real&)>& function) {
-        std::for_each(begin(), end(), function);
-    }
+    void applyOperationToEachElement(const std::function<void(Real&)>& fxn) { std::for_each(begin(), end(), fxn); }
 
     /*!
      * \brief applyOperation applies an operation to this matrix using the spectral decomposition,
@@ -473,6 +472,22 @@ class Matrix {
         assertSameSize(other);
 
         return std::inner_product(cbegin(), cend(), other.cbegin(), Real(0));
+    }
+
+    /*!
+     * \brief writeToFile formats the matrix and writes to an ASCII file.
+     * \param fileName the name of the file to save to.
+     * \param width the width of each matrix element's formatted representation.
+     * \param precision the precision of each matrix element's formatted representation.
+     * \param printDimensions whether to print the dimensions at the top of the file.
+     */
+    void writeToFile(const std::string& filename, int width = 20, int precision = 14,
+                     bool printDimensions = false) const {
+        std::ofstream file;
+        file.open(filename, std::ios::out);
+        if (printDimensions) file << nRows_ << "  " << nCols_ << std::endl;
+        file << stringify(data_, nRows_ * nCols_, nCols_, width, precision);
+        file.close();
     }
 
     /*!

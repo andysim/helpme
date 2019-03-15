@@ -33,10 +33,7 @@ class TestHelpme(unittest.TestCase):
                                           [-9.98483179, -1.37283008, -1.26398385, 6.10859811],
                                           [-3.50591589, -0.98219832, -1.10328133, 7.71868137],
                                           [-2.39904512, -1.17142047, -0.83733677, 7.30806279]]);
-
-    def test_serial(self):
-        # Instatiate double precision PME object
-        coords = np.array([
+        self.coordsD = np.array([
             [ 2.00000,  2.00000, 2.00000],
             [ 2.50000,  2.00000, 3.00000],
             [ 1.50000,  2.00000, 3.00000],
@@ -44,7 +41,20 @@ class TestHelpme(unittest.TestCase):
             [ 0.50000,  0.00000, 1.00000],
             [-0.50000,  0.00000, 1.00000]
         ], dtype=np.float64)
-        charges = np.array([[-0.834, 0.417, 0.417, -0.834, 0.417, 0.417]], dtype=np.float64).T
+        self.chargesD = np.array([[-0.834, 0.417, 0.417, -0.834, 0.417, 0.417]], dtype=np.float64).T
+        self.coordsF = np.array([
+            [ 2.00000,  2.00000, 2.00000],
+            [ 2.50000,  2.00000, 3.00000],
+            [ 1.50000,  2.00000, 3.00000],
+            [ 0.00000,  0.00000, 0.00000],
+            [ 0.50000,  0.00000, 1.00000],
+            [-0.50000,  0.00000, 1.00000]
+        ], dtype=np.float32)
+        self.chargesF = np.array([[-0.834, 0.417, 0.417, -0.834, 0.417, 0.417]], dtype=np.float32).T
+
+
+    def test_double(self):
+        # Instatiate double precision PME object
 
         energy = 0
         forces = np.zeros((6,3),dtype=np.float64)
@@ -57,16 +67,47 @@ class TestHelpme(unittest.TestCase):
         pmeD.set_lattice_vectors(20, 20, 20, 90, 90, 90, pmeD.LatticeType.XAligned)
         # Compute just the energy
         print_results("Before pmeD.compute_E_rec", energy, forces, virial)
-        energy = pmeD.compute_E_rec(0, mat(charges), mat(coords))
+        energy = pmeD.compute_E_rec(0, mat(self.chargesD), mat(self.coordsD))
         print_results("After pmeD.compute_E_rec", energy, forces, virial)
         # Compute the energy and forces
-        energy = pmeD.compute_EF_rec(0, mat(charges), mat(coords), mat(forces))
+        energy = pmeD.compute_EF_rec(0, mat(self.chargesD), mat(self.coordsD), mat(forces))
         print_results("After pmeD.compute_EF_rec", energy, forces, virial)
         # Compute the energy, forces and virial
-        energy = pmeD.compute_EFV_rec(0, mat(charges), mat(coords), mat(forces), mat(virial))
+        energy = pmeD.compute_EFV_rec(0, mat(self.chargesD), mat(self.coordsD), mat(forces), mat(virial))
         print_results("After pmeD.compute_EFV_rec", energy, forces, virial)
         # Compute the reciprocal space potential and its gradient
-        pmeD.compute_P_rec(0, mat(charges), mat(coords), mat(coords), 1, mat(potentialAndGradient))
+        pmeD.compute_P_rec(0, mat(self.chargesD), mat(self.coordsD), mat(self.coordsD), 1, mat(potentialAndGradient))
+        print("Potential and its gradient:")
+        print(potentialAndGradient, "\n")
+
+        self.assertTrue(np.allclose([self.expectedEnergy], [energy], atol=self.toleranceD))
+        self.assertTrue(np.allclose(self.expectedForces, forces, atol=self.toleranceD))
+        self.assertTrue(np.allclose(self.expectedVirial, virial, atol=self.toleranceD))
+        self.assertTrue(np.allclose(self.expectedPotential, potentialAndGradient, atol=self.toleranceD))
+
+    def test_double_compressed(self):
+        # Instatiate double precision PME object
+        energy = 0
+        forces = np.zeros((6,3),dtype=np.float64)
+        virial = np.zeros((1,6),dtype=np.float64)
+        potentialAndGradient = np.zeros((6,4),dtype=np.float64)
+
+        pmeD = pme.PMEInstanceD()
+        pmeD.setup_compressed(1, 0.3, 5, 32, 32, 32, 9, 9, 9, 332.0716, 1)
+        mat = pme.MatrixD
+        pmeD.set_lattice_vectors(20, 20, 20, 90, 90, 90, pmeD.LatticeType.XAligned)
+        # Compute just the energy
+        print_results("Before pmeD.compute_E_rec", energy, forces, virial)
+        energy = pmeD.compute_E_rec(0, mat(self.chargesD), mat(self.coordsD))
+        print_results("After pmeD.compute_E_rec", energy, forces, virial)
+        # Compute the energy and forces
+        energy = pmeD.compute_EF_rec(0, mat(self.chargesD), mat(self.coordsD), mat(forces))
+        print_results("After pmeD.compute_EF_rec", energy, forces, virial)
+        # Compute the energy, forces and virial
+        energy = pmeD.compute_EFV_rec(0, mat(self.chargesD), mat(self.coordsD), mat(forces), mat(virial))
+        print_results("After pmeD.compute_EFV_rec", energy, forces, virial)
+        # Compute the reciprocal space potential and its gradient
+        pmeD.compute_P_rec(0, mat(self.chargesD), mat(self.coordsD), mat(self.coordsD), 1, mat(potentialAndGradient))
         print("Potential and its gradient:")
         print(potentialAndGradient, "\n")
 
@@ -78,16 +119,6 @@ class TestHelpme(unittest.TestCase):
 
     def test_float(self):
         # Instatiate single precision PME object
-        coords = np.array([
-            [ 2.00000,  2.00000, 2.00000],
-            [ 2.50000,  2.00000, 3.00000],
-            [ 1.50000,  2.00000, 3.00000],
-            [ 0.00000,  0.00000, 0.00000],
-            [ 0.50000,  0.00000, 1.00000],
-            [-0.50000,  0.00000, 1.00000]
-        ], dtype=np.float32)
-        charges = np.array([[-0.834, 0.417, 0.417, -0.834, 0.417, 0.417]], dtype=np.float32).T
-
         energy = 0
         forces = np.zeros((6,3),dtype=np.float32)
         virial = np.zeros((1,6),dtype=np.float32)
@@ -99,16 +130,47 @@ class TestHelpme(unittest.TestCase):
         pmeF.set_lattice_vectors(20, 20, 20, 90, 90, 90, pmeF.LatticeType.XAligned)
         # Compute just the energy
         print_results("Before pmeF.compute_E_rec", energy, forces, virial)
-        energy = pmeF.compute_E_rec(0, mat(charges), mat(coords))
+        energy = pmeF.compute_E_rec(0, mat(self.chargesF), mat(self.coordsF))
         print_results("After pmeF.compute_E_rec", energy, forces, virial)
         # Compute the energy and forces
-        energy = pmeF.compute_EF_rec(0, mat(charges), mat(coords), mat(forces))
+        energy = pmeF.compute_EF_rec(0, mat(self.chargesF), mat(self.coordsF), mat(forces))
         print_results("After pmeF.compute_EF_rec", energy, forces, virial)
         # Compute the energy, forces and virial
-        energy = pmeF.compute_EFV_rec(0, mat(charges), mat(coords), mat(forces), mat(virial))
+        energy = pmeF.compute_EFV_rec(0, mat(self.chargesF), mat(self.coordsF), mat(forces), mat(virial))
         print_results("After pmeF.compute_EFV_rec", energy, forces, virial)
         # Compute the reciprocal space potential and its gradient
-        pmeF.compute_P_rec(0, mat(charges), mat(coords), mat(coords), 1, mat(potentialAndGradient))
+        pmeF.compute_P_rec(0, mat(self.chargesF), mat(self.coordsF), mat(self.coordsF), 1, mat(potentialAndGradient))
+        print("Potential and its gradient:")
+        print(potentialAndGradient, "\n")
+
+        self.assertTrue(np.allclose([self.expectedEnergy], [energy], atol=self.toleranceF))
+        self.assertTrue(np.allclose(self.expectedForces, forces, atol=self.toleranceF))
+        self.assertTrue(np.allclose(self.expectedVirial, virial, atol=self.toleranceF))
+        self.assertTrue(np.allclose(self.expectedPotential, potentialAndGradient, atol=self.toleranceF))
+
+    def test_float_compressed(self):
+        # Instatiate single precision PME object
+        energy = 0
+        forces = np.zeros((6,3),dtype=np.float32)
+        virial = np.zeros((1,6),dtype=np.float32)
+        potentialAndGradient = np.zeros((6,4),dtype=np.float32)
+
+        pmeF = pme.PMEInstanceF()
+        pmeF.setup_compressed(1, 0.3, 5, 32, 32, 32, 9, 9, 9, 332.0716, 1)
+        mat = pme.MatrixF
+        pmeF.set_lattice_vectors(20, 20, 20, 90, 90, 90, pmeF.LatticeType.XAligned)
+        # Compute just the energy
+        print_results("Before pmeF.compute_E_rec", energy, forces, virial)
+        energy = pmeF.compute_E_rec(0, mat(self.chargesF), mat(self.coordsF))
+        print_results("After pmeF.compute_E_rec", energy, forces, virial)
+        # Compute the energy and forces
+        energy = pmeF.compute_EF_rec(0, mat(self.chargesF), mat(self.coordsF), mat(forces))
+        print_results("After pmeF.compute_EF_rec", energy, forces, virial)
+        # Compute the energy, forces and virial
+        energy = pmeF.compute_EFV_rec(0, mat(self.chargesF), mat(self.coordsF), mat(forces), mat(virial))
+        print_results("After pmeF.compute_EFV_rec", energy, forces, virial)
+        # Compute the reciprocal space potential and its gradient
+        pmeF.compute_P_rec(0, mat(self.chargesF), mat(self.coordsF), mat(self.coordsF), 1, mat(potentialAndGradient))
         print("Potential and its gradient:")
         print(potentialAndGradient, "\n")
 

@@ -7,7 +7,7 @@ stages:
 formatcheck:
   stage: formatcheck
   script:
-    - export CLANG_FORMAT_DIR=/u/andysim/anaconda3/envs/clang/bin/
+    - export CLANG_FORMAT_DIR=/u/andysim/anaconda3/bin/
     - ./tools/check_style.sh 
 
 inteltest:
@@ -16,13 +16,14 @@ inteltest:
   - mkdir -p build_intel
   - cd build_intel
   - rm -rf *
+  - export INTEL=/v/apps/intel/composer_xe_2017/compilers_and_libraries_2017.1.132/linux
+  - source ${INTEL}/bin/iccvars.sh intel64
+  - source ${INTEL}/mpi/intel64/bin/mpivars.sh
+  - source ${INTEL}/mkl/bin/mklvars.sh intel64
+  - export LM_LICENSE_FILE=/v/apps/intel/licenses/2017_l_PK5BF7J3.lic
   - export PYTHONPATH=`pwd`/src
   - export PATH=/v/apps/cmake/3.7.1-centos7/bin:$PATH
-  - export PATH=/v/apps/intel/composer_xe_2017/compilers_and_libraries_2017.1.132/linux/bin/intel64:$PATH
-  - export LM_LICENSE_FILE=/v/apps/intel/licenses/2017_l_PK5BF7J3.lic
-  - export LD_LIBRARY_PATH=/v/apps/intel/composer_xe_2017/compilers_and_libraries_2017.1.132/linux/mkl/lib/intel64_lin:${LD_LIBRARY_PATH}
-  - export LD_LIBRARY_PATH=/v/apps/intel/composer_xe_2017/compilers_and_libraries_2017.1.132/linux/compiler/lib/intel64:${LD_LIBRARY_PATH}
-  - cmake -DPYTHON_EXECUTABLE=/v/apps/python/3.6.0-centos7/bin/python3 -DCMAKE_C_COMPILER=icc -DCMAKE_CXX_COMPILER=icpc -DCMAKE_Fortran_COMPILER=ifort -DCMAKE_PREFIX_PATH="/v/apps/fftw/3.3.5-centos7/avx;/v/apps/fftw/3.3.5-centos7/avx-dp" ..
+  - cmake -DPYTHON_EXECUTABLE=/u/andysim/anaconda3/bin/python -DCMAKE_C_COMPILER=mpiicc -DCMAKE_CXX_COMPILER=mpiicpc -DCMAKE_Fortran_COMPILER=mpiifort -DFFTW_ROOT={MKLROOT} ..
   - make -j2
   - ctest -VV
   - cd ..

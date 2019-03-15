@@ -44,16 +44,38 @@ add_custom_target(SingleHeader
 # C example
 add_executable (RunCWrapper fullexample.c)
 add_dependencies(RunCWrapper helpmestatic)
-target_link_libraries(RunCWrapper helpmestatic)
+target_link_libraries(RunCWrapper helpmestatic ${EXTERNAL_LIBRARIES})
 set_target_properties(RunCWrapper PROPERTIES LINKER_LANGUAGE CXX)
 add_test(NAME CWrapperTest COMMAND RunCWrapper)
 
-# CXX DHFR benchmark example
-add_executable (DHFRBenchmark dhfr_benchmark.cpp)
-target_link_libraries(DHFRBenchmark ${EXTERNAL_LIBRARIES})
-configure_file(data/dhfr_charges.txt . COPYONLY)
-configure_file(data/dhfr_c6s.txt . COPYONLY)
-configure_file(data/dhfr_coords.txt . COPYONLY)
+# Benchmarks need a few steps for building for, e.g. profiling options
+MACRO(MAKE_BENCHMARK testname)
+    string(TOLOWER ${testname} lctestname)
+    add_executable ("${testname}Benchmark" "${lctestname}_benchmark.cpp")
+    target_link_libraries("${testname}Benchmark" ${EXTERNAL_LIBRARIES})
+    set_target_properties("${testname}Benchmark" PROPERTIES COMPILE_FLAGS "-g -O3 -pg")
+    configure_file(data/${lctestname}_charges.txt . COPYONLY)
+    configure_file(data/${lctestname}_c6s.txt . COPYONLY)
+    configure_file(data/${lctestname}_coords.txt . COPYONLY)
+ENDMACRO()
+
+# Benchmark examples
+if(HAVE_MPI AND NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+    message(STATUS "${Cyan}Release build detected: building benchmarks${ColourReset}")
+    MAKE_BENCHMARK("DHFR")
+    MAKE_BENCHMARK("DMPC3x3")
+    MAKE_BENCHMARK("WaterBox12288")
+    MAKE_BENCHMARK("WaterBox24000")
+    MAKE_BENCHMARK("WaterBox41472")
+    MAKE_BENCHMARK("WaterBox65856")
+    MAKE_BENCHMARK("WaterBox98304")
+    MAKE_BENCHMARK("WaterBox255552")
+    MAKE_BENCHMARK("WaterBox331776")
+    MAKE_BENCHMARK("WaterBox139968")
+    MAKE_BENCHMARK("WaterBox192000")
+    MAKE_BENCHMARK("WaterBox421824")
+    MAKE_BENCHMARK("WaterBox526848")
+endif()
 
 # CXX example
 add_executable (RunCXXWrapper fullexample.cpp)
@@ -81,7 +103,7 @@ if(HAVE_MPI)
 
     # C example
     add_executable (RunCMPIWrapper fullexample_parallel.c)
-    target_link_libraries(RunCMPIWrapper helpmestatic)
+    target_link_libraries(RunCMPIWrapper helpmestatic ${EXTERNAL_LIBRARIES})
     set_target_properties(RunCMPIWrapper PROPERTIES LINKER_LANGUAGE CXX)
     add_test(NAME CMPIWrapperTestX
              COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./RunCMPIWrapper 2 1 1 ${MPIEXEC_POSTFLAGS})
@@ -95,7 +117,7 @@ if(HAVE_MPI)
         link_libraries(${MPI_Fortran_LIBRARIES})
         add_executable(RunFortranMPIWrapper ${PROJECT_SOURCE_DIR}/src/helpme.F90 fullexample_parallel.F90 )
         set_target_properties(RunFortranMPIWrapper PROPERTIES LINKER_LANGUAGE Fortran)
-        target_link_libraries(RunFortranMPIWrapper helpmestatic ${cpplib})
+        target_link_libraries(RunFortranMPIWrapper helpmestatic ${cpplib} ${EXTERNAL_LIBRARIES})
         add_test(NAME FortranMPIWrapperTestX
                  COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./RunFortranMPIWrapper 2 1 1 ${MPIEXEC_POSTFLAGS})
         add_test(NAME FortranMPIWrapperTestY
@@ -108,7 +130,7 @@ endif()
 # Fortran example
 if(Fortran_ENABLED)
     add_executable(RunFortranWrapper ${PROJECT_SOURCE_DIR}/src/helpme.F90 fullexample.F90 )
-    target_link_libraries(RunFortranWrapper helpmestatic ${cpplib})
+    target_link_libraries(RunFortranWrapper helpmestatic ${cpplib} ${EXTERNAL_LIBRARIES})
     set_target_properties(RunFortranWrapper PROPERTIES LINKER_LANGUAGE Fortran)
     add_test(NAME FortranWrapper COMMAND RunFortranWrapper)
 endif()

@@ -5,6 +5,7 @@ set( SOURCES_UNITTESTS_TESTS
     unittest-dispersionkappasweep.cpp
     unittest-fft.cpp
     unittest-fullrun.cpp
+    unittest-fullrun-compressed.cpp
     unittest-fullrun-multipoles.cpp
     unittest-gammafunction.cpp
     unittest-gridsize.cpp
@@ -16,6 +17,7 @@ set( SOURCES_UNITTESTS_TESTS
     unittest-potential.cpp
     unittest-splines.cpp
     unittest-string.cpp
+    unittest-tensor.cpp
 )
 if(HAVE_MPI)
     set( SOURCES_UNITTESTS_PARALLEL_TESTS

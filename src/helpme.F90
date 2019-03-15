@@ -53,6 +53,24 @@ module helpme
             real(c_float), value :: kappa, scaleFactor
         end subroutine
 
+        subroutine helpme_setup_compressedD(pme, rPower, kappa, splineOrder, aDim, bDim, cDim, maxKA, maxKB, maxKC,&
+                                            scaleFactor, nThreads)&
+                            bind(C, name="helpme_setup_compressedD")
+            use iso_c_binding
+            type(c_ptr), value :: pme
+            integer(c_int), value :: rPower, splineOrder, aDim, bDim, cDim, maxKA, maxKB, maxKC, nThreads
+            real(c_double), value :: kappa, scaleFactor
+        end subroutine
+
+        subroutine helpme_setup_compressedF(pme, rPower, kappa, splineOrder, aDim, bDim, cDim, maxKA, maxKB, maxKC,&
+                                            scaleFactor, nThreads)&
+                            bind(C, name="helpme_setup_compressedF")
+            use iso_c_binding
+            type(c_ptr), value :: pme
+            integer(c_int), value :: rPower, splineOrder, aDim, bDim, cDim, maxKA, maxKB, maxKC, nThreads
+            real(c_float), value :: kappa, scaleFactor
+        end subroutine
+
 #if HAVE_MPI == 1
         subroutine helpme_setup_parallelD_impl(pme, rPower, kappa, splineOrder, aDim, bDim, cDim, scaleFactor,&
                                           nThreads, communicator, nodeOrder, numNodesA, numNodesB, numNodesC)&
@@ -71,6 +89,30 @@ module helpme
             use iso_c_binding
             type(c_ptr), value :: pme, communicator
             integer(c_int), value :: rPower, splineOrder, aDim, bDim, cDim, nThreads
+            integer(c_int), value :: numNodesA, numNodesB, numNodesC
+            real(c_float), value :: kappa, scaleFactor
+            integer(kind(ZYX)), value :: nodeOrder
+        end subroutine
+
+        subroutine helpme_setup_compressed_parallelD_impl(pme, rPower, kappa, splineOrder, aDim, bDim, cDim,&
+                                                          maxKA, maxKB, maxKC, scaleFactor, nThreads,&
+                                                          communicator, nodeOrder, numNodesA, numNodesB, numNodesC)&
+                            bind(C, name="helpme_setup_compressed_parallelD")
+            use iso_c_binding
+            type(c_ptr), value :: pme, communicator
+            integer(c_int), value :: rPower, splineOrder, aDim, bDim, cDim, maxKA, maxKB, maxKC, nThreads
+            integer(c_int), value :: numNodesA, numNodesB, numNodesC
+            real(c_double), value :: kappa, scaleFactor
+            integer(kind(ZYX)), value :: nodeOrder
+        end subroutine
+
+        subroutine helpme_setup_compressed_parallelF_impl(pme, rPower, kappa, splineOrder, aDim, bDim, cDim,&
+                                                          maxKA, maxKB, maxKC, scaleFactor, nThreads,&
+                                                          communicator, nodeOrder, numNodesA, numNodesB, numNodesC)&
+                            bind(C, name="helpme_setup_compressed_parallelF")
+            use iso_c_binding
+            type(c_ptr), value :: pme, communicator
+            integer(c_int), value :: rPower, splineOrder, aDim, bDim, cDim, maxKA, maxKB, maxKC, nThreads
             integer(c_int), value :: numNodesA, numNodesB, numNodesC
             real(c_float), value :: kappa, scaleFactor
             integer(kind(ZYX)), value :: nodeOrder
@@ -212,6 +254,44 @@ module helpme
             mpiCommunicator = MPI_Comm_f2c_wrapper(communicator)
             call helpme_setup_parallelF_impl(pme, rPower, kappa, splineOrder, aDim, bDim, cDim, scaleFactor,&
                                              nThreads, mpiCommunicator, nodeOrder, numNodesA, numNodesB, numNodesC)
+        end subroutine
+
+        subroutine helpme_setup_compressed_parallelD(pme, rPower, kappa, splineOrder, aDim, bDim, cDim,&
+                                                     maxKA, maxKB, maxKC, scaleFactor,&
+                                                     nThreads, communicator, nodeOrder, numNodesA, numNodesB, numNodesC)
+            use iso_c_binding
+            type(c_ptr), value :: pme
+            integer(c_int), value :: rPower, splineOrder, aDim, bDim, cDim, maxKA, maxKB, maxKC, nThreads
+            integer(c_int), value :: numNodesA, numNodesB, numNodesC, communicator
+            real(c_double), value :: kappa, scaleFactor
+            integer(kind(ZYX)), value :: nodeOrder
+
+            type(c_ptr) :: mpiCommunicator
+
+            mpiCommunicator = MPI_Comm_f2c_wrapper(communicator)
+            call helpme_setup_compressed_parallelD_impl(pme, rPower, kappa, splineOrder, aDim, bDim, cDim,&
+                                                        maxKA, maxKB, maxKC,&
+                                                        scaleFactor, nThreads, mpiCommunicator, nodeOrder,&
+                                                        numNodesA, numNodesB, numNodesC)
+        end subroutine
+
+        subroutine helpme_setup_compressed_parallelF(pme, rPower, kappa, splineOrder, aDim, bDim, cDim,&
+                                                     maxKA, maxKB, maxKC, scaleFactor,&
+                                                     nThreads, communicator, nodeOrder, numNodesA, numNodesB, numNodesC)
+            use iso_c_binding
+            type(c_ptr), value :: pme
+            integer(c_int), value :: rPower, splineOrder, aDim, bDim, cDim, maxKA, maxKB, maxKC, nThreads
+            integer(c_int), value :: numNodesA, numNodesB, numNodesC, communicator
+            real(c_float), value :: kappa, scaleFactor
+            integer(kind(ZYX)), value :: nodeOrder
+
+            type(c_ptr) :: mpiCommunicator
+
+            mpiCommunicator = MPI_Comm_f2c_wrapper(communicator)
+            call helpme_setup_compressed_parallelF_impl(pme, rPower, kappa, splineOrder, aDim, bDim, cDim,&
+                                                        maxKA, maxKB, maxKC,&
+                                                        scaleFactor, nThreads, mpiCommunicator, nodeOrder,&
+                                                        numNodesA, numNodesB, numNodesC)
         end subroutine
 #endif
 
