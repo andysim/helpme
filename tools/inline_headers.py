@@ -31,6 +31,10 @@ def canonicalize_include(name):
     """ Look to see if this include exists in the helPME source """
     if os.path.isfile('../src/' + name):
         return "../src/" + name
+    if os.path.isfile('../external/MIPP/src/' + name):
+        return "../external/MIPP/src/" + name
+    if os.path.isfile('../external/MIPP/src/math/' + name):
+        return "../external/MIPP/src/math/" + name
     else:
         return None
 
@@ -44,11 +48,9 @@ def cleanup_file(name):
             incname = ' _HELPME_STANDALONE_' + match.groups()[3] + '_H_\n'
             line = '#' + match.group(1) + incname
         output.append(line)
+    output.append('\n')
     return output
 
-#
-# Make the partially inlined version of the header, which still needs Eigen
-#
 output_array = ["// original file: ../src/helpme.h\n\n"]
 output_array.extend(cleanup_file('../src/helpme.h'))
 

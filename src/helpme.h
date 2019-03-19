@@ -29,6 +29,8 @@
 #include <unistd.h>
 #include <vector>
 
+#include "mipp.h"
+
 #include "cartesiantransform.h"
 #include "fftw_wrapper.h"
 #include "gamma.h"

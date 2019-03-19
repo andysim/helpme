@@ -34,6 +34,7 @@ endif()
 
 include_directories(${PROJECT_SOURCE_DIR}/src)
 include_directories(${FFTW_INCLUDES})
+include_directories(${PROJECT_SOURCE_DIR}/external/MIPP/src )
 
 set( SOURCES_UNITTESTS_MAIN unittest-main.cpp )
 

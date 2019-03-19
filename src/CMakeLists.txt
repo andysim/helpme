@@ -3,6 +3,7 @@ set(sources_list
         )
 
 include_directories(${FFTW_INCLUDES})
+include_directories(${PROJECT_SOURCE_DIR}/external/MIPP/src )
 add_library(helpmestatic STATIC ${sources_list})
 target_link_libraries(helpmestatic ${FFTW_LIBRARIES})
 

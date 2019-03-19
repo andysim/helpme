@@ -23,6 +23,7 @@ endforeach()
 include_directories(${PROJECT_SOURCE_DIR}/src)
 include_directories(${PROJECT_SOURCE_DIR}/single_include)
 include_directories(${FFTW_INCLUDES})
+include_directories(${PROJECT_SOURCE_DIR}/external/MIPP/src )
 
 if(HAVE_MPI)
     link_libraries(${MPI_CXX_LIBRARIES})

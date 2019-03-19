@@ -38,6 +38,17762 @@
 #include <unistd.h>
 #include <vector>
 
+// original file: ../external/MIPP/src/mipp.h
+
+/*
+The MIT License (MIT)
+
+Copyright (c) 2016 MIPP
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*/
+
+/*
+ * mipp.h
+ *
+ *  Created on: 5 oct. 2014
+ *      Author: Adrien Cassagne
+ */
+
+#ifndef MY_INTRINSICS_PLUS_PLUS_H_
+#define MY_INTRINSICS_PLUS_PLUS_H_
+
+#define MIPP
+
+#ifndef MIPP_NO_INTRINSICS
+#if defined(__ARM_NEON__) || defined(__ARM_NEON)
+#include <arm_neon.h>
+// original file: ../external/MIPP/src/math/neon_mathfun.h
+
+/* NEON implementation of sin, cos, exp and log
+
+   Inspired by Intel Approximate Math library, and based on the
+   corresponding algorithms of the cephes math library
+*/
+
+/* Copyright (C) 2011  Julien Pommier
+
+  This software is provided 'as-is', without any express or implied
+  warranty.  In no event will the authors be held liable for any damages
+  arising from the use of this software.
+
+  Permission is granted to anyone to use this software for any purpose,
+  including commercial applications, and to alter it and redistribute it
+  freely, subject to the following restrictions:
+
+  1. The origin of this software must not be misrepresented; you must not
+     claim that you wrote the original software. If you use this software
+     in a product, an acknowledgment in the product documentation would be
+     appreciated but is not required.
+  2. Altered source versions must be plainly marked as such, and must not be
+     misrepresented as being the original software.
+  3. This notice may not be removed or altered from any source distribution.
+
+  (this is the zlib license)
+*/
+
+#if defined(__ARM_NEON__) || defined(__ARM_NEON)
+#ifndef NEON_MATHFUN_H_
+#define NEON_MATHFUN_H_
+
+#include <arm_neon.h>
+
+typedef float32x4_t v4sf; // vector of 4 float
+
+// prototypes
+inline v4sf log_ps(v4sf x);
+inline v4sf exp_ps(v4sf x);
+inline v4sf sin_ps(v4sf x);
+inline v4sf cos_ps(v4sf x);
+inline void sincos_ps(v4sf x, v4sf *s, v4sf *c);
+
+// original file: ../external/MIPP/src/math/neon_mathfun.hxx
+
+/* NEON implementation of sin, cos, exp and log
+
+   Inspired by Intel Approximate Math library, and based on the
+   corresponding algorithms of the cephes math library
+*/
+
+/* Copyright (C) 2011  Julien Pommier
+
+  This software is provided 'as-is', without any express or implied
+  warranty.  In no event will the authors be held liable for any damages
+  arising from the use of this software.
+
+  Permission is granted to anyone to use this software for any purpose,
+  including commercial applications, and to alter it and redistribute it
+  freely, subject to the following restrictions:
+
+  1. The origin of this software must not be misrepresented; you must not
+     claim that you wrote the original software. If you use this software
+     in a product, an acknowledgment in the product documentation would be
+     appreciated but is not required.
+  2. Altered source versions must be plainly marked as such, and must not be
+     misrepresented as being the original software.
+  3. This notice may not be removed or altered from any source distribution.
+
+  (this is the zlib license)
+*/
+#if defined(__ARM_NEON__) || defined(__ARM_NEON)
+
+typedef uint32x4_t v4su;  // vector of 4 uint32
+typedef int32x4_t v4si;  // vector of 4 uint32
+
+#define c_inv_mant_mask ~0x7f800000u
+#define c_cephes_SQRTHF 0.707106781186547524
+#define c_cephes_log_p0 7.0376836292E-2
+#define c_cephes_log_p1 - 1.1514610310E-1
+#define c_cephes_log_p2 1.1676998740E-1
+#define c_cephes_log_p3 - 1.2420140846E-1
+#define c_cephes_log_p4 + 1.4249322787E-1
+#define c_cephes_log_p5 - 1.6668057665E-1
+#define c_cephes_log_p6 + 2.0000714765E-1
+#define c_cephes_log_p7 - 2.4999993993E-1
+#define c_cephes_log_p8 + 3.3333331174E-1
+#define c_cephes_log_q1 -2.12194440e-4
+#define c_cephes_log_q2 0.693359375
+
+/* natural logarithm computed for 4 simultaneous float 
+   return NaN for x <= 0
+*/
+v4sf log_ps(v4sf x) {
+  v4sf one = vdupq_n_f32(1);
+
+  x = vmaxq_f32(x, vdupq_n_f32(0)); /* force flush to zero on denormal values */
+  v4su invalid_mask = vcleq_f32(x, vdupq_n_f32(0));
+
+  v4si ux = vreinterpretq_s32_f32(x);
+  
+  v4si emm0 = vshrq_n_s32(ux, 23);
+
+  /* keep only the fractional part */
+  ux = vandq_s32(ux, vdupq_n_s32(c_inv_mant_mask));
+  ux = vorrq_s32(ux, vreinterpretq_s32_f32(vdupq_n_f32(0.5f)));
+  x = vreinterpretq_f32_s32(ux);
+
+  emm0 = vsubq_s32(emm0, vdupq_n_s32(0x7f));
+  v4sf e = vcvtq_f32_s32(emm0);
+
+  e = vaddq_f32(e, one);
+
+  /* part2: 
+     if( x < SQRTHF ) {
+       e -= 1;
+       x = x + x - 1.0;
+     } else { x = x - 1.0; }
+  */
+  v4su mask = vcltq_f32(x, vdupq_n_f32(c_cephes_SQRTHF));
+  v4sf tmp = vreinterpretq_f32_u32(vandq_u32(vreinterpretq_u32_f32(x), mask));
+  x = vsubq_f32(x, one);
+  e = vsubq_f32(e, vreinterpretq_f32_u32(vandq_u32(vreinterpretq_u32_f32(one), mask)));
+  x = vaddq_f32(x, tmp);
+
+  v4sf z = vmulq_f32(x,x);
+
+  v4sf y = vdupq_n_f32(c_cephes_log_p0);
+  y = vmulq_f32(y, x);
+  y = vaddq_f32(y, vdupq_n_f32(c_cephes_log_p1));
+  y = vmulq_f32(y, x);
+  y = vaddq_f32(y, vdupq_n_f32(c_cephes_log_p2));
+  y = vmulq_f32(y, x);
+  y = vaddq_f32(y, vdupq_n_f32(c_cephes_log_p3));
+  y = vmulq_f32(y, x);
+  y = vaddq_f32(y, vdupq_n_f32(c_cephes_log_p4));
+  y = vmulq_f32(y, x);
+  y = vaddq_f32(y, vdupq_n_f32(c_cephes_log_p5));
+  y = vmulq_f32(y, x);
+  y = vaddq_f32(y, vdupq_n_f32(c_cephes_log_p6));
+  y = vmulq_f32(y, x);
+  y = vaddq_f32(y, vdupq_n_f32(c_cephes_log_p7));
+  y = vmulq_f32(y, x);
+  y = vaddq_f32(y, vdupq_n_f32(c_cephes_log_p8));
+  y = vmulq_f32(y, x);
+
+  y = vmulq_f32(y, z);
+  
+
+  tmp = vmulq_f32(e, vdupq_n_f32(c_cephes_log_q1));
+  y = vaddq_f32(y, tmp);
+
+
+  tmp = vmulq_f32(z, vdupq_n_f32(0.5f));
+  y = vsubq_f32(y, tmp);
+
+  tmp = vmulq_f32(e, vdupq_n_f32(c_cephes_log_q2));
+  x = vaddq_f32(x, y);
+  x = vaddq_f32(x, tmp);
+  x = vreinterpretq_f32_u32(vorrq_u32(vreinterpretq_u32_f32(x), invalid_mask)); // negative arg will be NAN
+  return x;
+}
+
+#define c_exp_hi 88.3762626647949f
+#define c_exp_lo -88.3762626647949f
+
+#define c_cephes_LOG2EF 1.44269504088896341
+#define c_cephes_exp_C1 0.693359375
+#define c_cephes_exp_C2 -2.12194440e-4
+
+#define c_cephes_exp_p0 1.9875691500E-4
+#define c_cephes_exp_p1 1.3981999507E-3
+#define c_cephes_exp_p2 8.3334519073E-3
+#define c_cephes_exp_p3 4.1665795894E-2
+#define c_cephes_exp_p4 1.6666665459E-1
+#define c_cephes_exp_p5 5.0000001201E-1
+
+/* exp() computed for 4 float at once */
+v4sf exp_ps(v4sf x) {
+  v4sf tmp, fx;
+
+  v4sf one = vdupq_n_f32(1);
+  x = vminq_f32(x, vdupq_n_f32(c_exp_hi));
+  x = vmaxq_f32(x, vdupq_n_f32(c_exp_lo));
+
+  /* express exp(x) as exp(g + n*log(2)) */
+  fx = vmlaq_f32(vdupq_n_f32(0.5f), x, vdupq_n_f32(c_cephes_LOG2EF));
+
+  /* perform a floorf */
+  tmp = vcvtq_f32_s32(vcvtq_s32_f32(fx));
+
+  /* if greater, substract 1 */
+  v4su mask = vcgtq_f32(tmp, fx);    
+  mask = vandq_u32(mask, vreinterpretq_u32_f32(one));
+
+
+  fx = vsubq_f32(tmp, vreinterpretq_f32_u32(mask));
+
+  tmp = vmulq_f32(fx, vdupq_n_f32(c_cephes_exp_C1));
+  v4sf z = vmulq_f32(fx, vdupq_n_f32(c_cephes_exp_C2));
+  x = vsubq_f32(x, tmp);
+  x = vsubq_f32(x, z);
+
+  static const float cephes_exp_p[6] = { c_cephes_exp_p0, c_cephes_exp_p1, c_cephes_exp_p2, c_cephes_exp_p3, c_cephes_exp_p4, c_cephes_exp_p5 };
+  v4sf y = vld1q_dup_f32(cephes_exp_p+0);
+  v4sf c1 = vld1q_dup_f32(cephes_exp_p+1); 
+  v4sf c2 = vld1q_dup_f32(cephes_exp_p+2); 
+  v4sf c3 = vld1q_dup_f32(cephes_exp_p+3); 
+  v4sf c4 = vld1q_dup_f32(cephes_exp_p+4); 
+  v4sf c5 = vld1q_dup_f32(cephes_exp_p+5);
+
+  y = vmulq_f32(y, x);
+  z = vmulq_f32(x,x);
+  y = vaddq_f32(y, c1);
+  y = vmulq_f32(y, x);
+  y = vaddq_f32(y, c2);
+  y = vmulq_f32(y, x);
+  y = vaddq_f32(y, c3);
+  y = vmulq_f32(y, x);
+  y = vaddq_f32(y, c4);
+  y = vmulq_f32(y, x);
+  y = vaddq_f32(y, c5);
+  
+  y = vmulq_f32(y, z);
+  y = vaddq_f32(y, x);
+  y = vaddq_f32(y, one);
+
+  /* build 2^n */
+  int32x4_t mm;
+  mm = vcvtq_s32_f32(fx);
+  mm = vaddq_s32(mm, vdupq_n_s32(0x7f));
+  mm = vshlq_n_s32(mm, 23);
+  v4sf pow2n = vreinterpretq_f32_s32(mm);
+
+  y = vmulq_f32(y, pow2n);
+  return y;
+}
+
+#define c_minus_cephes_DP1 -0.78515625
+#define c_minus_cephes_DP2 -2.4187564849853515625e-4
+#define c_minus_cephes_DP3 -3.77489497744594108e-8
+#define c_sincof_p0 -1.9515295891E-4
+#define c_sincof_p1  8.3321608736E-3
+#define c_sincof_p2 -1.6666654611E-1
+#define c_coscof_p0  2.443315711809948E-005
+#define c_coscof_p1 -1.388731625493765E-003
+#define c_coscof_p2  4.166664568298827E-002
+#define c_cephes_FOPI 1.27323954473516 // 4 / M_PI
+
+/* evaluation of 4 sines & cosines at once.
+
+   The code is the exact rewriting of the cephes sinf function.
+   Precision is excellent as long as x < 8192 (I did not bother to
+   take into account the special handling they have for greater values
+   -- it does not return garbage for arguments over 8192, though, but
+   the extra precision is missing).
+
+   Note that it is such that sinf((float)M_PI) = 8.74e-8, which is the
+   surprising but correct result.
+
+   Note also that when you compute sin(x), cos(x) is available at
+   almost no extra price so both sin_ps and cos_ps make use of
+   sincos_ps..
+  */
+void sincos_ps(v4sf x, v4sf *ysin, v4sf *ycos) { // any x
+  v4sf xmm1, xmm2, xmm3, y;
+
+  v4su emm2;
+  
+  v4su sign_mask_sin, sign_mask_cos;
+  sign_mask_sin = vcltq_f32(x, vdupq_n_f32(0));
+  x = vabsq_f32(x);
+
+  /* scale by 4/Pi */
+  y = vmulq_f32(x, vdupq_n_f32(c_cephes_FOPI));
+
+  /* store the integer part of y in mm0 */
+  emm2 = vcvtq_u32_f32(y);
+  /* j=(j+1) & (~1) (see the cephes sources) */
+  emm2 = vaddq_u32(emm2, vdupq_n_u32(1));
+  emm2 = vandq_u32(emm2, vdupq_n_u32(~1));
+  y = vcvtq_f32_u32(emm2);
+
+  /* get the polynom selection mask 
+     there is one polynom for 0 <= x <= Pi/4
+     and another one for Pi/4<x<=Pi/2
+
+     Both branches will be computed.
+  */
+  v4su poly_mask = vtstq_u32(emm2, vdupq_n_u32(2));
+  
+  /* The magic pass: "Extended precision modular arithmetic" 
+     x = ((x - y * DP1) - y * DP2) - y * DP3; */
+  xmm1 = vmulq_n_f32(y, c_minus_cephes_DP1);
+  xmm2 = vmulq_n_f32(y, c_minus_cephes_DP2);
+  xmm3 = vmulq_n_f32(y, c_minus_cephes_DP3);
+  x = vaddq_f32(x, xmm1);
+  x = vaddq_f32(x, xmm2);
+  x = vaddq_f32(x, xmm3);
+
+  sign_mask_sin = veorq_u32(sign_mask_sin, vtstq_u32(emm2, vdupq_n_u32(4)));
+  sign_mask_cos = vtstq_u32(vsubq_u32(emm2, vdupq_n_u32(2)), vdupq_n_u32(4));
+
+  /* Evaluate the first polynom  (0 <= x <= Pi/4) in y1, 
+     and the second polynom      (Pi/4 <= x <= 0) in y2 */
+  v4sf z = vmulq_f32(x,x);
+  v4sf y1, y2;
+
+  y1 = vmulq_n_f32(z, c_coscof_p0);
+  y2 = vmulq_n_f32(z, c_sincof_p0);
+  y1 = vaddq_f32(y1, vdupq_n_f32(c_coscof_p1));
+  y2 = vaddq_f32(y2, vdupq_n_f32(c_sincof_p1));
+  y1 = vmulq_f32(y1, z);
+  y2 = vmulq_f32(y2, z);
+  y1 = vaddq_f32(y1, vdupq_n_f32(c_coscof_p2));
+  y2 = vaddq_f32(y2, vdupq_n_f32(c_sincof_p2));
+  y1 = vmulq_f32(y1, z);
+  y2 = vmulq_f32(y2, z);
+  y1 = vmulq_f32(y1, z);
+  y2 = vmulq_f32(y2, x);
+  y1 = vsubq_f32(y1, vmulq_f32(z, vdupq_n_f32(0.5f)));
+  y2 = vaddq_f32(y2, x);
+  y1 = vaddq_f32(y1, vdupq_n_f32(1));
+
+  /* select the correct result from the two polynoms */  
+  v4sf ys = vbslq_f32(poly_mask, y1, y2);
+  v4sf yc = vbslq_f32(poly_mask, y2, y1);
+  *ysin = vbslq_f32(sign_mask_sin, vnegq_f32(ys), ys);
+  *ycos = vbslq_f32(sign_mask_cos, yc, vnegq_f32(yc));
+}
+
+v4sf sin_ps(v4sf x) {
+  v4sf ysin, ycos; 
+  sincos_ps(x, &ysin, &ycos); 
+  return ysin;
+}
+
+v4sf cos_ps(v4sf x) {
+  v4sf ysin, ycos; 
+  sincos_ps(x, &ysin, &ycos); 
+  return ycos;
+}
+
+#endif
+
+#endif
+#endif
+#elif defined(__SSE__) || defined(__AVX__) || defined(__MIC__) || defined(__KNCNI__) || defined(__AVX512__) || defined(__AVX512F__)
+// header for special functions: log, exp, sin, cos
+#if !defined(__INTEL_COMPILER) && !defined(__ICL) && !defined(__ICC)
+#if defined(__AVX512F__)
+// original file: ../external/MIPP/src/math/avx512_mathfun.h
+
+/* 
+   AVX512 implementation of sin, cos, sincos, exp and log
+
+   Based on "sse_mathfun.h", by Julien Pommier
+   http://gruntthepeon.free.fr/ssemath/
+
+   Copyright (C) 2017 Adrien Cassagne
+   MIT license
+*/
+#ifdef __AVX512F__
+#ifndef AVX512_MATHFUN_H_
+#define AVX512_MATHFUN_H_
+
+#include <immintrin.h>
+
+typedef __m512 v16sf; // vector of 8 float (avx)
+
+// prototypes
+inline v16sf log512_ps(v16sf x);
+inline v16sf exp512_ps(v16sf x);
+inline v16sf sin512_ps(v16sf x);
+inline v16sf cos512_ps(v16sf x);
+inline void sincos512_ps(v16sf x, v16sf *s, v16sf *c);
+
+// original file: ../external/MIPP/src/math/avx512_mathfun.hxx
+
+/* 
+   AVX512 implementation of sin, cos, sincos, exp and log
+
+   Based on "sse_mathfun.h", by Julien Pommier
+   http://gruntthepeon.free.fr/ssemath/
+
+   Copyright (C) 2017 Adrien Cassagne
+   MIT license
+*/
+#ifdef __AVX512F__
+
+// #include "avx512_mathfun.h"
+
+typedef __m512i v16si; // vector of 16 int   (avx)
+
+/* yes I know, the top of this file is quite ugly */
+#ifdef _MSC_VER /* visual c++ */
+# define ALIGN32_BEG __declspec(align(32))
+# define ALIGN32_END 
+#else /* gcc or icc */
+# define ALIGN32_BEG
+# define ALIGN32_END __attribute__((aligned(32)))
+#endif
+
+/* declare some AVX512 constants -- why can't I figure a better way to do that? */
+#define _PS512_CONST(Name, Val)                                            \
+  static const ALIGN32_BEG float _ps512_##Name[16] ALIGN32_END = { Val, Val, Val, Val, Val, Val, Val, Val, Val, Val, Val, Val, Val, Val, Val, Val }
+#define _PI32_CONST512(Name, Val)                                            \
+  static const ALIGN32_BEG int _pi32_512_##Name[16] ALIGN32_END = { Val, Val, Val, Val, Val, Val, Val, Val, Val, Val, Val, Val, Val, Val, Val, Val }
+#define _PS512_CONST_TYPE(Name, Type, Val)                                 \
+  static const ALIGN32_BEG Type _ps512_##Name[16] ALIGN32_END = { Val, Val, Val, Val, Val, Val, Val, Val, Val, Val, Val, Val, Val, Val, Val, Val }
+
+_PS512_CONST(1  , 1.0f);
+_PS512_CONST(0p5, 0.5f);
+/* the smallest non denormalized float number */
+_PS512_CONST_TYPE(min_norm_pos, int, 0x00800000);
+//_PS512_CONST_TYPE(mant_mask, int, 0x7f800000);
+_PS512_CONST_TYPE(inv_mant_mask, int, ~0x7f800000);
+
+_PS512_CONST_TYPE(sign_mask, int, (int)0x80000000);
+_PS512_CONST_TYPE(inv_sign_mask, int, ~0x80000000);
+
+_PI32_CONST512(0, 0);
+_PI32_CONST512(1, 1);
+_PI32_CONST512(0xffffffff, (int)0xFFFFFFFF);
+_PI32_CONST512(inv1, ~1);
+_PI32_CONST512(2, 2);
+_PI32_CONST512(4, 4);
+_PI32_CONST512(0x7f, 0x7f);
+
+_PS512_CONST(cephes_SQRTHF, 0.707106781186547524f);
+_PS512_CONST(cephes_log_p0, 7.0376836292E-2f);
+_PS512_CONST(cephes_log_p1, - 1.1514610310E-1f);
+_PS512_CONST(cephes_log_p2, 1.1676998740E-1f);
+_PS512_CONST(cephes_log_p3, - 1.2420140846E-1f);
+_PS512_CONST(cephes_log_p4, + 1.4249322787E-1f);
+_PS512_CONST(cephes_log_p5, - 1.6668057665E-1f);
+_PS512_CONST(cephes_log_p6, + 2.0000714765E-1f);
+_PS512_CONST(cephes_log_p7, - 2.4999993993E-1f);
+_PS512_CONST(cephes_log_p8, + 3.3333331174E-1f);
+_PS512_CONST(cephes_log_q1, -2.12194440e-4f);
+_PS512_CONST(cephes_log_q2, 0.693359375f);
+
+static inline v16si _wrap_mm512_slli_epi32(v16si x, int  y) { return _mm512_slli_epi32(x,y); }
+static inline v16si _wrap_mm512_srli_epi32(v16si x, int  y) { return _mm512_srli_epi32(x,y); }
+static inline v16si _wrap_mm512_sub_epi32 (v16si x, v16si y) { return _mm512_sub_epi32 (x,y); }
+static inline v16si _wrap_mm512_add_epi32 (v16si x, v16si y) { return _mm512_add_epi32 (x,y); }
+
+
+/* natural logarithm computed for 16 simultaneous float
+   return NaN for x <= 0
+*/
+v16sf log512_ps(v16sf x) {
+  v16si imm0;
+  v16sf one = *(v16sf*)_ps512_1;
+
+  //v16sf invalid_mask = _mm512_cmple_ps(x, _mm512_setzero_ps());
+  __mmask16 invalid_mask2 = _mm512_cmp_ps_mask(x, _mm512_setzero_ps(), _CMP_LE_OS);
+  v16sf invalid_mask = _mm512_mask_blend_ps(invalid_mask2, *(v16sf*)_pi32_512_0, *(v16sf*)_pi32_512_0xffffffff);
+
+  x = _mm512_max_ps(x, *(v16sf*)_ps512_min_norm_pos);  /* cut off denormalized stuff */
+
+  // can be done with AVX2
+  imm0 = _wrap_mm512_srli_epi32(_mm512_castps_si512(x), 23);
+
+  /* keep only the fractional part */
+//  x = _mm512_and_ps(x, *(v16sf*)_ps512_inv_mant_mask);
+  x = _mm512_castsi512_ps(_mm512_and_si512(_mm512_castps_si512(x), _mm512_castps_si512(*(v16sf*)_ps512_inv_mant_mask)));
+//  x = _mm512_or_ps(x, *(v16sf*)_ps512_0p5);
+  x = _mm512_castsi512_ps(_mm512_or_si512(_mm512_castps_si512(x), _mm512_castps_si512(*(v16sf*)_ps512_0p5)));
+
+  // this is again another AVX2 instruction
+  imm0 = _wrap_mm512_sub_epi32(imm0, *(v16si*)_pi32_512_0x7f);
+  v16sf e = _mm512_cvtepi32_ps(imm0);
+
+  e = _mm512_add_ps(e, one);
+
+  /* part2: 
+     if( x < SQRTHF ) {
+       e -= 1;
+       x = x + x - 1.0;
+     } else { x = x - 1.0; }
+  */
+  //v16sf mask = _mm512_cmplt_ps(x, *(v16sf*)_ps512_cephes_SQRTHF);
+  __mmask16 mask2 = _mm512_cmp_ps_mask(x, *(v16sf*)_ps512_cephes_SQRTHF, _CMP_LT_OS);
+  v16sf mask = _mm512_mask_blend_ps(mask2, *(v16sf*)_pi32_512_0, *(v16sf*)_pi32_512_0xffffffff);
+
+//  v16sf tmp = _mm512_and_ps(x, mask);
+  v16sf tmp = _mm512_castsi512_ps(_mm512_and_si512(_mm512_castps_si512(x), _mm512_castps_si512(mask)));
+  x = _mm512_sub_ps(x, one);
+//  e = _mm512_sub_ps(e, _mm512_and_ps(one, mask));
+  e = _mm512_sub_ps(e, _mm512_castsi512_ps(_mm512_and_si512(_mm512_castps_si512(one), _mm512_castps_si512(mask))));
+  x = _mm512_add_ps(x, tmp);
+
+  v16sf z = _mm512_mul_ps(x,x);
+
+  v16sf y = *(v16sf*)_ps512_cephes_log_p0;
+  y = _mm512_mul_ps(y, x);
+  y = _mm512_add_ps(y, *(v16sf*)_ps512_cephes_log_p1);
+  y = _mm512_mul_ps(y, x);
+  y = _mm512_add_ps(y, *(v16sf*)_ps512_cephes_log_p2);
+  y = _mm512_mul_ps(y, x);
+  y = _mm512_add_ps(y, *(v16sf*)_ps512_cephes_log_p3);
+  y = _mm512_mul_ps(y, x);
+  y = _mm512_add_ps(y, *(v16sf*)_ps512_cephes_log_p4);
+  y = _mm512_mul_ps(y, x);
+  y = _mm512_add_ps(y, *(v16sf*)_ps512_cephes_log_p5);
+  y = _mm512_mul_ps(y, x);
+  y = _mm512_add_ps(y, *(v16sf*)_ps512_cephes_log_p6);
+  y = _mm512_mul_ps(y, x);
+  y = _mm512_add_ps(y, *(v16sf*)_ps512_cephes_log_p7);
+  y = _mm512_mul_ps(y, x);
+  y = _mm512_add_ps(y, *(v16sf*)_ps512_cephes_log_p8);
+  y = _mm512_mul_ps(y, x);
+
+  y = _mm512_mul_ps(y, z);
+  
+  tmp = _mm512_mul_ps(e, *(v16sf*)_ps512_cephes_log_q1);
+  y = _mm512_add_ps(y, tmp);
+
+
+  tmp = _mm512_mul_ps(z, *(v16sf*)_ps512_0p5);
+  y = _mm512_sub_ps(y, tmp);
+
+  tmp = _mm512_mul_ps(e, *(v16sf*)_ps512_cephes_log_q2);
+  x = _mm512_add_ps(x, y);
+  x = _mm512_add_ps(x, tmp);
+//  x = _mm512_or_ps(x, invalid_mask); // negative arg will be NAN
+  x = _mm512_castsi512_ps(_mm512_or_si512(_mm512_castps_si512(x), _mm512_castps_si512(invalid_mask)));
+  return x;
+}
+
+_PS512_CONST(exp_hi,	88.3762626647949f);
+_PS512_CONST(exp_lo,	-88.3762626647949f);
+
+_PS512_CONST(cephes_LOG2EF, 1.44269504088896341f);
+_PS512_CONST(cephes_exp_C1, 0.693359375f);
+_PS512_CONST(cephes_exp_C2, -2.12194440e-4f);
+
+_PS512_CONST(cephes_exp_p0, 1.9875691500E-4f);
+_PS512_CONST(cephes_exp_p1, 1.3981999507E-3f);
+_PS512_CONST(cephes_exp_p2, 8.3334519073E-3f);
+_PS512_CONST(cephes_exp_p3, 4.1665795894E-2f);
+_PS512_CONST(cephes_exp_p4, 1.6666665459E-1f);
+_PS512_CONST(cephes_exp_p5, 5.0000001201E-1f);
+
+v16sf exp512_ps(v16sf x) {
+  v16sf tmp = _mm512_setzero_ps(), fx;
+  v16si imm0;
+  v16sf one = *(v16sf*)_ps512_1;
+
+  x = _mm512_min_ps(x, *(v16sf*)_ps512_exp_hi);
+  x = _mm512_max_ps(x, *(v16sf*)_ps512_exp_lo);
+
+  /* express exp(x) as exp(g + n*log(2)) */
+  fx = _mm512_mul_ps(x, *(v16sf*)_ps512_cephes_LOG2EF);
+  fx = _mm512_add_ps(fx, *(v16sf*)_ps512_0p5);
+
+  /* how to perform a floorf with SSE: just below */
+  //imm0 = _mm512_cvttps_epi32(fx);
+  //tmp  = _mm512_cvtepi32_ps(imm0);
+  
+  tmp = _mm512_floor_ps(fx);
+
+  /* if greater, substract 1 */
+  //v16sf mask = _mm512_cmpgt_ps(tmp, fx);
+//  v16sf mask = _mm512_cmp_ps(tmp, fx, _CMP_GT_OS);
+  __mmask16 mask2 = _mm512_cmp_ps_mask(tmp, fx, _CMP_GT_OS);
+  v16sf mask = _mm512_mask_blend_ps(mask2, *(v16sf*)_pi32_512_0, *(v16sf*)_pi32_512_0xffffffff);
+//  mask = _mm512_and_ps(mask, one);
+  mask = _mm512_castsi512_ps(_mm512_and_si512(_mm512_castps_si512(mask), _mm512_castps_si512(one)));
+  fx = _mm512_sub_ps(tmp, mask);
+
+  tmp = _mm512_mul_ps(fx, *(v16sf*)_ps512_cephes_exp_C1);
+  v16sf z = _mm512_mul_ps(fx, *(v16sf*)_ps512_cephes_exp_C2);
+  x = _mm512_sub_ps(x, tmp);
+  x = _mm512_sub_ps(x, z);
+
+  z = _mm512_mul_ps(x,x);
+  
+  v16sf y = *(v16sf*)_ps512_cephes_exp_p0;
+  y = _mm512_mul_ps(y, x);
+  y = _mm512_add_ps(y, *(v16sf*)_ps512_cephes_exp_p1);
+  y = _mm512_mul_ps(y, x);
+  y = _mm512_add_ps(y, *(v16sf*)_ps512_cephes_exp_p2);
+  y = _mm512_mul_ps(y, x);
+  y = _mm512_add_ps(y, *(v16sf*)_ps512_cephes_exp_p3);
+  y = _mm512_mul_ps(y, x);
+  y = _mm512_add_ps(y, *(v16sf*)_ps512_cephes_exp_p4);
+  y = _mm512_mul_ps(y, x);
+  y = _mm512_add_ps(y, *(v16sf*)_ps512_cephes_exp_p5);
+  y = _mm512_mul_ps(y, z);
+  y = _mm512_add_ps(y, x);
+  y = _mm512_add_ps(y, one);
+
+  /* build 2^n */
+  imm0 = _mm512_cvttps_epi32(fx);
+  // another two AVX2 instructions
+  imm0 = _wrap_mm512_add_epi32(imm0, *(v16si*)_pi32_512_0x7f);
+  imm0 = _wrap_mm512_slli_epi32(imm0, 23);
+  v16sf pow2n = _mm512_castsi512_ps(imm0);
+  y = _mm512_mul_ps(y, pow2n);
+  return y;
+}
+
+_PS512_CONST(minus_cephes_DP1, -0.78515625f);
+_PS512_CONST(minus_cephes_DP2, -2.4187564849853515625e-4f);
+_PS512_CONST(minus_cephes_DP3, -3.77489497744594108e-8f);
+_PS512_CONST(sincof_p0, -1.9515295891E-4f);
+_PS512_CONST(sincof_p1,  8.3321608736E-3f);
+_PS512_CONST(sincof_p2, -1.6666654611E-1f);
+_PS512_CONST(coscof_p0,  2.443315711809948E-005f);
+_PS512_CONST(coscof_p1, -1.388731625493765E-003f);
+_PS512_CONST(coscof_p2,  4.166664568298827E-002f);
+_PS512_CONST(cephes_FOPI, 1.27323954473516f); // 4 / M_PI
+
+
+/* evaluation of 16 sines at onces using AVX intrisics
+
+   The code is the exact rewriting of the cephes sinf function.
+   Precision is excellent as long as x < 8192 (I did not bother to
+   take into account the special handling they have for greater values
+   -- it does not return garbage for arguments over 8192, though, but
+   the extra precision is missing).
+
+   Note that it is such that sinf((float)M_PI) = 8.74e-8, which is the
+   surprising but correct result.
+
+*/
+v16sf sin512_ps(v16sf x) { // any x
+  v16sf xmm1, xmm2 = _mm512_setzero_ps(), xmm3, sign_bit, y;
+  v16si imm0, imm2;
+
+  sign_bit = x;
+  /* take the absolute value */
+//  x = _mm512_and_ps(x, *(v16sf*)_ps512_inv_sign_mask);
+  x = _mm512_castsi512_ps(_mm512_and_si512(_mm512_castps_si512(x), _mm512_castps_si512(*(v16sf*)_ps512_inv_sign_mask)));
+  /* extract the sign bit (upper one) */
+//  sign_bit = _mm512_and_ps(sign_bit, *(v16sf*)_ps512_sign_mask);
+  sign_bit = _mm512_castsi512_ps(_mm512_and_si512(_mm512_castps_si512(sign_bit), _mm512_castps_si512(*(v16sf*)_ps512_sign_mask)));
+  
+  /* scale by 4/Pi */
+  y = _mm512_mul_ps(x, *(v16sf*)_ps512_cephes_FOPI);
+
+  /*
+    Here we start a series of integer operations, which are in the
+    realm of AVX2.
+    If we don't have AVX, let's perform them using SSE2 directives
+  */
+
+  /* store the integer part of y in mm0 */
+  imm2 = _mm512_cvttps_epi32(y);
+  /* j=(j+1) & (~1) (see the cephes sources) */
+  // another two AVX2 instruction
+  imm2 = _wrap_mm512_add_epi32(imm2, *(v16si*)_pi32_512_1);
+  imm2 = _mm512_and_si512(imm2, *(v16si*)_pi32_512_inv1);
+  y = _mm512_cvtepi32_ps(imm2);
+
+  /* get the swap sign flag */
+  imm0 = _mm512_and_si512(imm2, *(v16si*)_pi32_512_4);
+  imm0 = _wrap_mm512_slli_epi32(imm0, 29);
+  /* get the polynom selection mask 
+     there is one polynom for 0 <= x <= Pi/4
+     and another one for Pi/4<x<=Pi/2
+
+     Both branches will be computed.
+  */
+  imm2 = _mm512_and_si512(imm2, *(v16si*)_pi32_512_2);
+
+//  imm2 = _mm512_cmpeq_epi32(imm2,*(v16si*)_pi32_512_0);
+  __mmask16 imm22 = _mm512_cmpeq_epi32_mask(imm2,*(v16si*)_pi32_512_0);
+  imm2= _mm512_mask_blend_epi32(imm22, *(v16si*)_pi32_512_0, *(v16si*)_pi32_512_0xffffffff);
+ 
+  v16sf swap_sign_bit = _mm512_castsi512_ps(imm0);
+  v16sf poly_mask = _mm512_castsi512_ps(imm2);
+//  sign_bit = _mm512_xor_ps(sign_bit, swap_sign_bit);
+  sign_bit = _mm512_castsi512_ps(_mm512_xor_si512(_mm512_castps_si512(sign_bit), _mm512_castps_si512(swap_sign_bit)));
+
+  /* The magic pass: "Extended precision modular arithmetic" 
+     x = ((x - y * DP1) - y * DP2) - y * DP3; */
+  xmm1 = *(v16sf*)_ps512_minus_cephes_DP1;
+  xmm2 = *(v16sf*)_ps512_minus_cephes_DP2;
+  xmm3 = *(v16sf*)_ps512_minus_cephes_DP3;
+  xmm1 = _mm512_mul_ps(y, xmm1);
+  xmm2 = _mm512_mul_ps(y, xmm2);
+  xmm3 = _mm512_mul_ps(y, xmm3);
+  x = _mm512_add_ps(x, xmm1);
+  x = _mm512_add_ps(x, xmm2);
+  x = _mm512_add_ps(x, xmm3);
+
+  /* Evaluate the first polynom  (0 <= x <= Pi/4) */
+  y = *(v16sf*)_ps512_coscof_p0;
+  v16sf z = _mm512_mul_ps(x,x);
+
+  y = _mm512_mul_ps(y, z);
+  y = _mm512_add_ps(y, *(v16sf*)_ps512_coscof_p1);
+  y = _mm512_mul_ps(y, z);
+  y = _mm512_add_ps(y, *(v16sf*)_ps512_coscof_p2);
+  y = _mm512_mul_ps(y, z);
+  y = _mm512_mul_ps(y, z);
+  v16sf tmp = _mm512_mul_ps(z, *(v16sf*)_ps512_0p5);
+  y = _mm512_sub_ps(y, tmp);
+  y = _mm512_add_ps(y, *(v16sf*)_ps512_1);
+  
+  /* Evaluate the second polynom  (Pi/4 <= x <= 0) */
+
+  v16sf y2 = *(v16sf*)_ps512_sincof_p0;
+  y2 = _mm512_mul_ps(y2, z);
+  y2 = _mm512_add_ps(y2, *(v16sf*)_ps512_sincof_p1);
+  y2 = _mm512_mul_ps(y2, z);
+  y2 = _mm512_add_ps(y2, *(v16sf*)_ps512_sincof_p2);
+  y2 = _mm512_mul_ps(y2, z);
+  y2 = _mm512_mul_ps(y2, x);
+  y2 = _mm512_add_ps(y2, x);
+
+  /* select the correct result from the two polynoms */  
+  xmm3 = poly_mask;
+//  y2 = _mm512_and_ps(xmm3, y2); //, xmm3);
+  y2 = _mm512_castsi512_ps(_mm512_and_si512(_mm512_castps_si512(xmm3), _mm512_castps_si512(y2)));
+//  y = _mm512_andnot_ps(xmm3, y);
+  y = _mm512_castsi512_ps(_mm512_andnot_si512(_mm512_castps_si512(xmm3), _mm512_castps_si512(y)));
+  y = _mm512_add_ps(y,y2);
+  /* update the sign */
+//  y = _mm512_xor_ps(y, sign_bit);
+  y = _mm512_castsi512_ps(_mm512_xor_si512(_mm512_castps_si512(y), _mm512_castps_si512(sign_bit)));
+
+  return y;
+}
+
+/* almost the same as sin_ps */
+v16sf cos512_ps(v16sf x) { // any x
+  v16sf xmm1, xmm2 = _mm512_setzero_ps(), xmm3, y;
+  v16si imm0, imm2;
+
+  /* take the absolute value */
+//  x = _mm512_and_ps(x, *(v16sf*)_ps512_inv_sign_mask);
+  x = _mm512_castsi512_ps(_mm512_and_si512(_mm512_castps_si512(x), _mm512_castps_si512(*(v16sf*)_ps512_inv_sign_mask)));
+
+  /* scale by 4/Pi */
+  y = _mm512_mul_ps(x, *(v16sf*)_ps512_cephes_FOPI);
+
+  /* store the integer part of y in mm0 */
+  imm2 = _mm512_cvttps_epi32(y);
+  /* j=(j+1) & (~1) (see the cephes sources) */
+  imm2 = _wrap_mm512_add_epi32(imm2, *(v16si*)_pi32_512_1);
+  imm2 = _mm512_and_si512(imm2, *(v16si*)_pi32_512_inv1);
+  y = _mm512_cvtepi32_ps(imm2);
+  imm2 = _wrap_mm512_sub_epi32(imm2, *(v16si*)_pi32_512_2);
+
+  /* get the swap sign flag */
+  imm0 = _mm512_andnot_si512(imm2, *(v16si*)_pi32_512_4);
+  imm0 = _wrap_mm512_slli_epi32(imm0, 29);
+  /* get the polynom selection mask */
+  imm2 = _mm512_and_si512(imm2, *(v16si*)_pi32_512_2);
+//  imm2 = _mm512_cmpeq_epi32(imm2, *(v16si*)_pi32_512_0);
+  __mmask16 imm22 = _mm512_cmpeq_epi32_mask(imm2, *(v16si*)_pi32_512_0);
+  imm2 = _mm512_mask_blend_epi32(imm22, *(v16si*)_pi32_512_0, *(v16si*)_pi32_512_0xffffffff);
+
+  v16sf sign_bit = _mm512_castsi512_ps(imm0);
+  v16sf poly_mask = _mm512_castsi512_ps(imm2);
+
+  /* The magic pass: "Extended precision modular arithmetic"
+     x = ((x - y * DP1) - y * DP2) - y * DP3; */
+  xmm1 = *(v16sf*)_ps512_minus_cephes_DP1;
+  xmm2 = *(v16sf*)_ps512_minus_cephes_DP2;
+  xmm3 = *(v16sf*)_ps512_minus_cephes_DP3;
+  xmm1 = _mm512_mul_ps(y, xmm1);
+  xmm2 = _mm512_mul_ps(y, xmm2);
+  xmm3 = _mm512_mul_ps(y, xmm3);
+  x = _mm512_add_ps(x, xmm1);
+  x = _mm512_add_ps(x, xmm2);
+  x = _mm512_add_ps(x, xmm3);
+
+  /* Evaluate the first polynom  (0 <= x <= Pi/4) */
+  y = *(v16sf*)_ps512_coscof_p0;
+  v16sf z = _mm512_mul_ps(x,x);
+
+  y = _mm512_mul_ps(y, z);
+  y = _mm512_add_ps(y, *(v16sf*)_ps512_coscof_p1);
+  y = _mm512_mul_ps(y, z);
+  y = _mm512_add_ps(y, *(v16sf*)_ps512_coscof_p2);
+  y = _mm512_mul_ps(y, z);
+  y = _mm512_mul_ps(y, z);
+  v16sf tmp = _mm512_mul_ps(z, *(v16sf*)_ps512_0p5);
+  y = _mm512_sub_ps(y, tmp);
+  y = _mm512_add_ps(y, *(v16sf*)_ps512_1);
+
+  /* Evaluate the second polynom  (Pi/4 <= x <= 0) */
+
+  v16sf y2 = *(v16sf*)_ps512_sincof_p0;
+  y2 = _mm512_mul_ps(y2, z);
+  y2 = _mm512_add_ps(y2, *(v16sf*)_ps512_sincof_p1);
+  y2 = _mm512_mul_ps(y2, z);
+  y2 = _mm512_add_ps(y2, *(v16sf*)_ps512_sincof_p2);
+  y2 = _mm512_mul_ps(y2, z);
+  y2 = _mm512_mul_ps(y2, x);
+  y2 = _mm512_add_ps(y2, x);
+
+  /* select the correct result from the two polynoms */
+  xmm3 = poly_mask;
+//  y2 = _mm512_and_ps(xmm3, y2); //, xmm3);
+  y2 = _mm512_castsi512_ps(_mm512_and_si512(_mm512_castps_si512(xmm3), _mm512_castps_si512(y2)));
+//  y = _mm512_andnot_ps(xmm3, y);
+  y = _mm512_castsi512_ps(_mm512_andnot_si512(_mm512_castps_si512(xmm3), _mm512_castps_si512(y)));
+  y = _mm512_add_ps(y,y2);
+  /* update the sign */
+//  y = _mm512_xor_ps(y, sign_bit);
+  y = _mm512_castsi512_ps(_mm512_xor_si512(_mm512_castps_si512(y), _mm512_castps_si512(sign_bit)));
+
+  return y;
+}
+
+/* since sin512_ps and cos512_ps are almost identical, sincos512_ps could replace both of them..
+   it is almost as fast, and gives you a free cosine with your sine */
+void sincos512_ps(v16sf x, v16sf *s, v16sf *c) {
+
+  v16sf xmm1, xmm2, xmm3 = _mm512_setzero_ps(), sign_bit_sin, y;
+  v16si imm0, imm2, imm4;
+
+  sign_bit_sin = x;
+  /* take the absolute value */
+//  x = _mm512_and_ps(x, *(v16sf*)_ps512_inv_sign_mask);
+  x = _mm512_castsi512_ps(_mm512_and_si512(_mm512_castps_si512(x), _mm512_castps_si512(*(v16sf*)_ps512_inv_sign_mask)));
+  /* extract the sign bit (upper one) */
+//  sign_bit_sin = _mm512_and_ps(sign_bit_sin, *(v16sf*)_ps512_sign_mask);
+  sign_bit_sin = _mm512_castsi512_ps(_mm512_and_si512(_mm512_castps_si512(sign_bit_sin), _mm512_castps_si512(*(v16sf*)_ps512_sign_mask)));
+  
+  /* scale by 4/Pi */
+  y = _mm512_mul_ps(x, *(v16sf*)_ps512_cephes_FOPI);
+
+  /* store the integer part of y in imm2 */
+  imm2 = _mm512_cvttps_epi32(y);
+
+  /* j=(j+1) & (~1) (see the cephes sources) */
+  imm2 = _wrap_mm512_add_epi32(imm2, *(v16si*)_pi32_512_1);
+  imm2 = _mm512_and_si512(imm2, *(v16si*)_pi32_512_inv1);
+
+  y = _mm512_cvtepi32_ps(imm2);
+  imm4 = imm2;
+
+  /* get the swap sign flag for the sine */
+  imm0 = _mm512_and_si512(imm2, *(v16si*)_pi32_512_4);
+  imm0 = _wrap_mm512_slli_epi32(imm0, 29);
+  //v16sf swap_sign_bit_sin = _mm512_castsi512_ps(imm0);
+
+  /* get the polynom selection mask for the sine*/
+  imm2 = _mm512_and_si512(imm2, *(v16si*)_pi32_512_2);
+//  imm2 = _mm512_cmpeq_epi32(imm2, *(v16si*)_pi32_512_0);
+  __mmask16 imm22 = _mm512_cmpeq_epi32_mask(imm2, *(v16si*)_pi32_512_0);
+  imm2 = _mm512_mask_blend_epi32(imm22, *(v16si*)_pi32_512_0, *(v16si*)_pi32_512_0xffffffff);
+
+  //v16sf poly_mask = _mm512_castsi512_ps(imm2);
+
+  v16sf swap_sign_bit_sin = _mm512_castsi512_ps(imm0);
+  v16sf poly_mask = _mm512_castsi512_ps(imm2);
+
+  /* The magic pass: "Extended precision modular arithmetic" 
+     x = ((x - y * DP1) - y * DP2) - y * DP3; */
+  xmm1 = *(v16sf*)_ps512_minus_cephes_DP1;
+  xmm2 = *(v16sf*)_ps512_minus_cephes_DP2;
+  xmm3 = *(v16sf*)_ps512_minus_cephes_DP3;
+  xmm1 = _mm512_mul_ps(y, xmm1);
+  xmm2 = _mm512_mul_ps(y, xmm2);
+  xmm3 = _mm512_mul_ps(y, xmm3);
+  x = _mm512_add_ps(x, xmm1);
+  x = _mm512_add_ps(x, xmm2);
+  x = _mm512_add_ps(x, xmm3);
+
+  imm4 = _wrap_mm512_sub_epi32(imm4, *(v16si*)_pi32_512_2);
+  imm4 = _mm512_andnot_si512(imm4, *(v16si*)_pi32_512_4);
+  imm4 = _wrap_mm512_slli_epi32(imm4, 29);
+
+  v16sf sign_bit_cos = _mm512_castsi512_ps(imm4);
+
+//  sign_bit_sin = _mm512_xor_ps(sign_bit_sin, swap_sign_bit_sin);
+  sign_bit_sin = _mm512_castsi512_ps(_mm512_xor_si512(_mm512_castps_si512(sign_bit_sin), _mm512_castps_si512(swap_sign_bit_sin)));
+  
+  /* Evaluate the first polynom  (0 <= x <= Pi/4) */
+  v16sf z = _mm512_mul_ps(x,x);
+  y = *(v16sf*)_ps512_coscof_p0;
+
+  y = _mm512_mul_ps(y, z);
+  y = _mm512_add_ps(y, *(v16sf*)_ps512_coscof_p1);
+  y = _mm512_mul_ps(y, z);
+  y = _mm512_add_ps(y, *(v16sf*)_ps512_coscof_p2);
+  y = _mm512_mul_ps(y, z);
+  y = _mm512_mul_ps(y, z);
+  v16sf tmp = _mm512_mul_ps(z, *(v16sf*)_ps512_0p5);
+  y = _mm512_sub_ps(y, tmp);
+  y = _mm512_add_ps(y, *(v16sf*)_ps512_1);
+  
+  /* Evaluate the second polynom  (Pi/4 <= x <= 0) */
+
+  v16sf y2 = *(v16sf*)_ps512_sincof_p0;
+  y2 = _mm512_mul_ps(y2, z);
+  y2 = _mm512_add_ps(y2, *(v16sf*)_ps512_sincof_p1);
+  y2 = _mm512_mul_ps(y2, z);
+  y2 = _mm512_add_ps(y2, *(v16sf*)_ps512_sincof_p2);
+  y2 = _mm512_mul_ps(y2, z);
+  y2 = _mm512_mul_ps(y2, x);
+  y2 = _mm512_add_ps(y2, x);
+
+  /* select the correct result from the two polynoms */  
+  xmm3 = poly_mask;
+//  v16sf ysin2 = _mm512_and_ps(xmm3, y2);
+  v16sf ysin2 = _mm512_castsi512_ps(_mm512_and_si512(_mm512_castps_si512(xmm3), _mm512_castps_si512(y2)));
+//  v16sf ysin1 = _mm512_andnot_ps(xmm3, y);
+  v16sf ysin1 = _mm512_castsi512_ps(_mm512_andnot_si512(_mm512_castps_si512(xmm3), _mm512_castps_si512(y)));
+  y2 = _mm512_sub_ps(y2,ysin2);
+  y = _mm512_sub_ps(y, ysin1);
+
+  xmm1 = _mm512_add_ps(ysin1,ysin2);
+  xmm2 = _mm512_add_ps(y,y2);
+ 
+  /* update the sign */
+//  *s = _mm512_xor_ps(xmm1, sign_bit_sin);
+  *s = _mm512_castsi512_ps(_mm512_xor_si512(_mm512_castps_si512(xmm1), _mm512_castps_si512(sign_bit_sin)));
+//  *c = _mm512_xor_ps(xmm2, sign_bit_cos);
+  *c = _mm512_castsi512_ps(_mm512_xor_si512(_mm512_castps_si512(xmm2), _mm512_castps_si512(sign_bit_cos)));
+}
+
+#endif
+
+
+#endif
+#endif
+
+#elif defined(__AVX__)
+// original file: ../external/MIPP/src/math/avx_mathfun.h
+
+/* 
+   AVX implementation of sin, cos, sincos, exp and log
+
+   Based on "sse_mathfun.h", by Julien Pommier
+   http://gruntthepeon.free.fr/ssemath/
+
+   Copyright (C) 2012 Giovanni Garberoglio
+   Interdisciplinary Laboratory for Computational Science (LISC)
+   Fondazione Bruno Kessler and University of Trento
+   via Sommarive, 18
+   I-38123 Trento (Italy)
+
+  This software is provided 'as-is', without any express or implied
+  warranty.  In no event will the authors be held liable for any damages
+  arising from the use of this software.
+
+  Permission is granted to anyone to use this software for any purpose,
+  including commercial applications, and to alter it and redistribute it
+  freely, subject to the following restrictions:
+
+  1. The origin of this software must not be misrepresented; you must not
+     claim that you wrote the original software. If you use this software
+     in a product, an acknowledgment in the product documentation would be
+     appreciated but is not required.
+  2. Altered source versions must be plainly marked as such, and must not be
+     misrepresented as being the original software.
+  3. This notice may not be removed or altered from any source distribution.
+
+  (this is the zlib license)
+*/
+#ifdef __AVX__
+#ifndef AVX_MATHFUN_H_
+#define AVX_MATHFUN_H_
+
+#include <immintrin.h>
+
+typedef __m256 v8sf; // vector of 8 float (avx)
+
+// prototypes
+inline v8sf log256_ps(v8sf x);
+inline v8sf exp256_ps(v8sf x);
+inline v8sf sin256_ps(v8sf x);
+inline v8sf cos256_ps(v8sf x);
+inline void sincos256_ps(v8sf x, v8sf *s, v8sf *c);
+
+// original file: ../external/MIPP/src/math/avx_mathfun.hxx
+
+/* 
+   AVX implementation of sin, cos, sincos, exp and log
+
+   Based on "sse_mathfun.h", by Julien Pommier
+   http://gruntthepeon.free.fr/ssemath/
+
+   Copyright (C) 2012 Giovanni Garberoglio
+   Interdisciplinary Laboratory for Computational Science (LISC)
+   Fondazione Bruno Kessler and University of Trento
+   via Sommarive, 18
+   I-38123 Trento (Italy)
+
+  This software is provided 'as-is', without any express or implied
+  warranty.  In no event will the authors be held liable for any damages
+  arising from the use of this software.
+
+  Permission is granted to anyone to use this software for any purpose,
+  including commercial applications, and to alter it and redistribute it
+  freely, subject to the following restrictions:
+
+  1. The origin of this software must not be misrepresented; you must not
+     claim that you wrote the original software. If you use this software
+     in a product, an acknowledgment in the product documentation would be
+     appreciated but is not required.
+  2. Altered source versions must be plainly marked as such, and must not be
+     misrepresented as being the original software.
+  3. This notice may not be removed or altered from any source distribution.
+
+  (this is the zlib license)
+*/
+#ifdef __AVX__
+
+// #include "avx_mathfun.h"
+
+typedef __m256i v8si; // vector of 8 int   (avx)
+typedef __m128i v4si; // vector of 8 int   (avx)
+
+/* yes I know, the top of this file is quite ugly */
+#ifdef _MSC_VER /* visual c++ */
+# define ALIGN32_BEG __declspec(align(32))
+# define ALIGN32_END 
+#else /* gcc or icc */
+# define ALIGN32_BEG
+# define ALIGN32_END __attribute__((aligned(32)))
+#endif
+
+#define _PI32AVX_CONST(Name, Val)                                            \
+  static const ALIGN32_BEG int _pi32avx_##Name[4] ALIGN32_END = { Val, Val, Val, Val }
+
+#ifndef __AVX2__
+_PI32AVX_CONST(1,     1);
+_PI32AVX_CONST(inv1, ~1);
+_PI32AVX_CONST(2,     2);
+_PI32AVX_CONST(4,     4);
+#endif
+
+/* declare some AVX constants -- why can't I figure a better way to do that? */
+#define _PS256_CONST(Name, Val)                                            \
+  static const ALIGN32_BEG float _ps256_##Name[8] ALIGN32_END = { Val, Val, Val, Val, Val, Val, Val, Val }
+#define _PI32_CONST256(Name, Val)                                            \
+  static const ALIGN32_BEG int _pi32_256_##Name[8] ALIGN32_END = { Val, Val, Val, Val, Val, Val, Val, Val }
+#define _PS256_CONST_TYPE(Name, Type, Val)                                 \
+  static const ALIGN32_BEG Type _ps256_##Name[8] ALIGN32_END = { Val, Val, Val, Val, Val, Val, Val, Val }
+
+_PS256_CONST(1  , 1.0f);
+_PS256_CONST(0p5, 0.5f);
+/* the smallest non denormalized float number */
+_PS256_CONST_TYPE(min_norm_pos, int, 0x00800000);
+//_PS256_CONST_TYPE(mant_mask, int, 0x7f800000);
+_PS256_CONST_TYPE(inv_mant_mask, int, ~0x7f800000);
+
+_PS256_CONST_TYPE(sign_mask, int, (int)0x80000000);
+_PS256_CONST_TYPE(inv_sign_mask, int, ~0x80000000);
+
+#ifdef __AVX2__ 
+_PI32_CONST256(0, 0);
+_PI32_CONST256(1, 1);
+_PI32_CONST256(inv1, ~1);
+_PI32_CONST256(2, 2);
+_PI32_CONST256(4, 4);
+#endif
+_PI32_CONST256(0x7f, 0x7f);
+
+_PS256_CONST(cephes_SQRTHF, 0.707106781186547524f);
+_PS256_CONST(cephes_log_p0, 7.0376836292E-2f);
+_PS256_CONST(cephes_log_p1, - 1.1514610310E-1f);
+_PS256_CONST(cephes_log_p2, 1.1676998740E-1f);
+_PS256_CONST(cephes_log_p3, - 1.2420140846E-1f);
+_PS256_CONST(cephes_log_p4, + 1.4249322787E-1f);
+_PS256_CONST(cephes_log_p5, - 1.6668057665E-1f);
+_PS256_CONST(cephes_log_p6, + 2.0000714765E-1f);
+_PS256_CONST(cephes_log_p7, - 2.4999993993E-1f);
+_PS256_CONST(cephes_log_p8, + 3.3333331174E-1f);
+_PS256_CONST(cephes_log_q1, -2.12194440e-4f);
+_PS256_CONST(cephes_log_q2, 0.693359375f);
+
+#ifndef __AVX2__
+
+typedef union imm_xmm_union {
+  v8si imm;
+  v4si xmm[2];
+} imm_xmm_union;
+
+#define COPY_IMM_TO_XMM(imm_, xmm0_, xmm1_) {    \
+    ALIGN32_BEG imm_xmm_union u ALIGN32_END;  \
+    u.imm = imm_;				   \
+    xmm0_ = u.xmm[0];                            \
+    xmm1_ = u.xmm[1];                            \
+}
+
+#define COPY_XMM_TO_IMM(xmm0_, xmm1_, imm_) {                       \
+    ALIGN32_BEG imm_xmm_union u ALIGN32_END; \
+    u.xmm[0]=xmm0_; u.xmm[1]=xmm1_; imm_ = u.imm; \
+  }
+
+
+#define AVX2_BITOP_USING_SSE2(fn) \
+static inline v8si _wrap_mm256_##fn(v8si x, int a) \
+{ \
+  /* use SSE2 instruction to perform the bitop AVX2 */ \
+  v4si x1, x2; \
+  v8si ret; \
+  COPY_IMM_TO_XMM(x, x1, x2); \
+  x1 = _mm_##fn(x1,a); \
+  x2 = _mm_##fn(x2,a); \
+  COPY_XMM_TO_IMM(x1, x2, ret); \
+  return(ret); \
+}
+
+//#warning "Using SSE2 to perform AVX2 bitshift ops"
+AVX2_BITOP_USING_SSE2(slli_epi32)
+AVX2_BITOP_USING_SSE2(srli_epi32)
+
+#define AVX2_INTOP_USING_SSE2(fn) \
+static inline v8si _wrap_mm256_##fn(v8si x, v8si y) \
+{ \
+  /* use SSE2 instructions to perform the AVX2 integer operation */ \
+  v4si x1, x2; \
+  v4si y1, y2; \
+  v8si ret; \
+  COPY_IMM_TO_XMM(x, x1, x2); \
+  COPY_IMM_TO_XMM(y, y1, y2); \
+  x1 = _mm_##fn(x1,y1); \
+  x2 = _mm_##fn(x2,y2); \
+  COPY_XMM_TO_IMM(x1, x2, ret); \
+  return(ret); \
+}
+
+//#warning "Using SSE2 to perform AVX2 integer ops"
+//AVX2_INTOP_USING_SSE2(and_si128)
+//AVX2_INTOP_USING_SSE2(andnot_si128)
+//AVX2_INTOP_USING_SSE2(cmpeq_epi32)
+AVX2_INTOP_USING_SSE2(sub_epi32)
+AVX2_INTOP_USING_SSE2(add_epi32)
+
+#else
+
+static inline v8si _wrap_mm256_slli_epi32(v8si x, int  y) { return _mm256_slli_epi32(x,y); }
+static inline v8si _wrap_mm256_srli_epi32(v8si x, int  y) { return _mm256_srli_epi32(x,y); }
+static inline v8si _wrap_mm256_sub_epi32 (v8si x, v8si y) { return _mm256_sub_epi32 (x,y); }
+static inline v8si _wrap_mm256_add_epi32 (v8si x, v8si y) { return _mm256_add_epi32 (x,y); }
+
+#endif /* __AVX2__ */
+
+
+/* natural logarithm computed for 8 simultaneous float 
+   return NaN for x <= 0
+*/
+v8sf log256_ps(v8sf x) {
+  v8si imm0;
+  v8sf one = *(v8sf*)_ps256_1;
+
+  //v8sf invalid_mask = _mm256_cmple_ps(x, _mm256_setzero_ps());
+  v8sf invalid_mask = _mm256_cmp_ps(x, _mm256_setzero_ps(), _CMP_LE_OS);
+
+  x = _mm256_max_ps(x, *(v8sf*)_ps256_min_norm_pos);  /* cut off denormalized stuff */
+
+  // can be done with AVX2
+  imm0 = _wrap_mm256_srli_epi32(_mm256_castps_si256(x), 23);
+
+  /* keep only the fractional part */
+  x = _mm256_and_ps(x, *(v8sf*)_ps256_inv_mant_mask);
+  x = _mm256_or_ps(x, *(v8sf*)_ps256_0p5);
+
+  // this is again another AVX2 instruction
+  imm0 = _wrap_mm256_sub_epi32(imm0, *(v8si*)_pi32_256_0x7f);
+  v8sf e = _mm256_cvtepi32_ps(imm0);
+
+  e = _mm256_add_ps(e, one);
+
+  /* part2: 
+     if( x < SQRTHF ) {
+       e -= 1;
+       x = x + x - 1.0;
+     } else { x = x - 1.0; }
+  */
+  //v8sf mask = _mm256_cmplt_ps(x, *(v8sf*)_ps256_cephes_SQRTHF);
+  v8sf mask = _mm256_cmp_ps(x, *(v8sf*)_ps256_cephes_SQRTHF, _CMP_LT_OS);
+  v8sf tmp = _mm256_and_ps(x, mask);
+  x = _mm256_sub_ps(x, one);
+  e = _mm256_sub_ps(e, _mm256_and_ps(one, mask));
+  x = _mm256_add_ps(x, tmp);
+
+  v8sf z = _mm256_mul_ps(x,x);
+
+  v8sf y = *(v8sf*)_ps256_cephes_log_p0;
+  y = _mm256_mul_ps(y, x);
+  y = _mm256_add_ps(y, *(v8sf*)_ps256_cephes_log_p1);
+  y = _mm256_mul_ps(y, x);
+  y = _mm256_add_ps(y, *(v8sf*)_ps256_cephes_log_p2);
+  y = _mm256_mul_ps(y, x);
+  y = _mm256_add_ps(y, *(v8sf*)_ps256_cephes_log_p3);
+  y = _mm256_mul_ps(y, x);
+  y = _mm256_add_ps(y, *(v8sf*)_ps256_cephes_log_p4);
+  y = _mm256_mul_ps(y, x);
+  y = _mm256_add_ps(y, *(v8sf*)_ps256_cephes_log_p5);
+  y = _mm256_mul_ps(y, x);
+  y = _mm256_add_ps(y, *(v8sf*)_ps256_cephes_log_p6);
+  y = _mm256_mul_ps(y, x);
+  y = _mm256_add_ps(y, *(v8sf*)_ps256_cephes_log_p7);
+  y = _mm256_mul_ps(y, x);
+  y = _mm256_add_ps(y, *(v8sf*)_ps256_cephes_log_p8);
+  y = _mm256_mul_ps(y, x);
+
+  y = _mm256_mul_ps(y, z);
+  
+  tmp = _mm256_mul_ps(e, *(v8sf*)_ps256_cephes_log_q1);
+  y = _mm256_add_ps(y, tmp);
+
+
+  tmp = _mm256_mul_ps(z, *(v8sf*)_ps256_0p5);
+  y = _mm256_sub_ps(y, tmp);
+
+  tmp = _mm256_mul_ps(e, *(v8sf*)_ps256_cephes_log_q2);
+  x = _mm256_add_ps(x, y);
+  x = _mm256_add_ps(x, tmp);
+  x = _mm256_or_ps(x, invalid_mask); // negative arg will be NAN
+  return x;
+}
+
+_PS256_CONST(exp_hi,	88.3762626647949f);
+_PS256_CONST(exp_lo,	-88.3762626647949f);
+
+_PS256_CONST(cephes_LOG2EF, 1.44269504088896341f);
+_PS256_CONST(cephes_exp_C1, 0.693359375f);
+_PS256_CONST(cephes_exp_C2, -2.12194440e-4f);
+
+_PS256_CONST(cephes_exp_p0, 1.9875691500E-4f);
+_PS256_CONST(cephes_exp_p1, 1.3981999507E-3f);
+_PS256_CONST(cephes_exp_p2, 8.3334519073E-3f);
+_PS256_CONST(cephes_exp_p3, 4.1665795894E-2f);
+_PS256_CONST(cephes_exp_p4, 1.6666665459E-1f);
+_PS256_CONST(cephes_exp_p5, 5.0000001201E-1f);
+
+v8sf exp256_ps(v8sf x) {
+  v8sf tmp = _mm256_setzero_ps(), fx;
+  v8si imm0;
+  v8sf one = *(v8sf*)_ps256_1;
+
+  x = _mm256_min_ps(x, *(v8sf*)_ps256_exp_hi);
+  x = _mm256_max_ps(x, *(v8sf*)_ps256_exp_lo);
+
+  /* express exp(x) as exp(g + n*log(2)) */
+  fx = _mm256_mul_ps(x, *(v8sf*)_ps256_cephes_LOG2EF);
+  fx = _mm256_add_ps(fx, *(v8sf*)_ps256_0p5);
+
+  /* how to perform a floorf with SSE: just below */
+  //imm0 = _mm256_cvttps_epi32(fx);
+  //tmp  = _mm256_cvtepi32_ps(imm0);
+  
+  tmp = _mm256_floor_ps(fx);
+
+  /* if greater, substract 1 */
+  //v8sf mask = _mm256_cmpgt_ps(tmp, fx);    
+  v8sf mask = _mm256_cmp_ps(tmp, fx, _CMP_GT_OS);    
+  mask = _mm256_and_ps(mask, one);
+  fx = _mm256_sub_ps(tmp, mask);
+
+  tmp = _mm256_mul_ps(fx, *(v8sf*)_ps256_cephes_exp_C1);
+  v8sf z = _mm256_mul_ps(fx, *(v8sf*)_ps256_cephes_exp_C2);
+  x = _mm256_sub_ps(x, tmp);
+  x = _mm256_sub_ps(x, z);
+
+  z = _mm256_mul_ps(x,x);
+  
+  v8sf y = *(v8sf*)_ps256_cephes_exp_p0;
+  y = _mm256_mul_ps(y, x);
+  y = _mm256_add_ps(y, *(v8sf*)_ps256_cephes_exp_p1);
+  y = _mm256_mul_ps(y, x);
+  y = _mm256_add_ps(y, *(v8sf*)_ps256_cephes_exp_p2);
+  y = _mm256_mul_ps(y, x);
+  y = _mm256_add_ps(y, *(v8sf*)_ps256_cephes_exp_p3);
+  y = _mm256_mul_ps(y, x);
+  y = _mm256_add_ps(y, *(v8sf*)_ps256_cephes_exp_p4);
+  y = _mm256_mul_ps(y, x);
+  y = _mm256_add_ps(y, *(v8sf*)_ps256_cephes_exp_p5);
+  y = _mm256_mul_ps(y, z);
+  y = _mm256_add_ps(y, x);
+  y = _mm256_add_ps(y, one);
+
+  /* build 2^n */
+  imm0 = _mm256_cvttps_epi32(fx);
+  // another two AVX2 instructions
+  imm0 = _wrap_mm256_add_epi32(imm0, *(v8si*)_pi32_256_0x7f);
+  imm0 = _wrap_mm256_slli_epi32(imm0, 23);
+  v8sf pow2n = _mm256_castsi256_ps(imm0);
+  y = _mm256_mul_ps(y, pow2n);
+  return y;
+}
+
+_PS256_CONST(minus_cephes_DP1, -0.78515625f);
+_PS256_CONST(minus_cephes_DP2, -2.4187564849853515625e-4f);
+_PS256_CONST(minus_cephes_DP3, -3.77489497744594108e-8f);
+_PS256_CONST(sincof_p0, -1.9515295891E-4f);
+_PS256_CONST(sincof_p1,  8.3321608736E-3f);
+_PS256_CONST(sincof_p2, -1.6666654611E-1f);
+_PS256_CONST(coscof_p0,  2.443315711809948E-005f);
+_PS256_CONST(coscof_p1, -1.388731625493765E-003f);
+_PS256_CONST(coscof_p2,  4.166664568298827E-002f);
+_PS256_CONST(cephes_FOPI, 1.27323954473516f); // 4 / M_PI
+
+
+/* evaluation of 8 sines at onces using AVX intrisics
+
+   The code is the exact rewriting of the cephes sinf function.
+   Precision is excellent as long as x < 8192 (I did not bother to
+   take into account the special handling they have for greater values
+   -- it does not return garbage for arguments over 8192, though, but
+   the extra precision is missing).
+
+   Note that it is such that sinf((float)M_PI) = 8.74e-8, which is the
+   surprising but correct result.
+
+*/
+v8sf sin256_ps(v8sf x) { // any x
+  v8sf xmm1, xmm2 = _mm256_setzero_ps(), xmm3, sign_bit, y;
+  v8si imm0, imm2;
+
+#ifndef __AVX2__
+  v4si imm0_1, imm0_2;
+  v4si imm2_1, imm2_2;
+#endif
+
+  sign_bit = x;
+  /* take the absolute value */
+  x = _mm256_and_ps(x, *(v8sf*)_ps256_inv_sign_mask);
+  /* extract the sign bit (upper one) */
+  sign_bit = _mm256_and_ps(sign_bit, *(v8sf*)_ps256_sign_mask);
+  
+  /* scale by 4/Pi */
+  y = _mm256_mul_ps(x, *(v8sf*)_ps256_cephes_FOPI);
+
+  /*
+    Here we start a series of integer operations, which are in the
+    realm of AVX2.
+    If we don't have AVX, let's perform them using SSE2 directives
+  */
+
+#ifdef __AVX2__
+  /* store the integer part of y in mm0 */
+  imm2 = _mm256_cvttps_epi32(y);
+  /* j=(j+1) & (~1) (see the cephes sources) */
+  // another two AVX2 instruction
+  imm2 = _wrap_mm256_add_epi32(imm2, *(v8si*)_pi32_256_1);
+  imm2 = _mm256_and_si256(imm2, *(v8si*)_pi32_256_inv1);
+  y = _mm256_cvtepi32_ps(imm2);
+
+  /* get the swap sign flag */
+  imm0 = _mm256_and_si256(imm2, *(v8si*)_pi32_256_4);
+  imm0 = _wrap_mm256_slli_epi32(imm0, 29);
+  /* get the polynom selection mask 
+     there is one polynom for 0 <= x <= Pi/4
+     and another one for Pi/4<x<=Pi/2
+
+     Both branches will be computed.
+  */
+  imm2 = _mm256_and_si256(imm2, *(v8si*)_pi32_256_2);
+  imm2 = _mm256_cmpeq_epi32(imm2,*(v8si*)_pi32_256_0);
+#else
+  /* we use SSE2 routines to perform the integer ops */
+  COPY_IMM_TO_XMM(_mm256_cvttps_epi32(y),imm2_1,imm2_2);
+
+  imm2_1 = _mm_add_epi32(imm2_1, *(v4si*)_pi32avx_1);
+  imm2_2 = _mm_add_epi32(imm2_2, *(v4si*)_pi32avx_1);
+
+  imm2_1 = _mm_and_si128(imm2_1, *(v4si*)_pi32avx_inv1);
+  imm2_2 = _mm_and_si128(imm2_2, *(v4si*)_pi32avx_inv1);
+
+  COPY_XMM_TO_IMM(imm2_1,imm2_2,imm2);
+  y = _mm256_cvtepi32_ps(imm2);
+
+  imm0_1 = _mm_and_si128(imm2_1, *(v4si*)_pi32avx_4);
+  imm0_2 = _mm_and_si128(imm2_2, *(v4si*)_pi32avx_4);
+
+  imm0_1 = _mm_slli_epi32(imm0_1, 29);
+  imm0_2 = _mm_slli_epi32(imm0_2, 29);
+
+  COPY_XMM_TO_IMM(imm0_1, imm0_2, imm0);
+
+  imm2_1 = _mm_and_si128(imm2_1, *(v4si*)_pi32avx_2);
+  imm2_2 = _mm_and_si128(imm2_2, *(v4si*)_pi32avx_2);
+
+  imm2_1 = _mm_cmpeq_epi32(imm2_1, _mm_setzero_si128());
+  imm2_2 = _mm_cmpeq_epi32(imm2_2, _mm_setzero_si128());
+
+  COPY_XMM_TO_IMM(imm2_1, imm2_2, imm2);
+#endif
+ 
+  v8sf swap_sign_bit = _mm256_castsi256_ps(imm0);
+  v8sf poly_mask = _mm256_castsi256_ps(imm2);
+  sign_bit = _mm256_xor_ps(sign_bit, swap_sign_bit);
+
+  /* The magic pass: "Extended precision modular arithmetic" 
+     x = ((x - y * DP1) - y * DP2) - y * DP3; */
+  xmm1 = *(v8sf*)_ps256_minus_cephes_DP1;
+  xmm2 = *(v8sf*)_ps256_minus_cephes_DP2;
+  xmm3 = *(v8sf*)_ps256_minus_cephes_DP3;
+  xmm1 = _mm256_mul_ps(y, xmm1);
+  xmm2 = _mm256_mul_ps(y, xmm2);
+  xmm3 = _mm256_mul_ps(y, xmm3);
+  x = _mm256_add_ps(x, xmm1);
+  x = _mm256_add_ps(x, xmm2);
+  x = _mm256_add_ps(x, xmm3);
+
+  /* Evaluate the first polynom  (0 <= x <= Pi/4) */
+  y = *(v8sf*)_ps256_coscof_p0;
+  v8sf z = _mm256_mul_ps(x,x);
+
+  y = _mm256_mul_ps(y, z);
+  y = _mm256_add_ps(y, *(v8sf*)_ps256_coscof_p1);
+  y = _mm256_mul_ps(y, z);
+  y = _mm256_add_ps(y, *(v8sf*)_ps256_coscof_p2);
+  y = _mm256_mul_ps(y, z);
+  y = _mm256_mul_ps(y, z);
+  v8sf tmp = _mm256_mul_ps(z, *(v8sf*)_ps256_0p5);
+  y = _mm256_sub_ps(y, tmp);
+  y = _mm256_add_ps(y, *(v8sf*)_ps256_1);
+  
+  /* Evaluate the second polynom  (Pi/4 <= x <= 0) */
+
+  v8sf y2 = *(v8sf*)_ps256_sincof_p0;
+  y2 = _mm256_mul_ps(y2, z);
+  y2 = _mm256_add_ps(y2, *(v8sf*)_ps256_sincof_p1);
+  y2 = _mm256_mul_ps(y2, z);
+  y2 = _mm256_add_ps(y2, *(v8sf*)_ps256_sincof_p2);
+  y2 = _mm256_mul_ps(y2, z);
+  y2 = _mm256_mul_ps(y2, x);
+  y2 = _mm256_add_ps(y2, x);
+
+  /* select the correct result from the two polynoms */  
+  xmm3 = poly_mask;
+  y2 = _mm256_and_ps(xmm3, y2); //, xmm3);
+  y = _mm256_andnot_ps(xmm3, y);
+  y = _mm256_add_ps(y,y2);
+  /* update the sign */
+  y = _mm256_xor_ps(y, sign_bit);
+
+  return y;
+}
+
+/* almost the same as sin_ps */
+v8sf cos256_ps(v8sf x) { // any x
+  v8sf xmm1, xmm2 = _mm256_setzero_ps(), xmm3, y;
+  v8si imm0, imm2;
+
+#ifndef __AVX2__
+  v4si imm0_1, imm0_2;
+  v4si imm2_1, imm2_2;
+#endif
+
+  /* take the absolute value */
+  x = _mm256_and_ps(x, *(v8sf*)_ps256_inv_sign_mask);
+  
+  /* scale by 4/Pi */
+  y = _mm256_mul_ps(x, *(v8sf*)_ps256_cephes_FOPI);
+  
+#ifdef __AVX2__
+  /* store the integer part of y in mm0 */
+  imm2 = _mm256_cvttps_epi32(y);
+  /* j=(j+1) & (~1) (see the cephes sources) */
+  imm2 = _wrap_mm256_add_epi32(imm2, *(v8si*)_pi32_256_1);
+  imm2 = _mm256_and_si256(imm2, *(v8si*)_pi32_256_inv1);
+  y = _mm256_cvtepi32_ps(imm2);
+  imm2 = _wrap_mm256_sub_epi32(imm2, *(v8si*)_pi32_256_2);
+  
+  /* get the swap sign flag */
+  imm0 = _mm256_andnot_si256(imm2, *(v8si*)_pi32_256_4);
+  imm0 = _wrap_mm256_slli_epi32(imm0, 29);
+  /* get the polynom selection mask */
+  imm2 = _mm256_and_si256(imm2, *(v8si*)_pi32_256_2);
+  imm2 = _mm256_cmpeq_epi32(imm2, *(v8si*)_pi32_256_0);
+#else
+
+  /* we use SSE2 routines to perform the integer ops */
+  COPY_IMM_TO_XMM(_mm256_cvttps_epi32(y),imm2_1,imm2_2);
+
+  imm2_1 = _mm_add_epi32(imm2_1, *(v4si*)_pi32avx_1);
+  imm2_2 = _mm_add_epi32(imm2_2, *(v4si*)_pi32avx_1);
+
+  imm2_1 = _mm_and_si128(imm2_1, *(v4si*)_pi32avx_inv1);
+  imm2_2 = _mm_and_si128(imm2_2, *(v4si*)_pi32avx_inv1);
+
+  COPY_XMM_TO_IMM(imm2_1,imm2_2,imm2);
+  y = _mm256_cvtepi32_ps(imm2);
+
+  imm2_1 = _mm_sub_epi32(imm2_1, *(v4si*)_pi32avx_2);
+  imm2_2 = _mm_sub_epi32(imm2_2, *(v4si*)_pi32avx_2);
+
+  imm0_1 = _mm_andnot_si128(imm2_1, *(v4si*)_pi32avx_4);
+  imm0_2 = _mm_andnot_si128(imm2_2, *(v4si*)_pi32avx_4);
+
+  imm0_1 = _mm_slli_epi32(imm0_1, 29);
+  imm0_2 = _mm_slli_epi32(imm0_2, 29);
+
+  COPY_XMM_TO_IMM(imm0_1, imm0_2, imm0);
+
+  imm2_1 = _mm_and_si128(imm2_1, *(v4si*)_pi32avx_2);
+  imm2_2 = _mm_and_si128(imm2_2, *(v4si*)_pi32avx_2);
+
+  imm2_1 = _mm_cmpeq_epi32(imm2_1, _mm_setzero_si128());
+  imm2_2 = _mm_cmpeq_epi32(imm2_2, _mm_setzero_si128());
+
+  COPY_XMM_TO_IMM(imm2_1, imm2_2, imm2);
+#endif
+
+  v8sf sign_bit = _mm256_castsi256_ps(imm0);
+  v8sf poly_mask = _mm256_castsi256_ps(imm2);
+
+  /* The magic pass: "Extended precision modular arithmetic" 
+     x = ((x - y * DP1) - y * DP2) - y * DP3; */
+  xmm1 = *(v8sf*)_ps256_minus_cephes_DP1;
+  xmm2 = *(v8sf*)_ps256_minus_cephes_DP2;
+  xmm3 = *(v8sf*)_ps256_minus_cephes_DP3;
+  xmm1 = _mm256_mul_ps(y, xmm1);
+  xmm2 = _mm256_mul_ps(y, xmm2);
+  xmm3 = _mm256_mul_ps(y, xmm3);
+  x = _mm256_add_ps(x, xmm1);
+  x = _mm256_add_ps(x, xmm2);
+  x = _mm256_add_ps(x, xmm3);
+  
+  /* Evaluate the first polynom  (0 <= x <= Pi/4) */
+  y = *(v8sf*)_ps256_coscof_p0;
+  v8sf z = _mm256_mul_ps(x,x);
+
+  y = _mm256_mul_ps(y, z);
+  y = _mm256_add_ps(y, *(v8sf*)_ps256_coscof_p1);
+  y = _mm256_mul_ps(y, z);
+  y = _mm256_add_ps(y, *(v8sf*)_ps256_coscof_p2);
+  y = _mm256_mul_ps(y, z);
+  y = _mm256_mul_ps(y, z);
+  v8sf tmp = _mm256_mul_ps(z, *(v8sf*)_ps256_0p5);
+  y = _mm256_sub_ps(y, tmp);
+  y = _mm256_add_ps(y, *(v8sf*)_ps256_1);
+  
+  /* Evaluate the second polynom  (Pi/4 <= x <= 0) */
+
+  v8sf y2 = *(v8sf*)_ps256_sincof_p0;
+  y2 = _mm256_mul_ps(y2, z);
+  y2 = _mm256_add_ps(y2, *(v8sf*)_ps256_sincof_p1);
+  y2 = _mm256_mul_ps(y2, z);
+  y2 = _mm256_add_ps(y2, *(v8sf*)_ps256_sincof_p2);
+  y2 = _mm256_mul_ps(y2, z);
+  y2 = _mm256_mul_ps(y2, x);
+  y2 = _mm256_add_ps(y2, x);
+
+  /* select the correct result from the two polynoms */  
+  xmm3 = poly_mask;
+  y2 = _mm256_and_ps(xmm3, y2); //, xmm3);
+  y = _mm256_andnot_ps(xmm3, y);
+  y = _mm256_add_ps(y,y2);
+  /* update the sign */
+  y = _mm256_xor_ps(y, sign_bit);
+
+  return y;
+}
+
+/* since sin256_ps and cos256_ps are almost identical, sincos256_ps could replace both of them..
+   it is almost as fast, and gives you a free cosine with your sine */
+void sincos256_ps(v8sf x, v8sf *s, v8sf *c) {
+
+  v8sf xmm1, xmm2, xmm3 = _mm256_setzero_ps(), sign_bit_sin, y;
+  v8si imm0, imm2, imm4;
+
+#ifndef __AVX2__
+  v4si imm0_1, imm0_2;
+  v4si imm2_1, imm2_2;
+  v4si imm4_1, imm4_2;
+#endif
+
+  sign_bit_sin = x;
+  /* take the absolute value */
+  x = _mm256_and_ps(x, *(v8sf*)_ps256_inv_sign_mask);
+  /* extract the sign bit (upper one) */
+  sign_bit_sin = _mm256_and_ps(sign_bit_sin, *(v8sf*)_ps256_sign_mask);
+  
+  /* scale by 4/Pi */
+  y = _mm256_mul_ps(x, *(v8sf*)_ps256_cephes_FOPI);
+
+#ifdef __AVX2__    
+  /* store the integer part of y in imm2 */
+  imm2 = _mm256_cvttps_epi32(y);
+
+  /* j=(j+1) & (~1) (see the cephes sources) */
+  imm2 = _wrap_mm256_add_epi32(imm2, *(v8si*)_pi32_256_1);
+  imm2 = _mm256_and_si256(imm2, *(v8si*)_pi32_256_inv1);
+
+  y = _mm256_cvtepi32_ps(imm2);
+  imm4 = imm2;
+
+  /* get the swap sign flag for the sine */
+  imm0 = _mm256_and_si256(imm2, *(v8si*)_pi32_256_4);
+  imm0 = _wrap_mm256_slli_epi32(imm0, 29);
+  //v8sf swap_sign_bit_sin = _mm256_castsi256_ps(imm0);
+
+  /* get the polynom selection mask for the sine*/
+  imm2 = _mm256_and_si256(imm2, *(v8si*)_pi32_256_2);
+  imm2 = _mm256_cmpeq_epi32(imm2, *(v8si*)_pi32_256_0);
+  //v8sf poly_mask = _mm256_castsi256_ps(imm2);
+#else
+  /* we use SSE2 routines to perform the integer ops */
+  COPY_IMM_TO_XMM(_mm256_cvttps_epi32(y),imm2_1,imm2_2);
+
+  imm2_1 = _mm_add_epi32(imm2_1, *(v4si*)_pi32avx_1);
+  imm2_2 = _mm_add_epi32(imm2_2, *(v4si*)_pi32avx_1);
+  
+  imm2_1 = _mm_and_si128(imm2_1, *(v4si*)_pi32avx_inv1);
+  imm2_2 = _mm_and_si128(imm2_2, *(v4si*)_pi32avx_inv1);
+
+  COPY_XMM_TO_IMM(imm2_1,imm2_2,imm2);
+  y = _mm256_cvtepi32_ps(imm2);
+
+  imm4_1 = imm2_1;
+  imm4_2 = imm2_2;
+
+  imm0_1 = _mm_and_si128(imm2_1, *(v4si*)_pi32avx_4);
+  imm0_2 = _mm_and_si128(imm2_2, *(v4si*)_pi32avx_4);
+  
+  imm0_1 = _mm_slli_epi32(imm0_1, 29);
+  imm0_2 = _mm_slli_epi32(imm0_2, 29);
+
+  COPY_XMM_TO_IMM(imm0_1, imm0_2, imm0);
+
+  imm2_1 = _mm_and_si128(imm2_1, *(v4si*)_pi32avx_2);
+  imm2_2 = _mm_and_si128(imm2_2, *(v4si*)_pi32avx_2);
+
+  imm2_1 = _mm_cmpeq_epi32(imm2_1, _mm_setzero_si128());
+  imm2_2 = _mm_cmpeq_epi32(imm2_2, _mm_setzero_si128());
+
+  COPY_XMM_TO_IMM(imm2_1, imm2_2, imm2);
+#endif
+  v8sf swap_sign_bit_sin = _mm256_castsi256_ps(imm0);
+  v8sf poly_mask = _mm256_castsi256_ps(imm2);
+
+  /* The magic pass: "Extended precision modular arithmetic" 
+     x = ((x - y * DP1) - y * DP2) - y * DP3; */
+  xmm1 = *(v8sf*)_ps256_minus_cephes_DP1;
+  xmm2 = *(v8sf*)_ps256_minus_cephes_DP2;
+  xmm3 = *(v8sf*)_ps256_minus_cephes_DP3;
+  xmm1 = _mm256_mul_ps(y, xmm1);
+  xmm2 = _mm256_mul_ps(y, xmm2);
+  xmm3 = _mm256_mul_ps(y, xmm3);
+  x = _mm256_add_ps(x, xmm1);
+  x = _mm256_add_ps(x, xmm2);
+  x = _mm256_add_ps(x, xmm3);
+
+#ifdef __AVX2__
+  imm4 = _wrap_mm256_sub_epi32(imm4, *(v8si*)_pi32_256_2);
+  imm4 = _mm256_andnot_si256(imm4, *(v8si*)_pi32_256_4);
+  imm4 = _wrap_mm256_slli_epi32(imm4, 29);
+#else
+  imm4_1 = _mm_sub_epi32(imm4_1, *(v4si*)_pi32avx_2);
+  imm4_2 = _mm_sub_epi32(imm4_2, *(v4si*)_pi32avx_2);
+
+  imm4_1 = _mm_andnot_si128(imm4_1, *(v4si*)_pi32avx_4);
+  imm4_2 = _mm_andnot_si128(imm4_2, *(v4si*)_pi32avx_4);
+  
+  imm4_1 = _mm_slli_epi32(imm4_1, 29);
+  imm4_2 = _mm_slli_epi32(imm4_2, 29);
+
+  COPY_XMM_TO_IMM(imm4_1, imm4_2, imm4);
+#endif
+
+  v8sf sign_bit_cos = _mm256_castsi256_ps(imm4);
+
+  sign_bit_sin = _mm256_xor_ps(sign_bit_sin, swap_sign_bit_sin);
+  
+  /* Evaluate the first polynom  (0 <= x <= Pi/4) */
+  v8sf z = _mm256_mul_ps(x,x);
+  y = *(v8sf*)_ps256_coscof_p0;
+
+  y = _mm256_mul_ps(y, z);
+  y = _mm256_add_ps(y, *(v8sf*)_ps256_coscof_p1);
+  y = _mm256_mul_ps(y, z);
+  y = _mm256_add_ps(y, *(v8sf*)_ps256_coscof_p2);
+  y = _mm256_mul_ps(y, z);
+  y = _mm256_mul_ps(y, z);
+  v8sf tmp = _mm256_mul_ps(z, *(v8sf*)_ps256_0p5);
+  y = _mm256_sub_ps(y, tmp);
+  y = _mm256_add_ps(y, *(v8sf*)_ps256_1);
+  
+  /* Evaluate the second polynom  (Pi/4 <= x <= 0) */
+
+  v8sf y2 = *(v8sf*)_ps256_sincof_p0;
+  y2 = _mm256_mul_ps(y2, z);
+  y2 = _mm256_add_ps(y2, *(v8sf*)_ps256_sincof_p1);
+  y2 = _mm256_mul_ps(y2, z);
+  y2 = _mm256_add_ps(y2, *(v8sf*)_ps256_sincof_p2);
+  y2 = _mm256_mul_ps(y2, z);
+  y2 = _mm256_mul_ps(y2, x);
+  y2 = _mm256_add_ps(y2, x);
+
+  /* select the correct result from the two polynoms */  
+  xmm3 = poly_mask;
+  v8sf ysin2 = _mm256_and_ps(xmm3, y2);
+  v8sf ysin1 = _mm256_andnot_ps(xmm3, y);
+  y2 = _mm256_sub_ps(y2,ysin2);
+  y = _mm256_sub_ps(y, ysin1);
+
+  xmm1 = _mm256_add_ps(ysin1,ysin2);
+  xmm2 = _mm256_add_ps(y,y2);
+ 
+  /* update the sign */
+  *s = _mm256_xor_ps(xmm1, sign_bit_sin);
+  *c = _mm256_xor_ps(xmm2, sign_bit_cos);
+}
+
+#endif
+
+
+#endif
+#endif
+#elif defined(__SSE__)
+// original file: ../external/MIPP/src/math/sse_mathfun.h
+
+/* SIMD (SSE1+MMX or SSE2) implementation of sin, cos, exp and log
+
+   Inspired by Intel Approximate Math library, and based on the
+   corresponding algorithms of the cephes math library
+
+   The default is to use the SSE1 version. If you define USE_SSE2 the
+   the SSE2 intrinsics will be used in place of the MMX intrinsics. Do
+   not expect any significant performance improvement with SSE2.
+*/
+
+/* Copyright (C) 2007  Julien Pommier
+
+  This software is provided 'as-is', without any express or implied
+  warranty.  In no event will the authors be held liable for any damages
+  arising from the use of this software.
+
+  Permission is granted to anyone to use this software for any purpose,
+  including commercial applications, and to alter it and redistribute it
+  freely, subject to the following restrictions:
+
+  1. The origin of this software must not be misrepresented; you must not
+     claim that you wrote the original software. If you use this software
+     in a product, an acknowledgment in the product documentation would be
+     appreciated but is not required.
+  2. Altered source versions must be plainly marked as such, and must not be
+     misrepresented as being the original software.
+  3. This notice may not be removed or altered from any source distribution.
+
+  (this is the zlib license)
+*/
+
+#ifdef __SSE__
+#ifndef SSE_MATHFUN_H_
+#define SSE_MATHFUN_H_
+
+#include <xmmintrin.h>
+
+typedef __m128 v4sf;  // vector of 4 float (sse1)
+
+// prototypes
+inline v4sf log_ps(v4sf x);
+inline v4sf exp_ps(v4sf x);
+inline v4sf sin_ps(v4sf x);
+inline v4sf cos_ps(v4sf x);
+inline void sincos_ps(v4sf x, v4sf *s, v4sf *c);
+
+// original file: ../external/MIPP/src/math/sse_mathfun.hxx
+
+/* SIMD (SSE1+MMX or SSE2) implementation of sin, cos, exp and log
+
+   Inspired by Intel Approximate Math library, and based on the
+   corresponding algorithms of the cephes math library
+
+   Do not expect any significant performance improvement with SSE2.
+*/
+
+/* Copyright (C) 2007  Julien Pommier
+
+  This software is provided 'as-is', without any express or implied
+  warranty.  In no event will the authors be held liable for any damages
+  arising from the use of this software.
+
+  Permission is granted to anyone to use this software for any purpose,
+  including commercial applications, and to alter it and redistribute it
+  freely, subject to the following restrictions:
+
+  1. The origin of this software must not be misrepresented; you must not
+     claim that you wrote the original software. If you use this software
+     in a product, an acknowledgment in the product documentation would be
+     appreciated but is not required.
+  2. Altered source versions must be plainly marked as such, and must not be
+     misrepresented as being the original software.
+  3. This notice may not be removed or altered from any source distribution.
+
+  (this is the zlib license)
+*/
+#ifdef __SSE__
+// #include "sse_mathfun.h"
+
+/* yes I know, the top of this file is quite ugly */
+#ifdef __SSE2__
+#include <emmintrin.h>
+typedef __m128i v4si; // vector of 4 int (sse2)
+#else
+typedef __m64 v2si;   // vector of 2 int (mmx)
+#endif
+
+#ifdef _MSC_VER /* visual c++ */
+# define ALIGN16_BEG __declspec(align(16))
+# define ALIGN16_END 
+#else /* gcc or icc */
+# define ALIGN16_BEG
+# define ALIGN16_END __attribute__((aligned(16)))
+#endif
+
+/* declare some SSE constants -- why can't I figure a better way to do that? */
+#define _PS_CONST(Name, Val)                                            \
+  static const ALIGN16_BEG float _ps_##Name[4] ALIGN16_END = { Val, Val, Val, Val }
+#define _PI32_CONST(Name, Val)                                            \
+  static const ALIGN16_BEG int _pi32_##Name[4] ALIGN16_END = { Val, Val, Val, Val }
+#define _PS_CONST_TYPE(Name, Type, Val)                                 \
+  static const ALIGN16_BEG Type _ps_##Name[4] ALIGN16_END = { Val, Val, Val, Val }
+
+_PS_CONST(1  , 1.0f);
+_PS_CONST(0p5, 0.5f);
+/* the smallest non denormalized float number */
+_PS_CONST_TYPE(min_norm_pos, int, 0x00800000);
+//_PS_CONST_TYPE(mant_mask, int, 0x7f800000);
+_PS_CONST_TYPE(inv_mant_mask, int, ~0x7f800000);
+
+_PS_CONST_TYPE(sign_mask, int, (int)0x80000000);
+_PS_CONST_TYPE(inv_sign_mask, int, ~0x80000000);
+
+_PI32_CONST(1, 1);
+_PI32_CONST(inv1, ~1);
+_PI32_CONST(2, 2);
+_PI32_CONST(4, 4);
+_PI32_CONST(0x7f, 0x7f);
+
+_PS_CONST(cephes_SQRTHF, 0.707106781186547524f);
+_PS_CONST(cephes_log_p0, 7.0376836292E-2f);
+_PS_CONST(cephes_log_p1, - 1.1514610310E-1f);
+_PS_CONST(cephes_log_p2, 1.1676998740E-1f);
+_PS_CONST(cephes_log_p3, - 1.2420140846E-1f);
+_PS_CONST(cephes_log_p4, + 1.4249322787E-1f);
+_PS_CONST(cephes_log_p5, - 1.6668057665E-1f);
+_PS_CONST(cephes_log_p6, + 2.0000714765E-1f);
+_PS_CONST(cephes_log_p7, - 2.4999993993E-1f);
+_PS_CONST(cephes_log_p8, + 3.3333331174E-1f);
+_PS_CONST(cephes_log_q1, -2.12194440e-4f);
+_PS_CONST(cephes_log_q2, 0.693359375f);
+
+#ifndef __SSE2__
+typedef union xmm_mm_union {
+  __m128 xmm;
+  __m64 mm[2];
+} xmm_mm_union;
+
+#define COPY_XMM_TO_MM(xmm_, mm0_, mm1_) {          \
+    xmm_mm_union u; u.xmm = xmm_;                   \
+    mm0_ = u.mm[0];                                 \
+    mm1_ = u.mm[1];                                 \
+}
+
+#define COPY_MM_TO_XMM(mm0_, mm1_, xmm_) {                         \
+    xmm_mm_union u; u.mm[0]=mm0_; u.mm[1]=mm1_; xmm_ = u.xmm;      \
+  }
+
+#endif // __SSE2__
+
+/* natural logarithm computed for 4 simultaneous float 
+   return NaN for x <= 0
+*/
+v4sf log_ps(v4sf x) {
+#ifdef __SSE2__
+  v4si emm0;
+#else
+  v2si mm0, mm1;
+#endif
+  v4sf one = *(v4sf*)_ps_1;
+
+  v4sf invalid_mask = _mm_cmple_ps(x, _mm_setzero_ps());
+
+  x = _mm_max_ps(x, *(v4sf*)_ps_min_norm_pos);  /* cut off denormalized stuff */
+
+#ifndef __SSE2__
+  /* part 1: x = frexpf(x, &e); */
+  COPY_XMM_TO_MM(x, mm0, mm1);
+  mm0 = _mm_srli_pi32(mm0, 23);
+  mm1 = _mm_srli_pi32(mm1, 23);
+#else
+  emm0 = _mm_srli_epi32(_mm_castps_si128(x), 23);
+#endif
+  /* keep only the fractional part */
+  x = _mm_and_ps(x, *(v4sf*)_ps_inv_mant_mask);
+  x = _mm_or_ps(x, *(v4sf*)_ps_0p5);
+
+#ifndef __SSE2__
+  /* now e=mm0:mm1 contain the really base-2 exponent */
+  mm0 = _mm_sub_pi32(mm0, *(v2si*)_pi32_0x7f);
+  mm1 = _mm_sub_pi32(mm1, *(v2si*)_pi32_0x7f);
+  v4sf e = _mm_cvtpi32x2_ps(mm0, mm1);
+  _mm_empty(); /* bye bye mmx */
+#else
+  emm0 = _mm_sub_epi32(emm0, *(v4si*)_pi32_0x7f);
+  v4sf e = _mm_cvtepi32_ps(emm0);
+#endif
+
+  e = _mm_add_ps(e, one);
+
+  /* part2: 
+     if( x < SQRTHF ) {
+       e -= 1;
+       x = x + x - 1.0;
+     } else { x = x - 1.0; }
+  */
+  v4sf mask = _mm_cmplt_ps(x, *(v4sf*)_ps_cephes_SQRTHF);
+  v4sf tmp = _mm_and_ps(x, mask);
+  x = _mm_sub_ps(x, one);
+  e = _mm_sub_ps(e, _mm_and_ps(one, mask));
+  x = _mm_add_ps(x, tmp);
+
+
+  v4sf z = _mm_mul_ps(x,x);
+
+  v4sf y = *(v4sf*)_ps_cephes_log_p0;
+  y = _mm_mul_ps(y, x);
+  y = _mm_add_ps(y, *(v4sf*)_ps_cephes_log_p1);
+  y = _mm_mul_ps(y, x);
+  y = _mm_add_ps(y, *(v4sf*)_ps_cephes_log_p2);
+  y = _mm_mul_ps(y, x);
+  y = _mm_add_ps(y, *(v4sf*)_ps_cephes_log_p3);
+  y = _mm_mul_ps(y, x);
+  y = _mm_add_ps(y, *(v4sf*)_ps_cephes_log_p4);
+  y = _mm_mul_ps(y, x);
+  y = _mm_add_ps(y, *(v4sf*)_ps_cephes_log_p5);
+  y = _mm_mul_ps(y, x);
+  y = _mm_add_ps(y, *(v4sf*)_ps_cephes_log_p6);
+  y = _mm_mul_ps(y, x);
+  y = _mm_add_ps(y, *(v4sf*)_ps_cephes_log_p7);
+  y = _mm_mul_ps(y, x);
+  y = _mm_add_ps(y, *(v4sf*)_ps_cephes_log_p8);
+  y = _mm_mul_ps(y, x);
+
+  y = _mm_mul_ps(y, z);
+  
+
+  tmp = _mm_mul_ps(e, *(v4sf*)_ps_cephes_log_q1);
+  y = _mm_add_ps(y, tmp);
+
+
+  tmp = _mm_mul_ps(z, *(v4sf*)_ps_0p5);
+  y = _mm_sub_ps(y, tmp);
+
+  tmp = _mm_mul_ps(e, *(v4sf*)_ps_cephes_log_q2);
+  x = _mm_add_ps(x, y);
+  x = _mm_add_ps(x, tmp);
+  x = _mm_or_ps(x, invalid_mask); // negative arg will be NAN
+  return x;
+}
+
+_PS_CONST(exp_hi,	88.3762626647949f);
+_PS_CONST(exp_lo,	-88.3762626647949f);
+
+_PS_CONST(cephes_LOG2EF, 1.44269504088896341f);
+_PS_CONST(cephes_exp_C1, 0.693359375f);
+_PS_CONST(cephes_exp_C2, -2.12194440e-4f);
+
+_PS_CONST(cephes_exp_p0, 1.9875691500E-4f);
+_PS_CONST(cephes_exp_p1, 1.3981999507E-3f);
+_PS_CONST(cephes_exp_p2, 8.3334519073E-3f);
+_PS_CONST(cephes_exp_p3, 4.1665795894E-2f);
+_PS_CONST(cephes_exp_p4, 1.6666665459E-1f);
+_PS_CONST(cephes_exp_p5, 5.0000001201E-1f);
+
+v4sf exp_ps(v4sf x) {
+  v4sf tmp = _mm_setzero_ps(), fx;
+#ifdef __SSE2__
+  v4si emm0;
+#else
+  v2si mm0, mm1;
+#endif
+  v4sf one = *(v4sf*)_ps_1;
+
+  x = _mm_min_ps(x, *(v4sf*)_ps_exp_hi);
+  x = _mm_max_ps(x, *(v4sf*)_ps_exp_lo);
+
+  /* express exp(x) as exp(g + n*log(2)) */
+  fx = _mm_mul_ps(x, *(v4sf*)_ps_cephes_LOG2EF);
+  fx = _mm_add_ps(fx, *(v4sf*)_ps_0p5);
+
+  /* how to perform a floorf with SSE: just below */
+#ifndef __SSE2__
+  /* step 1 : cast to int */
+  tmp = _mm_movehl_ps(tmp, fx);
+  mm0 = _mm_cvttps_pi32(fx);
+  mm1 = _mm_cvttps_pi32(tmp);
+  /* step 2 : cast back to float */
+  tmp = _mm_cvtpi32x2_ps(mm0, mm1);
+#else
+  emm0 = _mm_cvttps_epi32(fx);
+  tmp  = _mm_cvtepi32_ps(emm0);
+#endif
+  /* if greater, substract 1 */
+  v4sf mask = _mm_cmpgt_ps(tmp, fx);    
+  mask = _mm_and_ps(mask, one);
+  fx = _mm_sub_ps(tmp, mask);
+
+  tmp = _mm_mul_ps(fx, *(v4sf*)_ps_cephes_exp_C1);
+  v4sf z = _mm_mul_ps(fx, *(v4sf*)_ps_cephes_exp_C2);
+  x = _mm_sub_ps(x, tmp);
+  x = _mm_sub_ps(x, z);
+
+  z = _mm_mul_ps(x,x);
+  
+  v4sf y = *(v4sf*)_ps_cephes_exp_p0;
+  y = _mm_mul_ps(y, x);
+  y = _mm_add_ps(y, *(v4sf*)_ps_cephes_exp_p1);
+  y = _mm_mul_ps(y, x);
+  y = _mm_add_ps(y, *(v4sf*)_ps_cephes_exp_p2);
+  y = _mm_mul_ps(y, x);
+  y = _mm_add_ps(y, *(v4sf*)_ps_cephes_exp_p3);
+  y = _mm_mul_ps(y, x);
+  y = _mm_add_ps(y, *(v4sf*)_ps_cephes_exp_p4);
+  y = _mm_mul_ps(y, x);
+  y = _mm_add_ps(y, *(v4sf*)_ps_cephes_exp_p5);
+  y = _mm_mul_ps(y, z);
+  y = _mm_add_ps(y, x);
+  y = _mm_add_ps(y, one);
+
+  /* build 2^n */
+#ifndef __SSE2__
+  z = _mm_movehl_ps(z, fx);
+  mm0 = _mm_cvttps_pi32(fx);
+  mm1 = _mm_cvttps_pi32(z);
+  mm0 = _mm_add_pi32(mm0, *(v2si*)_pi32_0x7f);
+  mm1 = _mm_add_pi32(mm1, *(v2si*)_pi32_0x7f);
+  mm0 = _mm_slli_pi32(mm0, 23); 
+  mm1 = _mm_slli_pi32(mm1, 23);
+  
+  v4sf pow2n; 
+  COPY_MM_TO_XMM(mm0, mm1, pow2n);
+  _mm_empty();
+#else
+  emm0 = _mm_cvttps_epi32(fx);
+  emm0 = _mm_add_epi32(emm0, *(v4si*)_pi32_0x7f);
+  emm0 = _mm_slli_epi32(emm0, 23);
+  v4sf pow2n = _mm_castsi128_ps(emm0);
+#endif
+  y = _mm_mul_ps(y, pow2n);
+  return y;
+}
+
+_PS_CONST(minus_cephes_DP1, -0.78515625f);
+_PS_CONST(minus_cephes_DP2, -2.4187564849853515625e-4f);
+_PS_CONST(minus_cephes_DP3, -3.77489497744594108e-8f);
+_PS_CONST(sincof_p0, -1.9515295891E-4f);
+_PS_CONST(sincof_p1,  8.3321608736E-3f);
+_PS_CONST(sincof_p2, -1.6666654611E-1f);
+_PS_CONST(coscof_p0,  2.443315711809948E-005f);
+_PS_CONST(coscof_p1, -1.388731625493765E-003f);
+_PS_CONST(coscof_p2,  4.166664568298827E-002f);
+_PS_CONST(cephes_FOPI, 1.27323954473516f); // 4 / M_PI
+
+
+/* evaluation of 4 sines at onces, using only SSE1+MMX intrinsics so
+   it runs also on old athlons XPs and the pentium III of your grand
+   mother.
+
+   The code is the exact rewriting of the cephes sinf function.
+   Precision is excellent as long as x < 8192 (I did not bother to
+   take into account the special handling they have for greater values
+   -- it does not return garbage for arguments over 8192, though, but
+   the extra precision is missing).
+
+   Note that it is such that sinf((float)M_PI) = 8.74e-8, which is the
+   surprising but correct result.
+
+   Performance is also surprisingly good, 1.33 times faster than the
+   macos vsinf SSE2 function, and 1.5 times faster than the
+   __vrs4_sinf of amd's ACML (which is only available in 64 bits). Not
+   too bad for an SSE1 function (with no special tuning) !
+   However the latter libraries probably have a much better handling of NaN,
+   Inf, denormalized and other special arguments..
+
+   On my core 1 duo, the execution of this function takes approximately 95 cycles.
+
+   From what I have observed on the experiments with Intel AMath lib, switching to an
+   SSE2 version would improve the perf by only 10%.
+
+   Since it is based on SSE intrinsics, it has to be compiled at -O2 to
+   deliver full speed.
+*/
+v4sf sin_ps(v4sf x) { // any x
+  v4sf xmm1, xmm2 = _mm_setzero_ps(), xmm3, sign_bit, y;
+
+#ifdef __SSE2__
+  v4si emm0, emm2;
+#else
+  v2si mm0, mm1, mm2, mm3;
+#endif
+  sign_bit = x;
+  /* take the absolute value */
+  x = _mm_and_ps(x, *(v4sf*)_ps_inv_sign_mask);
+  /* extract the sign bit (upper one) */
+  sign_bit = _mm_and_ps(sign_bit, *(v4sf*)_ps_sign_mask);
+  
+  /* scale by 4/Pi */
+  y = _mm_mul_ps(x, *(v4sf*)_ps_cephes_FOPI);
+
+#ifdef __SSE2__
+  /* store the integer part of y in mm0 */
+  emm2 = _mm_cvttps_epi32(y);
+  /* j=(j+1) & (~1) (see the cephes sources) */
+  emm2 = _mm_add_epi32(emm2, *(v4si*)_pi32_1);
+  emm2 = _mm_and_si128(emm2, *(v4si*)_pi32_inv1);
+  y = _mm_cvtepi32_ps(emm2);
+
+  /* get the swap sign flag */
+  emm0 = _mm_and_si128(emm2, *(v4si*)_pi32_4);
+  emm0 = _mm_slli_epi32(emm0, 29);
+  /* get the polynom selection mask 
+     there is one polynom for 0 <= x <= Pi/4
+     and another one for Pi/4<x<=Pi/2
+
+     Both branches will be computed.
+  */
+  emm2 = _mm_and_si128(emm2, *(v4si*)_pi32_2);
+  emm2 = _mm_cmpeq_epi32(emm2, _mm_setzero_si128());
+  
+  v4sf swap_sign_bit = _mm_castsi128_ps(emm0);
+  v4sf poly_mask = _mm_castsi128_ps(emm2);
+  sign_bit = _mm_xor_ps(sign_bit, swap_sign_bit);
+  
+#else
+  /* store the integer part of y in mm0:mm1 */
+  xmm2 = _mm_movehl_ps(xmm2, y);
+  mm2 = _mm_cvttps_pi32(y);
+  mm3 = _mm_cvttps_pi32(xmm2);
+  /* j=(j+1) & (~1) (see the cephes sources) */
+  mm2 = _mm_add_pi32(mm2, *(v2si*)_pi32_1);
+  mm3 = _mm_add_pi32(mm3, *(v2si*)_pi32_1);
+  mm2 = _mm_and_si64(mm2, *(v2si*)_pi32_inv1);
+  mm3 = _mm_and_si64(mm3, *(v2si*)_pi32_inv1);
+  y = _mm_cvtpi32x2_ps(mm2, mm3);
+  /* get the swap sign flag */
+  mm0 = _mm_and_si64(mm2, *(v2si*)_pi32_4);
+  mm1 = _mm_and_si64(mm3, *(v2si*)_pi32_4);
+  mm0 = _mm_slli_pi32(mm0, 29);
+  mm1 = _mm_slli_pi32(mm1, 29);
+  /* get the polynom selection mask */
+  mm2 = _mm_and_si64(mm2, *(v2si*)_pi32_2);
+  mm3 = _mm_and_si64(mm3, *(v2si*)_pi32_2);
+  mm2 = _mm_cmpeq_pi32(mm2, _mm_setzero_si64());
+  mm3 = _mm_cmpeq_pi32(mm3, _mm_setzero_si64());
+  v4sf swap_sign_bit, poly_mask;
+  COPY_MM_TO_XMM(mm0, mm1, swap_sign_bit);
+  COPY_MM_TO_XMM(mm2, mm3, poly_mask);
+  sign_bit = _mm_xor_ps(sign_bit, swap_sign_bit);
+  _mm_empty(); /* good-bye mmx */
+#endif
+  
+  /* The magic pass: "Extended precision modular arithmetic" 
+     x = ((x - y * DP1) - y * DP2) - y * DP3; */
+  xmm1 = *(v4sf*)_ps_minus_cephes_DP1;
+  xmm2 = *(v4sf*)_ps_minus_cephes_DP2;
+  xmm3 = *(v4sf*)_ps_minus_cephes_DP3;
+  xmm1 = _mm_mul_ps(y, xmm1);
+  xmm2 = _mm_mul_ps(y, xmm2);
+  xmm3 = _mm_mul_ps(y, xmm3);
+  x = _mm_add_ps(x, xmm1);
+  x = _mm_add_ps(x, xmm2);
+  x = _mm_add_ps(x, xmm3);
+
+  /* Evaluate the first polynom  (0 <= x <= Pi/4) */
+  y = *(v4sf*)_ps_coscof_p0;
+  v4sf z = _mm_mul_ps(x,x);
+
+  y = _mm_mul_ps(y, z);
+  y = _mm_add_ps(y, *(v4sf*)_ps_coscof_p1);
+  y = _mm_mul_ps(y, z);
+  y = _mm_add_ps(y, *(v4sf*)_ps_coscof_p2);
+  y = _mm_mul_ps(y, z);
+  y = _mm_mul_ps(y, z);
+  v4sf tmp = _mm_mul_ps(z, *(v4sf*)_ps_0p5);
+  y = _mm_sub_ps(y, tmp);
+  y = _mm_add_ps(y, *(v4sf*)_ps_1);
+  
+  /* Evaluate the second polynom  (Pi/4 <= x <= 0) */
+
+  v4sf y2 = *(v4sf*)_ps_sincof_p0;
+  y2 = _mm_mul_ps(y2, z);
+  y2 = _mm_add_ps(y2, *(v4sf*)_ps_sincof_p1);
+  y2 = _mm_mul_ps(y2, z);
+  y2 = _mm_add_ps(y2, *(v4sf*)_ps_sincof_p2);
+  y2 = _mm_mul_ps(y2, z);
+  y2 = _mm_mul_ps(y2, x);
+  y2 = _mm_add_ps(y2, x);
+
+  /* select the correct result from the two polynoms */  
+  xmm3 = poly_mask;
+  y2 = _mm_and_ps(xmm3, y2); //, xmm3);
+  y = _mm_andnot_ps(xmm3, y);
+  y = _mm_add_ps(y,y2);
+  /* update the sign */
+  y = _mm_xor_ps(y, sign_bit);
+  return y;
+}
+
+/* almost the same as sin_ps */
+v4sf cos_ps(v4sf x) { // any x
+  v4sf xmm1, xmm2 = _mm_setzero_ps(), xmm3, y;
+#ifdef __SSE2__
+  v4si emm0, emm2;
+#else
+  v2si mm0, mm1, mm2, mm3;
+#endif
+  /* take the absolute value */
+  x = _mm_and_ps(x, *(v4sf*)_ps_inv_sign_mask);
+  
+  /* scale by 4/Pi */
+  y = _mm_mul_ps(x, *(v4sf*)_ps_cephes_FOPI);
+  
+#ifdef __SSE2__
+  /* store the integer part of y in mm0 */
+  emm2 = _mm_cvttps_epi32(y);
+  /* j=(j+1) & (~1) (see the cephes sources) */
+  emm2 = _mm_add_epi32(emm2, *(v4si*)_pi32_1);
+  emm2 = _mm_and_si128(emm2, *(v4si*)_pi32_inv1);
+  y = _mm_cvtepi32_ps(emm2);
+
+  emm2 = _mm_sub_epi32(emm2, *(v4si*)_pi32_2);
+  
+  /* get the swap sign flag */
+  emm0 = _mm_andnot_si128(emm2, *(v4si*)_pi32_4);
+  emm0 = _mm_slli_epi32(emm0, 29);
+  /* get the polynom selection mask */
+  emm2 = _mm_and_si128(emm2, *(v4si*)_pi32_2);
+  emm2 = _mm_cmpeq_epi32(emm2, _mm_setzero_si128());
+  
+  v4sf sign_bit = _mm_castsi128_ps(emm0);
+  v4sf poly_mask = _mm_castsi128_ps(emm2);
+#else
+  /* store the integer part of y in mm0:mm1 */
+  xmm2 = _mm_movehl_ps(xmm2, y);
+  mm2 = _mm_cvttps_pi32(y);
+  mm3 = _mm_cvttps_pi32(xmm2);
+
+  /* j=(j+1) & (~1) (see the cephes sources) */
+  mm2 = _mm_add_pi32(mm2, *(v2si*)_pi32_1);
+  mm3 = _mm_add_pi32(mm3, *(v2si*)_pi32_1);
+  mm2 = _mm_and_si64(mm2, *(v2si*)_pi32_inv1);
+  mm3 = _mm_and_si64(mm3, *(v2si*)_pi32_inv1);
+
+  y = _mm_cvtpi32x2_ps(mm2, mm3);
+
+
+  mm2 = _mm_sub_pi32(mm2, *(v2si*)_pi32_2);
+  mm3 = _mm_sub_pi32(mm3, *(v2si*)_pi32_2);
+
+  /* get the swap sign flag in mm0:mm1 and the 
+     polynom selection mask in mm2:mm3 */
+
+  mm0 = _mm_andnot_si64(mm2, *(v2si*)_pi32_4);
+  mm1 = _mm_andnot_si64(mm3, *(v2si*)_pi32_4);
+  mm0 = _mm_slli_pi32(mm0, 29);
+  mm1 = _mm_slli_pi32(mm1, 29);
+
+  mm2 = _mm_and_si64(mm2, *(v2si*)_pi32_2);
+  mm3 = _mm_and_si64(mm3, *(v2si*)_pi32_2);
+
+  mm2 = _mm_cmpeq_pi32(mm2, _mm_setzero_si64());
+  mm3 = _mm_cmpeq_pi32(mm3, _mm_setzero_si64());
+
+  v4sf sign_bit, poly_mask;
+  COPY_MM_TO_XMM(mm0, mm1, sign_bit);
+  COPY_MM_TO_XMM(mm2, mm3, poly_mask);
+  _mm_empty(); /* good-bye mmx */
+#endif
+  /* The magic pass: "Extended precision modular arithmetic" 
+     x = ((x - y * DP1) - y * DP2) - y * DP3; */
+  xmm1 = *(v4sf*)_ps_minus_cephes_DP1;
+  xmm2 = *(v4sf*)_ps_minus_cephes_DP2;
+  xmm3 = *(v4sf*)_ps_minus_cephes_DP3;
+  xmm1 = _mm_mul_ps(y, xmm1);
+  xmm2 = _mm_mul_ps(y, xmm2);
+  xmm3 = _mm_mul_ps(y, xmm3);
+  x = _mm_add_ps(x, xmm1);
+  x = _mm_add_ps(x, xmm2);
+  x = _mm_add_ps(x, xmm3);
+  
+  /* Evaluate the first polynom  (0 <= x <= Pi/4) */
+  y = *(v4sf*)_ps_coscof_p0;
+  v4sf z = _mm_mul_ps(x,x);
+
+  y = _mm_mul_ps(y, z);
+  y = _mm_add_ps(y, *(v4sf*)_ps_coscof_p1);
+  y = _mm_mul_ps(y, z);
+  y = _mm_add_ps(y, *(v4sf*)_ps_coscof_p2);
+  y = _mm_mul_ps(y, z);
+  y = _mm_mul_ps(y, z);
+  v4sf tmp = _mm_mul_ps(z, *(v4sf*)_ps_0p5);
+  y = _mm_sub_ps(y, tmp);
+  y = _mm_add_ps(y, *(v4sf*)_ps_1);
+  
+  /* Evaluate the second polynom  (Pi/4 <= x <= 0) */
+
+  v4sf y2 = *(v4sf*)_ps_sincof_p0;
+  y2 = _mm_mul_ps(y2, z);
+  y2 = _mm_add_ps(y2, *(v4sf*)_ps_sincof_p1);
+  y2 = _mm_mul_ps(y2, z);
+  y2 = _mm_add_ps(y2, *(v4sf*)_ps_sincof_p2);
+  y2 = _mm_mul_ps(y2, z);
+  y2 = _mm_mul_ps(y2, x);
+  y2 = _mm_add_ps(y2, x);
+
+  /* select the correct result from the two polynoms */  
+  xmm3 = poly_mask;
+  y2 = _mm_and_ps(xmm3, y2); //, xmm3);
+  y = _mm_andnot_ps(xmm3, y);
+  y = _mm_add_ps(y,y2);
+  /* update the sign */
+  y = _mm_xor_ps(y, sign_bit);
+
+  return y;
+}
+
+/* since sin_ps and cos_ps are almost identical, sincos_ps could replace both of them..
+   it is almost as fast, and gives you a free cosine with your sine */
+void sincos_ps(v4sf x, v4sf *s, v4sf *c) {
+  v4sf xmm1, xmm2, xmm3 = _mm_setzero_ps(), sign_bit_sin, y;
+#ifdef __SSE2__
+  v4si emm0, emm2, emm4;
+#else
+  v2si mm0, mm1, mm2, mm3, mm4, mm5;
+#endif
+  sign_bit_sin = x;
+  /* take the absolute value */
+  x = _mm_and_ps(x, *(v4sf*)_ps_inv_sign_mask);
+  /* extract the sign bit (upper one) */
+  sign_bit_sin = _mm_and_ps(sign_bit_sin, *(v4sf*)_ps_sign_mask);
+  
+  /* scale by 4/Pi */
+  y = _mm_mul_ps(x, *(v4sf*)_ps_cephes_FOPI);
+    
+#ifdef __SSE2__
+  /* store the integer part of y in emm2 */
+  emm2 = _mm_cvttps_epi32(y);
+
+  /* j=(j+1) & (~1) (see the cephes sources) */
+  emm2 = _mm_add_epi32(emm2, *(v4si*)_pi32_1);
+  emm2 = _mm_and_si128(emm2, *(v4si*)_pi32_inv1);
+  y = _mm_cvtepi32_ps(emm2);
+
+  emm4 = emm2;
+
+  /* get the swap sign flag for the sine */
+  emm0 = _mm_and_si128(emm2, *(v4si*)_pi32_4);
+  emm0 = _mm_slli_epi32(emm0, 29);
+  v4sf swap_sign_bit_sin = _mm_castsi128_ps(emm0);
+
+  /* get the polynom selection mask for the sine*/
+  emm2 = _mm_and_si128(emm2, *(v4si*)_pi32_2);
+  emm2 = _mm_cmpeq_epi32(emm2, _mm_setzero_si128());
+  v4sf poly_mask = _mm_castsi128_ps(emm2);
+#else
+  /* store the integer part of y in mm2:mm3 */
+  xmm3 = _mm_movehl_ps(xmm3, y);
+  mm2 = _mm_cvttps_pi32(y);
+  mm3 = _mm_cvttps_pi32(xmm3);
+
+  /* j=(j+1) & (~1) (see the cephes sources) */
+  mm2 = _mm_add_pi32(mm2, *(v2si*)_pi32_1);
+  mm3 = _mm_add_pi32(mm3, *(v2si*)_pi32_1);
+  mm2 = _mm_and_si64(mm2, *(v2si*)_pi32_inv1);
+  mm3 = _mm_and_si64(mm3, *(v2si*)_pi32_inv1);
+
+  y = _mm_cvtpi32x2_ps(mm2, mm3);
+
+  mm4 = mm2;
+  mm5 = mm3;
+
+  /* get the swap sign flag for the sine */
+  mm0 = _mm_and_si64(mm2, *(v2si*)_pi32_4);
+  mm1 = _mm_and_si64(mm3, *(v2si*)_pi32_4);
+  mm0 = _mm_slli_pi32(mm0, 29);
+  mm1 = _mm_slli_pi32(mm1, 29);
+  v4sf swap_sign_bit_sin;
+  COPY_MM_TO_XMM(mm0, mm1, swap_sign_bit_sin);
+
+  /* get the polynom selection mask for the sine */
+
+  mm2 = _mm_and_si64(mm2, *(v2si*)_pi32_2);
+  mm3 = _mm_and_si64(mm3, *(v2si*)_pi32_2);
+  mm2 = _mm_cmpeq_pi32(mm2, _mm_setzero_si64());
+  mm3 = _mm_cmpeq_pi32(mm3, _mm_setzero_si64());
+  v4sf poly_mask;
+  COPY_MM_TO_XMM(mm2, mm3, poly_mask);
+#endif
+
+  /* The magic pass: "Extended precision modular arithmetic" 
+     x = ((x - y * DP1) - y * DP2) - y * DP3; */
+  xmm1 = *(v4sf*)_ps_minus_cephes_DP1;
+  xmm2 = *(v4sf*)_ps_minus_cephes_DP2;
+  xmm3 = *(v4sf*)_ps_minus_cephes_DP3;
+  xmm1 = _mm_mul_ps(y, xmm1);
+  xmm2 = _mm_mul_ps(y, xmm2);
+  xmm3 = _mm_mul_ps(y, xmm3);
+  x = _mm_add_ps(x, xmm1);
+  x = _mm_add_ps(x, xmm2);
+  x = _mm_add_ps(x, xmm3);
+
+#ifdef __SSE2__
+  emm4 = _mm_sub_epi32(emm4, *(v4si*)_pi32_2);
+  emm4 = _mm_andnot_si128(emm4, *(v4si*)_pi32_4);
+  emm4 = _mm_slli_epi32(emm4, 29);
+  v4sf sign_bit_cos = _mm_castsi128_ps(emm4);
+#else
+  /* get the sign flag for the cosine */
+  mm4 = _mm_sub_pi32(mm4, *(v2si*)_pi32_2);
+  mm5 = _mm_sub_pi32(mm5, *(v2si*)_pi32_2);
+  mm4 = _mm_andnot_si64(mm4, *(v2si*)_pi32_4);
+  mm5 = _mm_andnot_si64(mm5, *(v2si*)_pi32_4);
+  mm4 = _mm_slli_pi32(mm4, 29);
+  mm5 = _mm_slli_pi32(mm5, 29);
+  v4sf sign_bit_cos;
+  COPY_MM_TO_XMM(mm4, mm5, sign_bit_cos);
+  _mm_empty(); /* good-bye mmx */
+#endif
+
+  sign_bit_sin = _mm_xor_ps(sign_bit_sin, swap_sign_bit_sin);
+
+  
+  /* Evaluate the first polynom  (0 <= x <= Pi/4) */
+  v4sf z = _mm_mul_ps(x,x);
+  y = *(v4sf*)_ps_coscof_p0;
+
+  y = _mm_mul_ps(y, z);
+  y = _mm_add_ps(y, *(v4sf*)_ps_coscof_p1);
+  y = _mm_mul_ps(y, z);
+  y = _mm_add_ps(y, *(v4sf*)_ps_coscof_p2);
+  y = _mm_mul_ps(y, z);
+  y = _mm_mul_ps(y, z);
+  v4sf tmp = _mm_mul_ps(z, *(v4sf*)_ps_0p5);
+  y = _mm_sub_ps(y, tmp);
+  y = _mm_add_ps(y, *(v4sf*)_ps_1);
+  
+  /* Evaluate the second polynom  (Pi/4 <= x <= 0) */
+
+  v4sf y2 = *(v4sf*)_ps_sincof_p0;
+  y2 = _mm_mul_ps(y2, z);
+  y2 = _mm_add_ps(y2, *(v4sf*)_ps_sincof_p1);
+  y2 = _mm_mul_ps(y2, z);
+  y2 = _mm_add_ps(y2, *(v4sf*)_ps_sincof_p2);
+  y2 = _mm_mul_ps(y2, z);
+  y2 = _mm_mul_ps(y2, x);
+  y2 = _mm_add_ps(y2, x);
+
+  /* select the correct result from the two polynoms */  
+  xmm3 = poly_mask;
+  v4sf ysin2 = _mm_and_ps(xmm3, y2);
+  v4sf ysin1 = _mm_andnot_ps(xmm3, y);
+  y2 = _mm_sub_ps(y2,ysin2);
+  y = _mm_sub_ps(y, ysin1);
+
+  xmm1 = _mm_add_ps(ysin1,ysin2);
+  xmm2 = _mm_add_ps(y,y2);
+ 
+  /* update the sign */
+  *s = _mm_xor_ps(xmm1, sign_bit_sin);
+  *c = _mm_xor_ps(xmm2, sign_bit_cos);
+}
+
+#endif
+
+#endif
+#endif
+#endif
+#endif
+#include <immintrin.h>
+#ifdef __SSE__
+#include <xmmintrin.h>
+#endif
+#ifdef __SSE2__
+#include <emmintrin.h>
+#endif
+#ifdef __SSE3__
+#include <pmmintrin.h>
+#endif
+#ifdef __SSSE3__
+#include <tmmintrin.h>
+#endif
+#ifdef __SSE4_1__
+#include <smmintrin.h>
+#endif
+#else
+// original file: ../external/MIPP/src/mipp_scalar_op.h
+
+#ifndef MIPP_SCALAR_OP_H_
+#define MIPP_SCALAR_OP_H_
+
+namespace mipp_scop // My Intrinsics Plus Plus SCalar OPerations
+{
+	template <typename T>
+	inline T add(const T val1, const T val2);
+
+	template <typename T>
+	inline T sub(const T val1, const T val2);
+
+	template <typename T>
+	inline T andb(const T val1, const T val2);
+
+	template <typename T>
+	inline T xorb(const T val1, const T val2);
+
+	template <typename T>
+	inline T msb(const T val);
+
+	template <typename T>
+	inline T div2(const T val);
+
+	template <typename T>
+	inline T div4(const T val);
+
+	template <typename T>
+	inline T rshift(const T val, const int n);
+
+	template <typename T>
+	inline T lshift(const T val, const int n);
+}
+
+// original file: ../external/MIPP/src/mipp_scalar_op.hxx
+
+#include <limits>
+#include <cstdlib>
+#include <cstdint>
+#include <iostream>
+#include <algorithm>
+
+// #include "mipp_scalar_op.h"
+
+namespace mipp_scop
+{
+template <typename T> inline T       add(const T       val1, const T       val2) { return val1 + val2; }
+template <          > inline int16_t add(const int16_t val1, const int16_t val2) { return (int16_t)std::min(std::max((int32_t)((int32_t)val1 + (int32_t)val2),(int32_t)std::numeric_limits<int16_t>::min()),(int32_t)std::numeric_limits<int16_t>::max()); }
+template <          > inline int8_t  add(const int8_t  val1, const int8_t  val2) { return (int8_t )std::min(std::max((int16_t)((int16_t)val1 + (int16_t)val2),(int16_t)std::numeric_limits<int8_t >::min()),(int16_t)std::numeric_limits<int8_t >::max()); }
+
+template <typename T> inline T       sub(const T       val1, const T       val2) { return val1 - val2; }
+template <          > inline int16_t sub(const int16_t val1, const int16_t val2) { return (int16_t)std::min(std::max((int32_t)((int32_t)val1 - (int32_t)val2),(int32_t)std::numeric_limits<int16_t>::min()),(int32_t)std::numeric_limits<int16_t>::max()); }
+template <          > inline int8_t  sub(const int8_t  val1, const int8_t  val2) { return (int8_t )std::min(std::max((int16_t)((int16_t)val1 - (int16_t)val2),(int16_t)std::numeric_limits<int8_t >::min()),(int16_t)std::numeric_limits<int8_t >::max()); }
+
+template <typename T> inline T      andb(const T      val1, const T      val2) { return                                          val1  &                      val2;   }
+template <          > inline double andb(const double val1, const double val2) { return static_cast<double>(static_cast<int64_t>(val1) & static_cast<int64_t>(val2)); }
+template <          > inline float  andb(const float  val1, const float  val2) { return static_cast<float >(static_cast<int32_t>(val1) & static_cast<int32_t>(val2)); }
+
+template <typename T> inline T      xorb(const T      val1, const T      val2) { return                                          val1  ^                      val2;   }
+template <          > inline double xorb(const double val1, const double val2) { return static_cast<double>(static_cast<int64_t>(val1) ^ static_cast<int64_t>(val2)); }
+template <          > inline float  xorb(const float  val1, const float  val2) { return static_cast<float >(static_cast<int32_t>(val1) ^ static_cast<int32_t>(val2)); }
+
+template <typename T> inline T       msb(const T       val) { return (val >> (sizeof(T) * 8 -1)) << (sizeof(T) * 8 -1);              }
+template <          > inline double  msb(const double  val) { return static_cast<double >((static_cast<uint64_t>(val) >> 63) << 63); }
+template <          > inline float   msb(const float   val) { return static_cast<float  >((static_cast<uint32_t>(val) >> 31) << 31); }
+template <          > inline int64_t msb(const int64_t val) { return static_cast<int64_t>((static_cast<uint64_t>(val) >> 63) << 63); }
+template <          > inline int32_t msb(const int32_t val) { return static_cast<int32_t>((static_cast<uint32_t>(val) >> 31) << 31); }
+template <          > inline int16_t msb(const int16_t val) { return static_cast<int16_t>((static_cast<uint16_t>(val) >> 15) << 15); }
+template <          > inline int8_t  msb(const int8_t  val) { return static_cast<int8_t >((static_cast<uint8_t >(val) >>  7) <<  7); }
+
+template <typename T> inline T       div2(const T       val) { return val * (T)0.5; }
+template <          > inline int64_t div2(const int64_t val) { return val >> 1;     }
+template <          > inline int32_t div2(const int32_t val) { return val >> 1;     }
+template <          > inline int16_t div2(const int16_t val) { return val >> 1;     }
+template <          > inline int8_t  div2(const int8_t  val) { return val >> 1;     }
+
+template <typename T> inline T       div4(const T       val) { return val * (T)0.25; }
+template <          > inline int64_t div4(const int64_t val) { return val >> 2;      }
+template <          > inline int32_t div4(const int32_t val) { return val >> 2;      }
+template <          > inline int16_t div4(const int16_t val) { return val >> 2;      }
+template <          > inline int8_t  div4(const int8_t  val) { return val >> 2;      }
+
+template <typename T> inline T       lshift(const T       val, const int n) { return                                            val  << n;  }
+template <          > inline double  lshift(const double  val, const int n) { return static_cast<double >(static_cast<uint64_t>(val) << n); }
+template <          > inline float   lshift(const float   val, const int n) { return static_cast<float  >(static_cast<uint32_t>(val) << n); }
+template <          > inline int64_t lshift(const int64_t val, const int n) { return static_cast<int64_t>(static_cast<uint64_t>(val) << n); }
+template <          > inline int32_t lshift(const int32_t val, const int n) { return static_cast<int32_t>(static_cast<uint32_t>(val) << n); }
+template <          > inline int16_t lshift(const int16_t val, const int n) { return static_cast<int16_t>(static_cast<uint16_t>(val) << n); }
+template <          > inline int8_t  lshift(const int8_t  val, const int n) { return static_cast<int8_t >(static_cast<uint8_t >(val) << n); }
+
+template <typename T> inline T       rshift(const T       val, const int n) { return                                            val  >> n;  }
+template <          > inline double  rshift(const double  val, const int n) { return static_cast<double >(static_cast<uint64_t>(val) >> n); }
+template <          > inline float   rshift(const float   val, const int n) { return static_cast<float  >(static_cast<uint32_t>(val) >> n); }
+template <          > inline int64_t rshift(const int64_t val, const int n) { return static_cast<int64_t>(static_cast<uint64_t>(val) >> n); }
+template <          > inline int32_t rshift(const int32_t val, const int n) { return static_cast<int32_t>(static_cast<uint32_t>(val) >> n); }
+template <          > inline int16_t rshift(const int16_t val, const int n) { return static_cast<int16_t>(static_cast<uint16_t>(val) >> n); }
+template <          > inline int8_t  rshift(const int8_t  val, const int n) { return static_cast<int8_t >(static_cast<uint8_t >(val) >> n); }
+}
+
+
+#endif /* MIPP_SCALAR_OP_H_ */
+
+#endif
+#else
+// #include "mipp_scalar_op.h"
+#endif
+
+#include <unordered_map>
+#include <typeindex>
+#include <stdexcept>
+#include <typeinfo>
+#include <iostream>
+#include <iomanip>
+#include <cstddef>
+#include <cassert>
+#include <cstdint>
+#include <string>
+#include <vector>
+#include <cmath>
+#include <map>
+
+#if (defined(__GNUC__) || defined(__clang__) || defined(__llvm__)) && (defined(__linux__) || defined(__linux) || defined(__APPLE__))
+#include <execinfo.h>
+#include <unistd.h>
+#include <cstdlib>
+#endif
+
+#ifdef _MSC_VER
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#undef min
+#undef max
+#endif
+
+namespace mipp // My Intrinsics Plus Plus => mipp
+{
+// ------------------------------------------------------------------------------------------ myIntrinsics vector sizes
+// --------------------------------------------------------------------------------------------------------------------
+#ifndef MIPP_NO_INTRINSICS
+// ------------------------------------------------------------------------------------------------------- ARM NEON-128
+#if defined(__ARM_NEON__) || defined(__ARM_NEON)
+	const std::string InstructionType = "NEON";
+	#define MIPP_NEON
+
+	#define MIPP_REQUIRED_ALIGNMENT 16
+#ifdef __aarch64__
+	const std::string InstructionFullType = InstructionType + "v2";
+	const std::string InstructionVersion  = "2";
+	#define MIPP_NEONV2
+	#define MIPP_INSTR_VERSION 2
+	#define MIPP_64BIT
+#else
+	const std::string InstructionFullType = InstructionType + "v1";
+	const std::string InstructionVersion  = "1";
+	#define MIPP_NEONV1
+	#define MIPP_INSTR_VERSION 1
+#endif
+	#define MIPP_BW
+	#define MIPP_REGISTER_SIZE 128
+	#define MIPP_LANES 1
+
+	using msk   = uint32x4_t;
+	using reg   = float32x4_t;
+	using reg_2 = float32x2_t; // half a full register
+
+	template <int N>
+	inline reg toreg(const msk m) {
+		return (reg)m;
+	}
+
+	inline std::vector<std::string> InstructionExtensions()
+	{
+		std::vector<std::string> ext;
+#ifdef __ARM_FEATURE_FMA
+		ext.push_back("FMA");
+#endif
+		return ext;
+	}
+
+// -------------------------------------------------------------------------------------------------------- X86 AVX-512
+#elif defined(__MIC__) || defined(__KNCNI__) || defined(__AVX512__) || defined(__AVX512F__)
+	const std::string InstructionType = "AVX512";
+	#define MIPP_AVX512
+
+	#define MIPP_REQUIRED_ALIGNMENT 64
+	#define MIPP_64BIT
+
+#if defined(__MIC__) || defined(__KNCNI__)
+	#define MIPP_AVX512KNC
+#endif
+#ifdef __AVX512F__
+	#define MIPP_AVX512F
+#endif
+#ifdef __AVX512BW__
+	#define MIPP_AVX512BW
+	#define MIPP_BW
+#endif
+#ifdef __AVX512CD__
+	#define MIPP_AVX512CD
+#endif
+#ifdef __AVX512ER__
+	#define MIPP_AVX512ER
+#endif
+#ifdef __AVX512PF__
+	#define MIPP_AVX512PF
+#endif
+#ifdef __AVX512DQ__
+	#define MIPP_AVX512DQ
+#endif
+#ifdef __AVX512VL__
+	#define MIPP_AVX512VL
+#endif
+#ifdef __AVX512VBMI__
+	#define MIPP_AVX512VBMI
+#endif
+
+	const std::string InstructionFullType = InstructionType;
+	const std::string InstructionVersion  = "1";
+
+	#define MIPP_INSTR_VERSION 1
+	#define MIPP_REGISTER_SIZE 512
+	#define MIPP_LANES 4
+
+#ifdef __AVX512BW__
+	using msk   = __mmask64;
+#else
+	using msk   = __mmask16;
+#endif
+	using reg   = __m512;
+	using reg_2 = __m256; // half a full register
+
+	template <int N>
+	inline reg toreg(const msk m) {
+		throw std::runtime_error("mipp: Invalid mask size 'N' = " + std::to_string(N) + ".");
+	}
+
+	inline std::vector<std::string> InstructionExtensions()
+	{
+		std::vector<std::string> ext;
+#if defined(__MIC__) || defined(__KNCNI__)
+		ext.push_back("KNC");
+#endif
+#ifdef __AVX512F__
+		ext.push_back("F");
+#endif
+#ifdef __AVX512BW__
+		ext.push_back("BW");
+#endif
+#ifdef __AVX512CD__
+		ext.push_back("CD");
+#endif
+#ifdef __AVX512ER__
+		ext.push_back("ER");
+#endif
+#ifdef __AVX512PF__
+		ext.push_back("PF");
+#endif
+#ifdef __AVX512DQ__
+		ext.push_back("DQ");
+#endif
+#ifdef __AVX512VL__
+		ext.push_back("VL");
+#endif
+		return ext;
+	}
+
+// -------------------------------------------------------------------------------------------------------- X86 AVX-256
+#elif defined(__AVX__)
+	const std::string InstructionType = "AVX";
+	#define MIPP_AVX
+
+	#define MIPP_REQUIRED_ALIGNMENT 32
+	#define MIPP_64BIT
+#ifdef __AVX2__
+	const std::string InstructionFullType = InstructionType + "2";
+	const std::string InstructionVersion  = "2";
+	#define MIPP_AVX2
+	#define MIPP_INSTR_VERSION 2
+	#define MIPP_BW
+#else
+	const std::string InstructionFullType = InstructionType;
+	const std::string InstructionVersion  = "1";
+	#define MIPP_AVX1
+	#define MIPP_INSTR_VERSION 1
+#endif
+	#define MIPP_REGISTER_SIZE 256
+	#define MIPP_LANES 2
+
+	using msk   = __m256i;
+	using reg   = __m256;
+	using reg_2 = __m128; // half a full register
+
+	template <int N>
+	inline reg toreg(const msk m) {
+		return _mm256_castsi256_ps(m);
+	}
+
+	inline std::vector<std::string> InstructionExtensions()
+	{
+		std::vector<std::string> ext;
+#ifdef __FMA__
+		ext.push_back("FMA");
+#endif
+		return ext;
+	}
+
+// -------------------------------------------------------------------------------------------------------- X86 SSE-128
+#elif defined(__SSE__)
+	const std::string InstructionType = "SSE";
+	#define MIPP_SSE
+
+	#define MIPP_REQUIRED_ALIGNMENT 16
+#ifdef __SSE2__
+	#define MIPP_64BIT
+	#define MIPP_BW
+#endif
+#ifdef __SSE4_2__
+	const std::string InstructionFullType = InstructionType + "4.2";
+	const std::string InstructionVersion  = "4.2";
+	#define MIPP_SSE4_2
+	#define MIPP_INSTR_VERSION 42
+#elif defined(__SSE4_1__)
+	const std::string InstructionFullType = InstructionType + "4.1";
+	const std::string InstructionVersion  = "4.1";
+	#define MIPP_SSE4_1
+	#define MIPP_INSTR_VERSION 41
+#elif defined(__SSSE3__)
+	const std::string InstructionFullType = "SSSE3";
+	const std::string InstructionVersion  = "3";
+	#define MIPP_SSSE3
+	#define MIPP_INSTR_VERSION 31
+#elif defined(__SSE3__)
+	const std::string InstructionFullType = InstructionType + "3";
+	const std::string InstructionVersion  = "3";
+	#define MIPP_SSE3
+	#define MIPP_INSTR_VERSION 3
+#elif defined(__SSE2__)
+	const std::string InstructionFullType = InstructionType + "2";
+	const std::string InstructionVersion  = "2";
+	#define MIPP_SSE2
+	#define MIPP_INSTR_VERSION 2
+#else
+	const std::string InstructionFullType = InstructionType;
+	const std::string InstructionVersion  = "1";
+	#define MIPP_SSE1
+	#define MIPP_INSTR_VERSION 1
+#endif
+	#define MIPP_REGISTER_SIZE 128
+	#define MIPP_LANES 1
+
+	using msk   = __m128i;
+	using reg   = __m128;
+	using reg_2 = __m128d; // half a full register (information is in the lower part of the 128 bit register)
+
+	template <int N>
+	inline reg toreg(const msk m) {
+		return _mm_castsi128_ps(m);
+	}
+
+	inline std::vector<std::string> InstructionExtensions()
+	{
+		std::vector<std::string> ext;
+		return ext;
+	}
+
+// ------------------------------------------------------------------------------------------------- MIPP_NO_INTRINSICS
+#else
+	const std::string InstructionType = "NO";
+	#define MIPP_NO
+
+	const std::string InstructionFullType = "NO_INTRINSICS";
+	const std::string InstructionVersion  = "1";
+
+	#define MIPP_NO_INTRINSICS
+	#define MIPP_REQUIRED_ALIGNMENT 1
+#if UINTPTR_MAX == 0xffffffffffffffff
+#define MIPP_64BIT
+#endif
+	#define MIPP_BW
+	#define MIPP_INSTR_VERSION 1
+	#define MIPP_REGISTER_SIZE 0
+	#define MIPP_LANES 1
+
+	using msk   = uint8_t;
+	using reg   = uint32_t;
+	using reg_2 = uint16_t;
+
+	template <int N>
+	inline reg toreg(const msk m) {
+		return (reg)m;
+	}
+
+	inline std::vector<std::string> InstructionExtensions()
+	{
+		std::vector<std::string> ext;
+		return ext;
+	}
+#endif
+
+// ------------------------------------------------------------------------------------------------- MIPP_NO_INTRINSICS
+#else
+	const std::string InstructionType     = "NO";
+	#define MIPP_NO
+
+	const std::string InstructionFullType = "NO_INTRINSICS";
+	const std::string InstructionVersion  = "1";
+
+	#define MIPP_REQUIRED_ALIGNMENT 1
+#if UINTPTR_MAX == 0xffffffffffffffff
+#define MIPP_64BIT
+#endif
+	#define MIPP_BW
+	#define MIPP_INSTR_VERSION 1
+	#define MIPP_REGISTER_SIZE 0
+	#define MIPP_LANES 1
+
+	using msk   = uint8_t;
+	using reg   = uint32_t;
+	using reg_2 = uint16_t;
+
+	template <int N>
+	inline reg toreg(const msk m) {
+		return (reg)m;
+	}
+
+	inline std::vector<std::string> InstructionExtensions()
+	{
+		std::vector<std::string> ext;
+		return ext;
+	}
+#endif
+
+constexpr uint32_t RequiredAlignment = MIPP_REQUIRED_ALIGNMENT;
+constexpr uint32_t RegisterSizeBit   = MIPP_REGISTER_SIZE;
+constexpr uint32_t Lanes             = MIPP_LANES;
+
+#ifdef MIPP_64BIT
+const bool Support64Bit = true;
+#else
+const bool Support64Bit = false;
+#endif
+#ifdef MIPP_BW
+const bool SupportByteWord = true;
+#else
+const bool SupportByteWord = false;
+#endif
+
+typedef struct regx2 { reg val[2]; } regx2;
+
+template <typename T>
+constexpr int32_t nElmtsPerRegister()
+{
+#ifdef MIPP_NO_INTRINSICS
+	return 1;
+#else
+	return RegisterSizeBit / (8 * sizeof(T));
+#endif
+}
+
+template <typename T>
+constexpr int32_t nElReg()
+{
+#ifdef MIPP_NO_INTRINSICS
+	return 1;
+#else
+	return RegisterSizeBit / (8 * sizeof(T));
+#endif
+}
+
+template <typename T>
+constexpr int32_t N()
+{
+#ifndef MIPP_NO_INTRINSICS
+	return mipp::nElReg<T>();
+#else
+	return 1;
+#endif
+}
+
+template <typename T>
+inline bool isAligned(const T *ptr)
+{
+#ifdef MIPP_ALIGNED_LOADS
+	return (((uintptr_t)ptr) % (RegisterSizeBit / 8)) == 0;
+#else
+	return true;
+#endif
+}
+
+// --------------------------------------------------------------------------------------------------------------------
+// --------------------------------------------------------------------------------------------------- memory allocator
+template <typename T>
+T* malloc(uint32_t nData)
+{
+	T* ptr = nullptr;
+
+#if !defined(MIPP_NO_INTRINSICS) && (defined(__SSE2__) || defined(__AVX__) || defined(__MIC__) || defined(__KNCNI__) || defined(__AVX512__) || defined(__AVX512F__))
+	ptr = (T*)_mm_malloc(nData * sizeof(T), mipp::RequiredAlignment);
+#else
+	ptr = new T[nData];
+#endif
+
+	return ptr;
+}
+
+template <typename T>
+void free(T* ptr)
+{
+#if !defined(MIPP_NO_INTRINSICS) && (defined(__SSE2__) || defined(__AVX__) || defined(__MIC__) || defined(__KNCNI__) || defined(__AVX512__) || defined(__AVX512F__))
+	_mm_free(ptr);
+#else
+	delete[] ptr;
+#endif
+}
+
+template <class T>
+struct allocator
+{
+	typedef T value_type;
+	allocator() { }
+	template <class C> allocator(const allocator<C>& other) { }
+	T* allocate(std::size_t n) { return mipp::malloc<T>((int)n); }
+	void deallocate(T* p, std::size_t n) { mipp::free<T>(p); }
+};
+
+// returns true if and only if storage allocated from ma1 can be deallocated from ma2, and vice versa.
+// always returns true for stateless allocators.
+template <class C1, class C2>
+bool operator==(const allocator<C1>& ma1, const allocator<C2>& ma2) { return true; }
+
+template <class C1, class C2>
+bool operator!=(const allocator<C1>& ma1, const allocator<C2>& ma2) { return !(ma1 == ma2); }
+
+// override vector type
+template<class T> using vector = std::vector<T, allocator<T>>;
+
+// --------------------------------------------------------------------------------------------------- memory allocator
+// --------------------------------------------------------------------------------------------------------------------
+
+// -------------------------------------------------------------------------------------------- myIntrinsics prototypes
+// --------------------------------------------------------------------------------------------------------------------
+
+static inline std::string get_back_trace()
+{
+	std::string bt_str;
+#if defined(MIPP_ENABLE_BACKTRACE) && (defined(__GNUC__) || defined(__clang__) || defined(__llvm__)) && (defined(__linux__) || defined(__linux) || defined(__APPLE__))
+	const int bt_max_depth = 32;
+	void *bt_array[bt_max_depth];
+
+	size_t size = backtrace(bt_array, bt_max_depth);
+	char** bt_symbs = backtrace_symbols(bt_array, size);
+
+	bt_str += "\nBacktrace:";
+	for (size_t i = 0; i < size; i++)
+		bt_str += "\n" + std::string(bt_symbs[i]);
+	free(bt_symbs);
+#endif
+
+	return bt_str;
+}
+
+template <typename T>
+static inline void errorMessage(std::string instr)
+{
+	// define type names
+	std::unordered_map<std::type_index,std::string> type_names;
+	type_names[typeid(int8_t)  ] = "int8_t";
+	type_names[typeid(uint8_t) ] = "uint8_t";
+	type_names[typeid(int16_t) ] = "int16_t";
+	type_names[typeid(uint16_t)] = "uint16_t";
+	type_names[typeid(int32_t) ] = "int32_t";
+	type_names[typeid(uint32_t)] = "uint32_t";
+	type_names[typeid(int64_t) ] = "int64_t";
+	type_names[typeid(uint64_t)] = "uint64_t";
+	type_names[typeid(float)   ] = "float";
+	type_names[typeid(double)  ] = "double";
+
+	std::string message;
+	if (RegisterSizeBit == 0)
+		message = "mipp::" + instr + "<" + type_names[typeid(T)] + "> (" + InstructionFullType + ") is undefined!, "
+		          "try to add -mfpu=neon-vfpv4, -msse4.2, -mavx, -march=native... at the compile time.";
+	else
+		message = "mipp::" + instr + "<" + type_names[typeid(T)] + "> (" + InstructionFullType + ") is undefined!";
+
+	message += get_back_trace();
+
+	throw std::runtime_error(message);
+}
+
+template <int N>
+static inline void errorMessage(std::string instr)
+{
+	std::string message;
+	if (RegisterSizeBit == 0)
+		message = "mipp::" + instr + "<" + std::to_string(N) + "> (" + InstructionFullType + ") is undefined!, "
+		          "try to add -mfpu=neon-vfpv4, -msse4.2, -mavx, -march=native... at the compile time.";
+	else
+		message = "mipp::" + instr + "<" + std::to_string(N) + "> (" + InstructionFullType + ") is undefined!";
+
+	message += get_back_trace();
+
+	throw std::runtime_error(message);
+}
+
+template <typename T1, typename T2>
+static inline void errorMessage(std::string instr)
+{
+	// define type names
+	std::unordered_map<std::type_index,std::string> type_names;
+	type_names[typeid(int8_t  )] = "int8_t";
+	type_names[typeid(uint8_t )] = "uint8_t";
+	type_names[typeid(int16_t )] = "int16_t";
+	type_names[typeid(uint16_t)] = "uint16_t";
+	type_names[typeid(int32_t )] = "int32_t";
+	type_names[typeid(uint32_t)] = "uint32_t";
+	type_names[typeid(int64_t )] = "int64_t";
+	type_names[typeid(uint64_t)] = "uint64_t";
+	type_names[typeid(float   )] = "float";
+	type_names[typeid(double  )] = "double";
+
+	std::string message;
+	if (RegisterSizeBit == 0)
+		message = "mipp::" + instr + "<" + type_names[typeid(T1)] + "," + type_names[typeid(T2)] + "> (" +
+		          InstructionFullType + ") is undefined!, try to add -mfpu=neon, -msse4.2, -mavx, -march=native... "
+		          "at the compile time.";
+	else
+		message = "mipp::" + instr + "<" + type_names[typeid(T1)] + "," + type_names[typeid(T2)] + "> (" +
+		          InstructionFullType + ") is undefined!";
+
+	message += get_back_trace();
+
+	throw std::runtime_error(message);
+}
+
+template <typename T> inline reg   load         (const T*)                        { errorMessage<T>("load");          exit(-1); }
+template <typename T> inline reg   loadu        (const T*)                        { errorMessage<T>("loadu");         exit(-1); }
+template <typename T> inline void  store        (T*, const reg)                   { errorMessage<T>("store");         exit(-1); }
+template <typename T> inline void  storeu       (T*, const reg)                   { errorMessage<T>("storeu");        exit(-1); }
+template <typename T> inline reg   set          (const T[nElReg<T>()])            { errorMessage<T>("set");           exit(-1); }
+#ifdef _MSC_VER
+template <int      N> inline msk   set          (const bool[])                    { errorMessage<N>("set");           exit(-1); }
+#else
+template <int      N> inline msk   set          (const bool[N])                   { errorMessage<N>("set");           exit(-1); }
+#endif
+template <typename T> inline reg   set1         (const T)                         { errorMessage<T>("set1");          exit(-1); }
+template <int      N> inline msk   set1         (const bool)                      { errorMessage<N>("set1");          exit(-1); }
+template <typename T> inline reg   set0         ()                                { errorMessage<T>("set0");          exit(-1); }
+template <int      N> inline msk   set0         ()                                { errorMessage<N>("set0");          exit(-1); }
+template <typename T> inline reg_2 low          (const reg)                       { errorMessage<T>("low");           exit(-1); }
+template <typename T> inline reg_2 high         (const reg)                       { errorMessage<T>("high");          exit(-1); }
+#ifdef MIPP_NO_INTRINSICS // tricks to avoid compiling errors with Clang...
+template <typename T> inline reg   cmask        (const uint32_t[1])               { errorMessage<T>("cmask");         exit(-1); }
+template <typename T> inline reg   cmask2       (const uint32_t[1])               { errorMessage<T>("cmask2");        exit(-1); }
+template <typename T> inline reg   cmask4       (const uint32_t[1])               { errorMessage<T>("cmask4");        exit(-1); }
+#else
+template <typename T> inline reg   cmask        (const uint32_t[nElReg<T>()])     { errorMessage<T>("cmask");         exit(-1); }
+template <typename T> inline reg   cmask2       (const uint32_t[nElReg<T>()/2])   { errorMessage<T>("cmask2");        exit(-1); }
+template <typename T> inline reg   cmask4       (const uint32_t[nElReg<T>()/4])   { errorMessage<T>("cmask4");        exit(-1); }
+#endif
+template <typename T> inline reg   shuff        (const reg, const reg)            { errorMessage<T>("shuff");         exit(-1); }
+template <typename T> inline reg   shuff2       (const reg, const reg)            { errorMessage<T>("shuff2");        exit(-1); }
+template <typename T> inline reg   shuff4       (const reg, const reg)            { errorMessage<T>("shuff4");        exit(-1); }
+template <typename T> inline reg   interleavelo (const reg, const reg)            { errorMessage<T>("interleavelo");  exit(-1); }
+template <typename T> inline reg   interleavehi (const reg, const reg)            { errorMessage<T>("interleavehi");  exit(-1); }
+template <typename T> inline reg   interleavelo2(const reg, const reg)            { errorMessage<T>("interleavelo2"); exit(-1); }
+template <typename T> inline reg   interleavehi2(const reg, const reg)            { errorMessage<T>("interleavehi2"); exit(-1); }
+template <typename T> inline reg   interleavelo4(const reg, const reg)            { errorMessage<T>("interleavelo4"); exit(-1); }
+template <typename T> inline reg   interleavehi4(const reg, const reg)            { errorMessage<T>("interleavehi4"); exit(-1); }
+template <typename T> inline regx2 interleave   (const reg, const reg)            { errorMessage<T>("interleave");    exit(-1); }
+template <typename T> inline regx2 interleave2  (const reg, const reg)            { errorMessage<T>("interleave2");   exit(-1); }
+template <typename T> inline regx2 interleave4  (const reg, const reg)            { errorMessage<T>("interleave4");   exit(-1); }
+template <typename T> inline reg   interleave   (const reg)                       { errorMessage<T>("interleave");    exit(-1); }
+template <typename T> inline regx2 interleavex2 (const reg, const reg)            { errorMessage<T>("interleavex2");  exit(-1); }
+template <typename T> inline reg   interleavex4 (const reg)                       { errorMessage<T>("interleavex4");  exit(-1); }
+template <typename T> inline reg   interleavex16(const reg)                       { errorMessage<T>("interleavex16"); exit(-1); }
+template <typename T> inline void  transpose    (      reg[nElReg<T>()])          { errorMessage<T>("transpose");     exit(-1); }
+template <typename T> inline void  transpose8x8 (      reg[8])                    { errorMessage<T>("transpose8x8");  exit(-1); }
+template <typename T> inline void  transpose2   (      reg[nElReg<T>()/2])        { errorMessage<T>("transpose2");    exit(-1); }
+template <typename T> inline void  transpose28x8(      reg[8])                    { errorMessage<T>("transpose28x8"); exit(-1); }
+template <typename T> inline void  transpose4   (      reg[nElReg<T>()/2])        { errorMessage<T>("transpose4");    exit(-1); }
+template <typename T> inline void  transpose48x8(      reg[8])                    { errorMessage<T>("transpose48x8"); exit(-1); }
+template <typename T> inline reg   andb         (const reg, const reg)            { errorMessage<T>("andb");          exit(-1); }
+template <int      N> inline msk   andb         (const msk, const msk)            { errorMessage<N>("andb");          exit(-1); }
+template <typename T> inline reg   andnb        (const reg, const reg)            { errorMessage<T>("andnb");         exit(-1); }
+template <int      N> inline msk   andnb        (const msk, const msk)            { errorMessage<N>("andnb");         exit(-1); }
+template <typename T> inline reg   notb         (const reg)                       { errorMessage<T>("notb");          exit(-1); }
+template <int      N> inline msk   notb         (const msk)                       { errorMessage<N>("notb");          exit(-1); }
+template <typename T> inline reg   orb          (const reg, const reg)            { errorMessage<T>("orb");           exit(-1); }
+template <int      N> inline msk   orb          (const msk, const msk)            { errorMessage<N>("orb");           exit(-1); }
+template <typename T> inline reg   xorb         (const reg, const reg)            { errorMessage<T>("xorb");          exit(-1); }
+template <int      N> inline msk   xorb         (const msk, const msk)            { errorMessage<N>("xorb");          exit(-1); }
+template <typename T> inline reg   lshift       (const reg, const uint32_t)       { errorMessage<T>("lshift");        exit(-1); }
+template <int      N> inline msk   lshift       (const msk, const uint32_t)       { errorMessage<N>("lshift");        exit(-1); }
+template <typename T> inline reg   rshift       (const reg, const uint32_t)       { errorMessage<T>("rshift");        exit(-1); }
+template <int      N> inline msk   rshift       (const msk, const uint32_t)       { errorMessage<N>("rshift");        exit(-1); }
+template <typename T> inline msk   cmpeq        (const reg, const reg)            { errorMessage<T>("cmpeq");         exit(-1); }
+template <typename T> inline msk   cmpneq       (const reg, const reg)            { errorMessage<T>("cmpneq");        exit(-1); }
+template <typename T> inline msk   cmplt        (const reg, const reg)            { errorMessage<T>("cmplt");         exit(-1); }
+template <typename T> inline msk   cmple        (const reg, const reg)            { errorMessage<T>("cmple");         exit(-1); }
+template <typename T> inline msk   cmpgt        (const reg, const reg)            { errorMessage<T>("cmpgt");         exit(-1); }
+template <typename T> inline msk   cmpge        (const reg, const reg)            { errorMessage<T>("cmpge");         exit(-1); }
+template <typename T> inline reg   add          (const reg, const reg)            { errorMessage<T>("add");           exit(-1); }
+template <typename T> inline reg   sub          (const reg, const reg)            { errorMessage<T>("sub");           exit(-1); }
+template <typename T> inline reg   mul          (const reg, const reg)            { errorMessage<T>("mul");           exit(-1); }
+template <typename T> inline reg   div          (const reg, const reg)            { errorMessage<T>("div");           exit(-1); }
+template <typename T> inline reg   min          (const reg, const reg)            { errorMessage<T>("min");           exit(-1); }
+template <typename T> inline reg   max          (const reg, const reg)            { errorMessage<T>("max");           exit(-1); }
+template <typename T> inline reg   msb          (const reg)                       { errorMessage<T>("msb");           exit(-1); }
+template <typename T> inline reg   msb          (const reg, const reg)            { errorMessage<T>("msb");           exit(-1); }
+template <typename T> inline msk   sign         (const reg)                       { errorMessage<T>("sign");          exit(-1); }
+template <typename T> inline reg   neg          (const reg, const reg)            { errorMessage<T>("neg");           exit(-1); }
+template <typename T> inline reg   neg          (const reg, const msk)            { errorMessage<T>("neg");           exit(-1); }
+template <typename T> inline reg   abs          (const reg)                       { errorMessage<T>("abs");           exit(-1); }
+template <typename T> inline reg   sqrt         (const reg)                       { errorMessage<T>("sqrt");          exit(-1); }
+template <typename T> inline reg   rsqrt        (const reg)                       { errorMessage<T>("rsqrt");         exit(-1); }
+template <typename T> inline reg   log          (const reg)                       { errorMessage<T>("log");           exit(-1); }
+template <typename T> inline reg   exp          (const reg)                       { errorMessage<T>("exp");           exit(-1); }
+template <typename T> inline reg   sin          (const reg)                       { errorMessage<T>("sin");           exit(-1); }
+template <typename T> inline reg   cos          (const reg)                       { errorMessage<T>("cos");           exit(-1); }
+template <typename T> inline void  sincos       (const reg, reg&, reg&)           { errorMessage<T>("sincos");        exit(-1); }
+template <typename T> inline reg   fmadd        (const reg, const reg, const reg) { errorMessage<T>("fmadd");         exit(-1); }
+template <typename T> inline reg   fnmadd       (const reg, const reg, const reg) { errorMessage<T>("fnmadd");        exit(-1); }
+template <typename T> inline reg   fmsub        (const reg, const reg, const reg) { errorMessage<T>("fmsub");         exit(-1); }
+template <typename T> inline reg   fnmsub       (const reg, const reg, const reg) { errorMessage<T>("fnmsub");        exit(-1); }
+template <typename T> inline reg   blend        (const reg, const reg, const msk) { errorMessage<T>("blend");         exit(-1); }
+template <typename T> inline reg   lrot         (const reg)                       { errorMessage<T>("lrot");          exit(-1); }
+template <typename T> inline reg   rrot         (const reg)                       { errorMessage<T>("rrot");          exit(-1); }
+template <typename T> inline reg   div2         (const reg)                       { errorMessage<T>("div2");          exit(-1); }
+template <typename T> inline reg   div4         (const reg)                       { errorMessage<T>("div4");          exit(-1); }
+template <typename T> inline reg   sat          (const reg, T, T)                 { errorMessage<T>("sat");           exit(-1); }
+template <typename T> inline reg   round        (const reg)                       { errorMessage<T>("round");         exit(-1); }
+template <typename T> inline bool  testz        (const reg, const reg)            { errorMessage<T>("testz");         exit(-1); }
+template <int      N> inline bool  testz        (const msk, const msk)            { errorMessage<N>("testz");         exit(-1); }
+template <typename T> inline bool  testz        (const reg)                       { errorMessage<T>("testz");         exit(-1); }
+template <int      N> inline bool  testz        (const msk)                       { errorMessage<N>("testz");         exit(-1); }
+
+template <typename T1, typename T2>
+inline reg cvt(const reg) {
+	errorMessage<T1,T2>("cvt");
+	exit(-1);
+}
+
+template <typename T1, typename T2>
+inline reg cvt(const reg_2) {
+	errorMessage<T1,T2>("cvt");
+	exit(-1);
+}
+
+template <typename T1, typename T2>
+inline reg pack(const reg, const reg) {
+	errorMessage<T1,T2>("pack");
+	exit(-1);
+}
+
+// ------------------------------------------------------------------------------------------------------------ aliases
+// --------------------------------------------------------------------------------------------------------------------
+template <typename T> inline reg copysign(const reg r1, const reg r2) { return neg<T>(r1, r2); }
+template <typename T> inline reg copysign(const reg r1, const msk r2) { return neg<T>(r1, r2); }
+
+// --------------------------------------------------------------------------------- hyperbolic trigonometric functions
+// --------------------------------------------------------------------------------------------------------------------
+template <typename T>
+inline reg tan(const reg r)
+{
+	mipp::reg sin, cos;
+	mipp::sincos<T>(r, sin, cos);
+	return mipp::div<T>(sin, cos);
+}
+
+template <typename T>
+inline reg sinh(const reg r)
+{
+	mipp::reg zero = mipp::set0<T>();
+	mipp::reg half = mipp::set1<T>((T)0.5);
+	return mipp::mul<T>(mipp::sub<T>(mipp::exp<T>(r), mipp::exp<T>(mipp::sub<T>(zero,r))), half);
+}
+
+template <typename T>
+inline reg cosh(const reg r)
+{
+	mipp::reg zero = mipp::set0<T>();
+	mipp::reg half = mipp::set1<T>((T)0.5);
+	return mipp::mul<T>(mipp::add<T>(mipp::exp<T>(r), mipp::exp<T>(mipp::sub<T>(zero,r))), half);
+}
+
+template <typename T>
+inline reg tanh(const reg r)
+{
+	mipp::reg zero = mipp::set0<T>();
+	auto epx = mipp::exp<T>(r);
+	auto emx = mipp::exp<T>(mipp::sub<T>(zero,r));
+	return mipp::div<T>(mipp::sub<T>(epx, emx), mipp::add<T>(epx, emx));
+}
+
+template <typename T>
+inline reg asinh(const reg r)
+{
+	mipp::reg one = mipp::set1<T>((T)1);
+	return mipp::log<T>(mipp::add<T>(r, mipp::sqrt<T>(mipp::add<T>(mipp::mul<T>(r, r), one))));
+}
+
+template <typename T>
+inline reg acosh(const reg r)
+{
+	mipp::reg one = mipp::set1<T>((T)1);
+	return mipp::log<T>(mipp::add<T>(r, mipp::sqrt<T>(mipp::sub<T>(mipp::mul<T>(r, r), one))));
+}
+
+template <typename T>
+inline reg atanh(const reg r)
+{
+	mipp::reg one = mipp::set1<T>((T)1);
+	mipp::reg half = mipp::set1<T>((T)0.5);
+	return mipp::mul<T>(half, mipp::log<T>(mipp::div<T>(mipp::add<T>(one, r), mipp::sub<T>(one, r))));
+}
+
+// template <typename T>
+// inline reg csch(const reg r)
+// {
+// 	mipp::reg zero = mipp::set0<T>();
+// 	mipp::reg two = mipp::set1<T>((T)2);
+// 	return mipp::div<T>(two, mipp::sub<T>(mipp::exp<T>(r), mipp::exp<T>(mipp::sub<T>(zero,r))));
+// }
+
+// template <typename T>
+// inline reg sech(const reg r)
+// {
+// 	mipp::reg zero = mipp::set0<T>();
+// 	mipp::reg two = mipp::set1<T>((T)2);
+// 	return mipp::div<T>(two, mipp::add<T>(mipp::exp<T>(r), mipp::exp<T>(mipp::sub<T>(zero,r))));
+// }
+
+// template <typename T>
+// inline reg coth(const reg r)
+// {
+// 	mipp::reg zero = mipp::set0<T>();
+// 	auto epx = mipp::exp<T>(r);
+// 	auto emx = mipp::exp<T>(mipp::sub<T>(zero,r));
+// 	return mipp::div<T>(mipp::add<T>(epx, emx), mipp::sub<T>(epx, emx));
+// }
+
+// template <typename T>
+// inline reg acsch(const reg r)
+// {
+// 	mipp::reg one = mipp::set1<T>((T)1);
+// 	return mipp::log<T>(mipp::div<T>(mipp::add<T>(one, mipp::sqrt<T>(mipp::add<T>(one, mipp::mul<T>(r, r)))), r));
+// }
+
+// template <typename T>
+// inline reg asech(const reg r)
+// {
+// 	mipp::reg one = mipp::set1<T>((T)1);
+// 	return mipp::log<T>(mipp::div<T>(mipp::add<T>(one, mipp::sqrt<T>(mipp::sub<T>(one, mipp::mul<T>(r, r)))), r));
+// }
+
+// template <typename T>
+// inline reg acoth(const reg r)
+// {
+// 	mipp::reg one = mipp::set1<T>((T)1);
+// 	mipp::reg half = mipp::set1<T>((T)0.5);
+// 	return mipp::mul<T>(half, mipp::log<T>(mipp::div<T>(mipp::add<T>(r, one), mipp::sub<T>(r, one))));
+// }
+
+
+// ------------------------------------------------------------------------------------------------------------ masking
+// --------------------------------------------------------------------------------------------------------------------
+
+template <typename T> using proto_i1 = reg (*)(const reg a);
+template <typename T> using proto_i2 = reg (*)(const reg a, const reg b);
+template <typename T> using proto_i3 = reg (*)(const reg a, const reg b, const reg c);
+
+template <typename T, proto_i1<T> I1>
+inline reg mask(const msk m, const reg src, const reg a)
+{
+	return blend<T>(I1(a), src, m);
+}
+
+template <typename T, proto_i2<T> I2>
+inline reg mask(const msk m, const reg src, const reg a, const reg b)
+{
+	return blend<T>(I2(a, b), src, m);
+}
+
+template <typename T, proto_i3<T> I3>
+inline reg mask(const msk m, const reg src, const reg a, const reg b, const reg c)
+{
+	return blend<T>(I3(a, b, c), src, m);
+}
+
+template <typename T, proto_i1<T> I1>
+inline reg maskz(const msk m, const reg a)
+{
+	auto m_reg = toreg<N<T>()>(m);
+	auto a_modif = I1(a);
+	return andb<T>(m_reg, a_modif);
+}
+
+template <typename T, proto_i2<T> I2>
+inline reg maskz(const msk m, const reg a, const reg b)
+{
+	auto m_reg = toreg<N<T>()>(m);
+	auto a_modif = I2(a, b);
+	return andb<T>(m_reg, a_modif);
+}
+
+template <typename T, proto_i3<T> I3>
+inline reg maskz(const msk m, const reg a, const reg b, const reg c)
+{
+	auto m_reg = toreg<N<T>()>(m);
+	auto a_modif = I3(a, b, c);
+	return andb<T>(m_reg, a_modif);
+}
+
+// -------------------------------------------------------------------------------------------------------- obj masking
+
+template <typename T>
+class Reg;
+
+template <int N>
+class Msk;
+
+template <typename T> inline Reg<T> blend(const Reg<T> v1, const Reg<T> v2, const Msk<N<T>()> m);
+template <typename T> inline Reg<T> andb (const Reg<T> v1, const Reg<T> v2);
+
+template <typename T> using proto_I1 = Reg<T> (*)(const Reg<T> a);
+template <typename T> using proto_I2 = Reg<T> (*)(const Reg<T> a, const Reg<T> b);
+template <typename T> using proto_I3 = Reg<T> (*)(const Reg<T> a, const Reg<T> b, const Reg<T> c);
+
+template <typename T, proto_I1<T> I1>
+inline Reg<T> mask(const Msk<N<T>()> m, const Reg<T> src, const Reg<T> a)
+{
+#ifndef MIPP_NO
+	return blend<T>(I1(a), src, m);
+#else
+	return m.m ? I1(a) : src;
+#endif
+}
+
+template <typename T, proto_I2<T> I2>
+inline Reg<T> mask(const Msk<N<T>()> m, const Reg<T> src, const Reg<T> a, const Reg<T> b)
+{
+#ifndef MIPP_NO
+	return blend<T>(I2(a, b), src, m);
+#else
+	return m.m ? I2(a, b) : src;
+#endif
+}
+
+template <typename T, proto_I3<T> I3>
+inline Reg<T> mask(const Msk<N<T>()> m, const Reg<T> src, const Reg<T> a, const Reg<T> b, const Reg<T> c)
+{
+#ifndef MIPP_NO
+	return blend<T>(I3(a, b, c), src, m);
+#else
+	return m.m ? I3(a, b, c) : src;
+#endif
+}
+
+template <typename T, proto_I1<T> I1>
+inline Reg<T> maskz(const Msk<N<T>()> m, const Reg<T> a)
+{
+#ifndef MIPP_NO
+	auto m_reg = m.template toReg<T>();
+	auto a_modif = I1(a);
+	return andb<T>(m_reg, a_modif);
+#else
+	return m.m ? I1(a) : Reg<T>((T)0);
+#endif
+}
+
+template <typename T, proto_I2<T> I2>
+inline Reg<T> maskz(const Msk<N<T>()> m, const Reg<T> a, const Reg<T> b)
+{
+#ifndef MIPP_NO
+	auto m_reg = m.template toReg<T>();
+	auto a_modif = I2(a, b);
+	return andb<T>(m_reg, a_modif);
+#else
+	return m.m ? I2(a, b) : Reg<T>((T)0);
+#endif
+}
+
+template <typename T, proto_I3<T> I3>
+inline Reg<T> maskz(const Msk<N<T>()> m, const Reg<T> a, const Reg<T> b, const Reg<T> c)
+{
+#ifndef MIPP_NO
+	auto m_reg = m.template toReg<T>();
+	auto a_modif = I3(a, b, c);
+	return andb<T>(m_reg, a_modif);
+#else
+	return m.m ? I3(a, b, c) : Reg<T>((T)0);
+#endif
+}
+
+// --------------------------------------------------------------------------------------- myIntrinsics implementations
+// --------------------------------------------------------------------------------------------------------------------
+
+// --------------------------------------------------------------------------------------------------------------- dump
+
+template <typename T>
+void dump(const mipp::reg r, std::ostream &stream = std::cout, const uint32_t elmtWidth = 6)
+{
+	constexpr int32_t lane_size = (int32_t)(mipp::N<T>() / mipp::Lanes);
+
+//	const T* data = (T*)&r;
+	T data[mipp::nElReg<T>()];
+	store<T>(data, r);
+
+	stream << "[";
+	for (uint32_t l = 0; l < mipp::Lanes; l++)
+	{
+		for (auto i = 0; i < lane_size; i++)
+			stream << std::setw(elmtWidth) << +data[l * lane_size +i] << ((i < lane_size -1) ? ", " : "");
+		stream << (((int)l < (int)mipp::Lanes -1) ? " | " : "");
+	}
+	stream << "]";
+}
+
+template <int N>
+void dump(const mipp::msk m, std::ostream &stream = std::cout, const uint32_t elmtWidth = 6)
+{
+	constexpr int32_t lane_size = (int32_t)(N / mipp::Lanes);
+	constexpr int bits = mipp::RegisterSizeBit / N;
+
+	const auto r = toreg<N>(m);
+
+	stream << "[";
+	if (bits == 8)
+	{
+		// const int8_t* data = (int8_t*)&r;
+		int8_t data[N];
+		store<int8_t>(data, r);
+
+		for (uint32_t l = 0; l < mipp::Lanes; l++)
+		{
+			for (auto i = 0; i < lane_size; i++)
+				stream << std::setw(elmtWidth) << (data[l * lane_size +i] ? 1 : 0) << ((i < lane_size -1) ? ", " : "");
+			stream << (((int)l < (int)mipp::Lanes -1) ? " | " : "");
+		}
+	}
+	else if (bits == 16)
+	{
+		// const int16_t* data = (int16_t*)&r;
+		int16_t data[N];
+		store<int16_t>(data, r);
+
+		for (uint32_t l = 0; l < (int)mipp::Lanes; l++)
+		{
+			for (auto i = 0; i < lane_size; i++)
+				stream << std::setw(elmtWidth) << (data[l * lane_size +i] ? 1 : 0) << ((i < lane_size -1) ? ", " : "");
+			stream << (((int)l < (int)mipp::Lanes -1) ? " | " : "");
+		}
+	}
+	else if (bits == 32)
+	{
+		// const int32_t* data = (int32_t*)&r;
+		int32_t data[N];
+		store<int32_t>(data, r);
+
+		for (uint32_t l = 0; l < (int)mipp::Lanes; l++)
+		{
+			for (auto i = 0; i < lane_size; i++)
+				stream << std::setw(elmtWidth) << (data[l * lane_size +i] ? 1 : 0) << ((i < lane_size -1) ? ", " : "");
+			stream << (((int)l < (int)mipp::Lanes -1) ? " | " : "");
+		}
+	}
+	else if (bits == 64)
+	{
+		// const int64_t* data = (int64_t*)&r;
+		int64_t data[N];
+		store<int64_t>(data, r);
+
+		for (uint32_t l = 0; l < (int)mipp::Lanes; l++)
+		{
+			for (auto i = 0; i < lane_size; i++)
+				stream << std::setw(elmtWidth) << (data[l * lane_size +i] ? 1 : 0) << ((i < lane_size -1) ? ", " : "");
+			stream << (((int)l < (int)mipp::Lanes -1) ? " | " : "");
+		}
+	}
+
+	stream << "]";
+}
+
+// ---------------------------------------------------------------------------------------------------------- reduction
+
+template <typename T>
+using red_op = reg (*)(const reg, const reg);
+
+template <typename T>
+using Red_op = Reg<T> (*)(const Reg<T>, const Reg<T>);
+
+template <typename T>
+using ld_op = reg (*)(const T*);
+
+template <typename T, red_op<T> OP>
+struct _reduction
+{
+	static reg apply(const reg) {
+		errorMessage<T>("_reduction::apply");
+		exit(-1);
+	}
+};
+
+template <typename T, Red_op<T> OP>
+struct _Reduction
+{
+	static Reg<T> apply(const Reg<T> r) {
+#ifndef MIPP_NO_INTRINSICS
+		errorMessage<T>("_Reduction::apply");
+		exit(-1);
+#else
+		return r;
+#endif
+	}
+};
+
+template <typename T, red_op<T> OP>
+struct reduction
+{
+	static reg apply(const reg r)
+	{
+		return _reduction<T,OP>::apply(r);
+	}
+
+	static T sapply(const reg r)
+	{
+		auto red = reduction<T,OP>::apply(r);
+#ifdef _MSC_VER
+		return *((T*)&red);
+#else
+#pragma GCC diagnostic ignored "-Wstrict-aliasing"
+		return *((T*)&red);
+#endif
+	}
+
+	template <ld_op<T> LD = mipp::load<T>>
+	static T apply(const mipp::vector<T> &data)
+	{
+		return reduction<T,OP>::template apply<LD>(data.data(), data.size());
+	}
+
+	template <ld_op<T> LD = mipp::loadu<T>>
+	static T apply(const std::vector<T> &data)
+	{
+		return reduction<T,OP>::template apply<LD>(data.data(), data.size());
+	}
+
+	template <ld_op<T> LD = mipp::loadu<T>>
+	static T apply(const T *data, const uint32_t dataSize)
+	{
+		assert(dataSize > 0);
+		assert(dataSize % mipp::nElReg<T>() == 0);
+
+		auto rRed = LD(&data[0]);
+		for (auto i = mipp::nElReg<T>(); i < dataSize; i += mipp::nElReg<T>())
+			rRed = OP(rRed, LD(&data[i]));
+		rRed = reduction<T,OP>::apply(rRed);
+
+		T tRed[mipp::nElReg<T>()];
+		mipp::store<T>(tRed, rRed);
+
+		return tRed[0];
+	}
+};
+
+template <typename T, Red_op<T> OP>
+struct Reduction
+{
+	static Reg<T> apply(const Reg<T> r)
+	{
+		return _Reduction<T,OP>::apply(r);
+	}
+
+	static T sapply(const Reg<T> r)
+	{
+		auto red = Reduction<T,OP>::apply(r);
+		return red[0];
+	}
+
+	template <ld_op<T> LD = mipp::load<T>>
+	static T apply(const mipp::vector<T> &data)
+	{
+		return Reduction<T,OP>::template apply<LD>(data.data(), data.size());
+	}
+
+	template <ld_op<T> LD = mipp::loadu<T>>
+	static T apply(const std::vector<T> &data)
+	{
+		return Reduction<T,OP>::template apply<LD>(data.data(), data.size());
+	}
+
+	template <ld_op<T> LD = mipp::loadu<T>>
+	static T apply(const T *data, const uint32_t dataSize)
+	{
+		assert(dataSize > 0);
+		assert(dataSize % mipp::nElReg<T>() == 0);
+
+#ifndef MIPP_NO_INTRINSICS
+		auto rRed = Reg<T>(LD(&data[0]));
+#else
+		auto rRed = Reg<T>(data[0]);
+#endif
+		for (auto i = mipp::nElReg<T>(); i < dataSize; i += mipp::nElReg<T>())
+#ifndef MIPP_NO_INTRINSICS
+			rRed = OP(rRed, Reg<T>(LD(&data[i])));
+#else
+			rRed = OP(rRed, Reg<T>(data[i]));
+#endif
+		rRed = Reduction<T,OP>::apply(rRed);
+
+		T tRed[mipp::nElReg<T>()];
+		rRed.store(tRed);
+
+		return tRed[0];
+	}
+};
+
+// ------------------------------------------------------------------------- special reduction functions implementation
+
+template <typename T> inline T sum (const reg v) { return reduction<T,mipp::add<T>>::sapply(v); }
+template <typename T> inline T hadd(const reg v) { return reduction<T,mipp::add<T>>::sapply(v); }
+template <typename T> inline T hmul(const reg v) { return reduction<T,mipp::mul<T>>::sapply(v); }
+template <typename T> inline T hmin(const reg v) { return reduction<T,mipp::min<T>>::sapply(v); }
+template <typename T> inline T hmax(const reg v) { return reduction<T,mipp::max<T>>::sapply(v); }
+
+// ------------------------------------------------------------------------------------------------- wrapper to objects
+// original file: ../external/MIPP/src/mipp_object.hxx
+
+// #include "mipp.h"
+
+template <typename T>
+class Reg;
+
+template <typename T> inline Reg<T> add(const Reg<T> v1, const Reg<T> v2);
+template <typename T> inline Reg<T> sub(const Reg<T> v1, const Reg<T> v2);
+template <typename T> inline Reg<T> mul(const Reg<T> v1, const Reg<T> v2);
+template <typename T> inline Reg<T> div(const Reg<T> v1, const Reg<T> v2);
+template <typename T> inline Reg<T> min(const Reg<T> v1, const Reg<T> v2);
+template <typename T> inline Reg<T> max(const Reg<T> v1, const Reg<T> v2);
+
+template <typename T>
+class Reg_2;
+
+template <typename T>
+class Regx2;
+
+template <int N>
+class Msk;
+
+template <typename T>
+class Reg
+{
+public:
+#ifndef MIPP_NO_INTRINSICS
+	reg r;
+#else
+	T r;
+#endif
+
+#ifndef MIPP_NO_INTRINSICS
+	Reg(                            )                         {}
+	Reg(const reg r                 ) : r(r)                  {}
+	Reg(const T   val               ) : r(mipp::set1<T>(val)) {}
+//	Reg(const T   vals[mipp::N<T>()]) : r(mipp::set <T>(vals)){}
+	Reg(const T  *data              ) : r(mipp::load<T>(data)){}
+
+	Reg(const std::initializer_list<T> &l)
+	{
+		if (l.size() >= (unsigned)mipp::nElReg<T>())
+			r = mipp::loadu<T>(l.begin());
+		else
+			throw std::runtime_error("mipp::Reg<T>: invalid 'initializer_list' size.");
+	}
+
+	~Reg() {}
+#else
+	Reg(                )              {}
+	Reg(const T  val    ) : r(val)     {}
+	Reg(const T  vals[1]) : r(vals[0]) {}
+//	Reg(const T *data   ) : r(data[0]) {}
+
+	Reg(const std::initializer_list<T> &l)
+	{
+		auto vec = mipp::vector<T>(mipp::nElReg<T>());
+		vec = l;
+		r = vec[0];
+	}
+
+	~Reg() {}
+#endif
+
+#ifndef MIPP_NO_INTRINSICS
+	static inline Reg<T> cmask (const uint32_t mask[nElReg<T>()  ]) { return mipp::cmask <T>(mask); }
+	static inline Reg<T> cmask2(const uint32_t mask[nElReg<T>()/2]) { return mipp::cmask2<T>(mask); }
+	static inline Reg<T> cmask4(const uint32_t mask[nElReg<T>()/4]) { return mipp::cmask4<T>(mask); }
+#else
+	static inline Reg<T> cmask (const uint32_t mask[1]) { return Reg<T>((T)0);          }
+	static inline Reg<T> cmask2(const uint32_t mask[1]) { return Reg<T>((T)0);          }
+	static inline Reg<T> cmask4(const uint32_t mask[1]) { return Reg<T>((T)0);          }
+#endif
+
+	static inline void transpose(Reg<T> regs[nElReg<T>()])
+	{
+#ifndef MIPP_NO_INTRINSICS
+		reg rs[nElReg<T>()];
+		for (auto i = 0; i < nElReg<T>(); i++) rs[i] = regs[i].r;
+		mipp::transpose<T>(rs);
+		for (auto i = 0; i < nElReg<T>(); i++) regs[i].r = rs[i];
+#endif
+	}
+
+	static inline void transpose8x8(Reg<T> regs[8])
+	{
+#ifndef MIPP_NO_INTRINSICS
+		reg rs[8];
+		for (auto i = 0; i < 8; i++) rs[i] = regs[i].r;
+		mipp::transpose8x8<T>(rs);
+		for (auto i = 0; i < 8; i++) regs[i].r = rs[i];
+#else
+		throw std::runtime_error("mipp::Reg<T>::transpose8x8: non-sense in sequential mode.");
+#endif
+	}
+
+	static inline void transpose2(Reg<T> regs[nElReg<T>()/2])
+	{
+#ifndef MIPP_NO_INTRINSICS
+		reg rs[nElReg<T>()/2];
+		for (auto i = 0; i < nElReg<T>()/2; i++) rs[i] = regs[i].r;
+		mipp::transpose2<T>(rs);
+		for (auto i = 0; i < nElReg<T>()/2; i++) regs[i].r = rs[i];
+#else
+		throw std::runtime_error("mipp::Reg<T>::transpose2: non-sense in sequential mode.");
+#endif
+	}
+
+	static inline void transpose28x8(Reg<T> regs[8])
+	{
+#ifndef MIPP_NO_INTRINSICS
+		reg rs[8];
+		for (auto i = 0; i < 8; i++) rs[i] = regs[i].r;
+		mipp::transpose28x8<T>(rs);
+		for (auto i = 0; i < 8; i++) regs[i].r = rs[i];
+#else
+		throw std::runtime_error("mipp::Reg<T>::transpose28x8: non-sense in sequential mode.");
+#endif
+	}
+
+#ifndef MIPP_NO_INTRINSICS
+	inline void        set0         ()                                           { r = mipp::set0<T>();                           }
+	inline void        set1         (const T val)                                { r = mipp::set1<T>(val);                        }
+	inline void        set          (const T vals[mipp::N<T>()])                 { r = mipp::set <T>(vals);                       }
+	inline void        load         (const T* data)                              { r = mipp::load<T>(data);                       }
+	inline void        loadu        (const T* data)                              { r = mipp::loadu<T>(data);                      }
+	inline void        store        (T* data)                              const { mipp::store<T>(data, r);                       }
+	inline void        storeu       (T* data)                              const { mipp::storeu<T>(data, r);                      }
+	inline Reg_2<T>    low          ()                                     const { return mipp::low <T>(r);                       }
+	inline Reg_2<T>    high         ()                                     const { return mipp::high<T>(r);                       }
+	inline Reg<T>      shuff        (const Reg<T> v_shu)                   const { return mipp::shuff        <T>(r, v_shu.r);     }
+	inline Reg<T>      shuff2       (const Reg<T> v_shu)                   const { return mipp::shuff2       <T>(r, v_shu.r);     }
+	inline Reg<T>      shuff4       (const Reg<T> v_shu)                   const { return mipp::shuff4       <T>(r, v_shu.r);     }
+	inline Reg<T>      interleavelo (const Reg<T> v)                       const { return mipp::interleavelo <T>(r, v.r);         }
+	inline Reg<T>      interleavehi (const Reg<T> v)                       const { return mipp::interleavehi <T>(r, v.r);         }
+	inline Reg<T>      interleavelo2(const Reg<T> v)                       const { return mipp::interleavelo2<T>(r, v.r);         }
+	inline Reg<T>      interleavehi2(const Reg<T> v)                       const { return mipp::interleavehi2<T>(r, v.r);         }
+	inline Reg<T>      interleavelo4(const Reg<T> v)                       const { return mipp::interleavelo4<T>(r, v.r);         }
+	inline Reg<T>      interleavehi4(const Reg<T> v)                       const { return mipp::interleavehi4<T>(r, v.r);         }
+	inline Regx2<T>    interleave   (const Reg<T> v)                       const { return mipp::interleave   <T>(r, v.r);         }
+	inline Regx2<T>    interleave2  (const Reg<T> v)                       const { return mipp::interleave2  <T>(r, v.r);         }
+	inline Regx2<T>    interleave4  (const Reg<T> v)                       const { return mipp::interleave4  <T>(r, v.r);         }
+	inline Reg<T>      interleave   ()                                     const { return mipp::interleave   <T>(r);              }
+	inline Regx2<T>    interleavex2 (const Reg<T> v)                       const { return mipp::interleavex2 <T>(r, v.r);         }
+	inline Reg<T>      interleavex4 ()                                     const { return mipp::interleavex4 <T>(r);              }
+	inline Reg<T>      interleavex16()                                     const { return mipp::interleavex16<T>(r);              }
+	inline Reg<T>      andb         (const Reg<T> v)                       const { return mipp::andb         <T>(r, v.r);         }
+	inline Reg<T>      andnb        (const Reg<T> v)                       const { return mipp::andnb        <T>(r, v.r);         }
+	inline Reg<T>      notb         ()                                     const { return mipp::notb         <T>(r);              }
+	inline Reg<T>      orb          (const Reg<T> v)                       const { return mipp::orb          <T>(r, v.r);         }
+	inline Reg<T>      xorb         (const Reg<T> v)                       const { return mipp::xorb         <T>(r, v.r);         }
+	inline Reg<T>      lshift       (const uint32_t n)                     const { return mipp::lshift       <T>(r, n);           }
+	inline Reg<T>      rshift       (const uint32_t n)                     const { return mipp::rshift       <T>(r, n);           }
+	inline Msk<N<T>()> cmpeq        (const Reg<T> v)                       const { return mipp::cmpeq        <T>(r, v.r);         }
+	inline Msk<N<T>()> cmpneq       (const Reg<T> v)                       const { return mipp::cmpneq       <T>(r, v.r);         }
+	inline Msk<N<T>()> cmplt        (const Reg<T> v)                       const { return mipp::cmplt        <T>(r, v.r);         }
+	inline Msk<N<T>()> cmple        (const Reg<T> v)                       const { return mipp::cmple        <T>(r, v.r);         }
+	inline Msk<N<T>()> cmpgt        (const Reg<T> v)                       const { return mipp::cmpgt        <T>(r, v.r);         }
+	inline Msk<N<T>()> cmpge        (const Reg<T> v)                       const { return mipp::cmpge        <T>(r, v.r);         }
+	inline Reg<T>      add          (const Reg<T> v)                       const { return mipp::add          <T>(r, v.r);         }
+	inline Reg<T>      sub          (const Reg<T> v)                       const { return mipp::sub          <T>(r, v.r);         }
+	inline Reg<T>      mul          (const Reg<T> v)                       const { return mipp::mul          <T>(r, v.r);         }
+	inline Reg<T>      div          (const Reg<T> v)                       const { return mipp::div          <T>(r, v.r);         }
+	inline Reg<T>      min          (const Reg<T> v)                       const { return mipp::min          <T>(r, v.r);         }
+	inline Reg<T>      max          (const Reg<T> v)                       const { return mipp::max          <T>(r, v.r);         }
+	inline Reg<T>      msb          ()                                     const { return mipp::msb          <T>(r);              }
+	inline Reg<T>      msb          (const Reg<T> v)                       const { return mipp::msb          <T>(r, v.r);         }
+	inline Msk<N<T>()> sign         ()                                     const { return mipp::sign         <T>(r);              }
+	inline Reg<T>      neg          (const Reg<T> v)                       const { return mipp::neg          <T>(r, v.r);         }
+	inline Reg<T>      neg          (const Msk<N<T>()> v)                  const { return mipp::neg          <T>(r, v.m);         }
+	inline Reg<T>      copysign     (const Reg<T> v)                       const { return mipp::copysign     <T>(r, v.r);         }
+	inline Reg<T>      copysign     (const Msk<N<T>()> v)                  const { return mipp::copysign     <T>(r, v.m);         }
+	inline Reg<T>      abs          ()                                     const { return mipp::abs          <T>(r);              }
+	inline Reg<T>      sqrt         ()                                     const { return mipp::sqrt         <T>(r);              }
+	inline Reg<T>      rsqrt        ()                                     const { return mipp::rsqrt        <T>(r);              }
+	inline Reg<T>      log          ()                                     const { return mipp::log          <T>(r);              }
+	inline Reg<T>      exp          ()                                     const { return mipp::exp          <T>(r);              }
+	inline Reg<T>      sin          ()                                     const { return mipp::sin          <T>(r);              }
+	inline Reg<T>      cos          ()                                     const { return mipp::cos          <T>(r);              }
+	inline Reg<T>      tan          ()                                     const { return mipp::tan          <T>(r);              }
+	inline void        sincos       (      Reg<T> &s,       Reg<T> &c)     const {        mipp::sincos       <T>(r,  s.r,  c.r);  }
+	inline Reg<T>      sinh         ()                                     const { return mipp::sinh         <T>(r);              }
+	inline Reg<T>      cosh         ()                                     const { return mipp::cosh         <T>(r);              }
+	inline Reg<T>      tanh         ()                                     const { return mipp::tanh         <T>(r);              }
+	inline Reg<T>      asinh        ()                                     const { return mipp::asinh        <T>(r);              }
+	inline Reg<T>      acosh        ()                                     const { return mipp::acosh        <T>(r);              }
+	inline Reg<T>      atanh        ()                                     const { return mipp::atanh        <T>(r);              }
+//	inline Reg<T>      csch         ()                                     const { return mipp::csch         <T>(r);              }
+//	inline Reg<T>      sech         ()                                     const { return mipp::sech         <T>(r);              }
+//	inline Reg<T>      coth         ()                                     const { return mipp::coth         <T>(r);              }
+//	inline Reg<T>      acsch        ()                                     const { return mipp::acsch        <T>(r);              }
+//	inline Reg<T>      asech        ()                                     const { return mipp::asech        <T>(r);              }
+//	inline Reg<T>      acoth        ()                                     const { return mipp::acoth        <T>(r);              }
+	inline Reg<T>      fmadd        (const Reg<T> v1, const Reg<T> v2)     const { return mipp::fmadd        <T>(r, v1.r, v2.r);  }
+	inline Reg<T>      fnmadd       (const Reg<T> v1, const Reg<T> v2)     const { return mipp::fnmadd       <T>(r, v1.r, v2.r);  }
+	inline Reg<T>      fmsub        (const Reg<T> v1, const Reg<T> v2)     const { return mipp::fmsub        <T>(r, v1.r, v2.r);  }
+	inline Reg<T>      fnmsub       (const Reg<T> v1, const Reg<T> v2)     const { return mipp::fnmsub       <T>(r, v1.r, v2.r);  }
+	inline Reg<T>      blend        (const Reg<T> v1, const Msk<N<T>()> m) const { return mipp::blend        <T>(r, v1.r,  m.m);  }
+	inline Reg<T>      lrot         ()                                     const { return mipp::lrot         <T>(r);              }
+	inline Reg<T>      rrot         ()                                     const { return mipp::rrot         <T>(r);              }
+	inline Reg<T>      div2         ()                                     const { return mipp::div2         <T>(r);              }
+	inline Reg<T>      div4         ()                                     const { return mipp::div4         <T>(r);              }
+	inline Reg<T>      sat          (T min, T max)                         const { return mipp::sat          <T>(r, min, max);    }
+	inline Reg<T>      round        ()                                     const { return mipp::round        <T>(r);              }
+	inline bool        testz        (const Reg<T> v)                       const { return mipp::testz        <T>(r, v.r);         }
+	inline bool        testz        ()                                     const { return mipp::testz        <T>(r);              }
+#else
+	inline void        set0         ()                                           { r = 0;                                         }
+	inline void        set1         (const T val)                                { r = val;                                       }
+	inline void        set          (const T vals[1])                            { r = vals[0];                                   }
+	inline void        load         (const T* data)                              { r = data[0];                                   }
+	inline void        loadu        (const T* data)                              { r = data[0];                                   }
+	inline void        store        (T* data)                              const { data[0] = r;                                   }
+	inline void        storeu       (T* data)                              const { data[0] = r;                                   }
+	inline Reg_2<T>    low          ()                                     const { return r;                                      }
+	inline Reg_2<T>    high         ()                                     const { return r;                                      }
+	inline Reg<T>      shuff        (const Reg<T> v_shu)                   const { return *this;                                  }
+	inline Reg<T>      shuff2       (const Reg<T> v_shu)                   const { return *this;                                  }
+	inline Reg<T>      shuff4       (const Reg<T> v_shu)                   const { return *this;                                  }
+	inline Reg<T>      interleavelo (const Reg<T> v)                       const { return *this;                                  }
+	inline Reg<T>      interleavehi (const Reg<T> v)                       const { return *this;                                  }
+	inline Reg<T>      interleavelo2(const Reg<T> v)                       const { return *this;                                  }
+	inline Reg<T>      interleavehi2(const Reg<T> v)                       const { return *this;                                  }
+	inline Reg<T>      interleavelo4(const Reg<T> v)                       const { return *this;                                  }
+	inline Reg<T>      interleavehi4(const Reg<T> v)                       const { return *this;                                  }
+	inline Regx2<T>    interleave   (const Reg<T> v)                       const { return Regx2<T>(*this, v);                     }
+	inline Regx2<T>    interleave2  (const Reg<T> v)                       const { return Regx2<T>(*this, v);                     }
+	inline Regx2<T>    interleave4  (const Reg<T> v)                       const { return Regx2<T>(*this, v);                     }
+	inline Reg<T>      interleave   ()                                     const { return *this;                                  }
+	inline Regx2<T>    interleavex2 (const Reg<T> v)                       const { return Regx2<T>(*this, v);                     }
+	inline Reg<T>      interleavex4 ()                                     const { return *this;                                  }
+	inline Reg<T>      interleavex16()                                     const { return *this;                                  }
+	inline Reg<T>      andb         (const Reg<T> v)                       const { return mipp_scop::andb<T>( r, v.r);            }
+	inline Reg<T>      andnb        (const Reg<T> v)                       const { return mipp_scop::andb<T>(~r, v.r);            }
+	inline Reg<T>      notb         ()                                     const { return ~r;                                     }
+	inline Reg<T>      orb          (const Reg<T> v)                       const { return  r  |  v.r;                             }
+	inline Reg<T>      xorb         (const Reg<T> v)                       const { return mipp_scop::xorb<T>(r, v.r);             }
+	inline Reg<T>      lshift       (const uint32_t n)                     const { return mipp_scop::lshift<T>(r, n);             }
+	inline Reg<T>      rshift       (const uint32_t n)                     const { return mipp_scop::rshift<T>(r, n);             }
+	inline Msk<N<T>()> cmpeq        (const Reg<T> v)                       const { return (msk)(r  == v.r);                       }
+	inline Msk<N<T>()> cmpneq       (const Reg<T> v)                       const { return (msk)(r  != v.r);                       }
+	inline Msk<N<T>()> cmplt        (const Reg<T> v)                       const { return (msk)(r  <  v.r);                       }
+	inline Msk<N<T>()> cmple        (const Reg<T> v)                       const { return (msk)(r  <= v.r);                       }
+	inline Msk<N<T>()> cmpgt        (const Reg<T> v)                       const { return (msk)(r  >  v.r);                       }
+	inline Msk<N<T>()> cmpge        (const Reg<T> v)                       const { return (msk)(r  >= v.r);                       }
+	inline Reg<T>      add          (const Reg<T> v)                       const { return mipp_scop::add<T>(r,v.r);               }
+	inline Reg<T>      sub          (const Reg<T> v)                       const { return mipp_scop::sub<T>(r,v.r);               }
+	inline Reg<T>      mul          (const Reg<T> v)                       const { return r  *  v.r;                              }
+	inline Reg<T>      div          (const Reg<T> v)                       const { return r  /  v.r;                              }
+	inline Reg<T>      min          (const Reg<T> v)                       const { return std::min<T>(r, v.r);                    }
+	inline Reg<T>      max          (const Reg<T> v)                       const { return std::max<T>(r, v.r);                    }
+	// (1 = positive, -1 = negative, 0 = 0)
+	inline Reg<T>      msb          ()                                     const { return mipp_scop::msb<T>(r);                   }
+	inline Reg<T>      msb          (const Reg<T> v)                       const { return msb(Reg<T>(r ^ v.r));                   }
+	inline Msk<N<T>()> sign         ()                                     const { return r < 0;                                  }
+	inline Reg<T>      neg          (const Reg<T> v)                       const { return v.r >= 0 ? Reg<T>(r) : Reg<T>(-r);      }
+	inline Reg<T>      neg          (const Msk<N<T>()> v)                  const { return v.m == 0 ? Reg<T>(r) : Reg<T>(-r);      }
+	inline Reg<T>      copysign     (const Reg<T> v)                       const { return this->neg(v);                           }
+	inline Reg<T>      copysign     (const Msk<N<T>()> v)                  const { return this->neg(v);                           }
+	inline Reg<T>      abs          ()                                     const { return std::abs(r);                            }
+	inline Reg<T>      sqrt         ()                                     const { return (T)std::sqrt(r);                        }
+	inline Reg<T>      rsqrt        ()                                     const { return (T)(1 / std::sqrt(r));                  }
+	inline Reg<T>      log          ()                                     const { return (T)std::log(r);                         }
+	inline Reg<T>      exp          ()                                     const { return (T)std::exp(r);                         }
+	inline Reg<T>      sin          ()                                     const { return (T)std::sin(r);                         }
+	inline Reg<T>      cos          ()                                     const { return (T)std::cos(r);                         }
+	inline Reg<T>      tan          ()                                     const { return (T)std::tan(r);                         }
+	inline void        sincos       (      Reg<T> &s,       Reg<T> &c)     const { s = std::sin(r); c = std::cos(r);              }
+	inline Reg<T>      sinh         ()                                     const { return (T)std::sinh(r);                        }
+	inline Reg<T>      cosh         ()                                     const { return (T)std::cosh(r);                        }
+	inline Reg<T>      tanh         ()                                     const { return (T)std::tanh(r);                        }
+	inline Reg<T>      asinh        ()                                     const { return (T)std::asinh(r);                       }
+	inline Reg<T>      acosh        ()                                     const { return (T)std::acosh(r);                       }
+	inline Reg<T>      atanh        ()                                     const { return (T)std::atanh(r);                       }
+	inline Reg<T>      fmadd        (const Reg<T> v1, const Reg<T> v2)     const { return   r * v1.r + v2.r;                      }
+	inline Reg<T>      fnmadd       (const Reg<T> v1, const Reg<T> v2)     const { return v2.r -(r * v1.r);                       }
+	inline Reg<T>      fmsub        (const Reg<T> v1, const Reg<T> v2)     const { return   r * v1.r - v2.r;                      }
+	inline Reg<T>      fnmsub       (const Reg<T> v1, const Reg<T> v2)     const { return -v2.r - (r * v1.r) ;                    }
+	inline Reg<T>      blend        (const Reg<T> v1, const Msk<N<T>()> m) const { return (m.m) ? r : v1.r;                       }
+	inline Reg<T>      lrot         ()                                     const { return r;                                      }
+	inline Reg<T>      rrot         ()                                     const { return r;                                      }
+	inline Reg<T>      div2         ()                                     const { return mipp_scop::div2<T>(r);                  }
+	inline Reg<T>      div4         ()                                     const { return mipp_scop::div4<T>(r);                  }
+	inline Reg<T>      sat          (T min, T max)                         const { return std::min(std::max(r, min), max);        }
+	inline Reg<T>      round        ()                                     const { return std::round(r);                          }
+	inline bool        testz        (const Reg<T> v)                       const { return mipp_scop::andb<T>(r, v.r) == 0 ? 1 : 0;}
+	inline bool        testz        ()                                     const { return !r;                                     }
+#endif
+	inline Reg<T>      andb         (const Msk<N<T>()> m)                  const { return this->andb (m.template toReg<T>().r); }
+	inline Reg<T>      andnb        (const Msk<N<T>()> m)                  const { return this->andnb(m.template toReg<T>().r); }
+	inline Reg<T>      orb          (const Msk<N<T>()> m)                  const { return this->orb  (m.template toReg<T>().r); }
+	inline Reg<T>      xorb         (const Msk<N<T>()> m)                  const { return this->xorb (m.template toReg<T>().r); }
+
+#ifndef MIPP_NO_INTRINSICS
+	template <typename T2> inline Reg<T2> cvt ()               const { return mipp::cvt<T,T2>(r);       }
+	template <typename T2> inline Reg<T2> pack(const Reg<T> v) const { return mipp::pack<T,T2>(r, v.r); }
+	template <typename T2> inline Reg<T2> cast()               const { return Reg<T2>(this->r);         }
+#else
+	template <typename T2> inline Reg<T2> cvt ()               const { return (T2)std::round(r);        }
+	template <typename T2> inline Reg<T2> pack(const Reg<T> v) const
+	{
+		throw std::runtime_error("mipp::Reg<T>::pack: non-sense in sequential mode.");
+	}
+	template <typename T2> inline Reg<T2> cast()               const { return Reg<T2>((T2)this->r);     }
+#endif
+
+	inline Reg<T>& operator+= (const Reg<T>      &v)       { r =    this->add(v).r;    return *this; }
+	inline Reg<T>  operator+  (const Reg<T>       v) const { return this->add(v);                    }
+
+	inline Reg<T>& operator-= (const Reg<T>      &v)       { r =    this->sub(v).r;    return *this; }
+	inline Reg<T>  operator-  (const Reg<T>       v) const { return this->sub(v);                    }
+
+	inline Reg<T>& operator*= (const Reg<T>      &v)       { r =    this->mul(v).r;    return *this; }
+	inline Reg<T>  operator*  (const Reg<T>       v) const { return this->mul(v);                    }
+
+	inline Reg<T>& operator/= (const Reg<T>      &v)       { r =    this->div(v).r;    return *this; }
+	inline Reg<T>  operator/  (const Reg<T>       v) const { return this->div(v);                    }
+
+	inline Reg<T>  operator~  (                    )       { return this->notb();                    }
+
+	inline Reg<T>& operator^= (const Reg<T>      &v)       { r =    this->xorb(v).r;   return *this; }
+	inline Reg<T>  operator^  (const Reg<T>       v) const { return this->xorb(v);                   }
+//	inline Reg<T>& operator^= (const Msk<N<T>()> &v)       { r =    this->xorb(v).r;   return *this; }
+//	inline Reg<T>  operator^  (const Msk<N<T>()>  v) const { return this->xorb(v);                   }
+
+	inline Reg<T>& operator|= (const Reg<T>      &v)       { r =    this->orb(v).r;    return *this; }
+	inline Reg<T>  operator|  (const Reg<T>       v) const { return this->orb(v);                    }
+//	inline Reg<T>& operator|= (const Msk<N<T>()> &v)       { r =    this->orb(v).r;    return *this; }
+//	inline Reg<T>  operator|  (const Msk<N<T>()>  v) const { return this->orb(v);                    }
+
+	inline Reg<T>& operator&= (const Reg<T>      &v)       { r =    this->andb(v).r;   return *this; }
+	inline Reg<T>  operator&  (const Reg<T>       v) const { return this->andb(v);                   }
+//	inline Reg<T>& operator&= (const Msk<N<T>()> &v)       { r =    this->andb(v).r;   return *this; }
+//	inline Reg<T>  operator&  (const Msk<N<T>()>  v) const { return this->andb(v);                   }
+
+	inline Reg<T>& operator<<=(const uint32_t     n)       { r =    this->lshift(n).r; return *this; }
+	inline Reg<T>  operator<< (const uint32_t     n) const { return this->lshift(n);                 }
+
+	inline Reg<T>& operator>>=(const uint32_t     n)       { r =    this->rshift(n).r; return *this; }
+	inline Reg<T>  operator>> (const uint32_t     n) const { return this->rshift(n);                 }
+
+	inline Msk<N<T>()> operator==(Reg<T> v) const { return this->cmpeq (v); }
+	inline Msk<N<T>()> operator!=(Reg<T> v) const { return this->cmpneq(v); }
+	inline Msk<N<T>()> operator< (Reg<T> v) const { return this->cmplt (v); }
+	inline Msk<N<T>()> operator<=(Reg<T> v) const { return this->cmple (v); }
+	inline Msk<N<T>()> operator> (Reg<T> v) const { return this->cmpgt (v); }
+	inline Msk<N<T>()> operator>=(Reg<T> v) const { return this->cmpge (v); }
+
+#ifndef MIPP_NO_INTRINSICS
+	inline const T& operator[](size_t index) const { return *((T*)&this->r + index); }
+#else
+	inline const T& operator[](size_t index) const { return r; }
+#endif
+
+	// ------------------------------------------------------------------------------------------------------ reduction
+#ifndef MIPP_NO_INTRINSICS
+	inline T sum () const { return Reduction<T,mipp::add>::sapply(*this); }
+	inline T hadd() const { return Reduction<T,mipp::add>::sapply(*this); }
+	inline T hmul() const { return Reduction<T,mipp::mul>::sapply(*this); }
+	inline T hmin() const { return Reduction<T,mipp::min>::sapply(*this); }
+	inline T hmax() const { return Reduction<T,mipp::max>::sapply(*this); }
+#else
+	inline T sum () const { return this->r; }
+	inline T hadd() const { return this->r; }
+	inline T hmul() const { return this->r; }
+	inline T hmin() const { return this->r; }
+	inline T hmax() const { return this->r; }
+#endif
+
+	// -------------------------------------------------------------------------------------------------------- masking
+	template <proto_I1<T> I1>
+	inline Reg<T> mask(const Msk<N<T>()> m, const Reg<T> src) const
+	{
+		return mipp::mask<T, I1>(m, src, *this);
+	}
+
+	template <proto_I2<T> I2>
+	inline Reg<T> mask(const Msk<N<T>()> m, const Reg<T> src, const Reg<T> b) const
+	{
+		return mipp::mask<T, I2>(m, src, *this, b);
+	}
+
+	template <proto_I3<T> I3>
+	inline Reg<T> mask(const Msk<N<T>()> m, const Reg<T> src, const Reg<T> b, const Reg<T> c) const
+	{
+		return mipp::mask<T, I3>(m, src, *this, b, c);
+	}
+
+	template <proto_I1<T> I1>
+	inline Reg<T> maskz(const Msk<N<T>()> m) const
+	{
+		return mipp::maskz<T, I1>(m, *this);
+	}
+
+	template <proto_I2<T> I2>
+	inline Reg<T> maskz(const Msk<N<T>()> m, const Reg<T> b) const
+	{
+		return mipp::maskz<T, I2>(m, *this, b);
+	}
+
+	template <proto_I3<T> I3>
+	inline Reg<T> maskz(const Msk<N<T>()> m, const Reg<T> b, const Reg<T> c) const
+	{
+		return mipp::maskz<T, I3>(m, *this, b, c);
+	}
+};
+
+template <int N>
+class Msk
+{
+public:
+	msk m;
+
+	Msk(){}
+	Msk(const msk m) : m(m) {}
+
+#ifndef MIPP_NO_INTRINSICS
+	Msk(const bool val    ) : m(mipp::set1<N>(val) ) {}
+	Msk(const bool vals[N]) : m(mipp::set <N>(vals)) {}
+	Msk(const std::initializer_list<bool> &l)
+	{
+		if ((int)l.size() >= N)
+			m = mipp::set<N>(l.begin());
+		else
+			throw std::runtime_error("mipp::Msk<N>: invalid 'initializer_list' size.");
+	}
+
+#else
+	Msk(const bool val    ) : m(val     ? ~0 : 0) {}
+	Msk(const bool vals[N]) : m(vals[0] ? ~0 : 0) {}
+	Msk(const std::initializer_list<bool> &l)
+	{
+		auto vec = std::vector<bool>(N);
+		vec = l;
+		m = vec[0] ? ~0 : 0;
+	}
+
+#endif
+
+#ifndef MIPP_NO_INTRINSICS
+	template <typename T>
+	inline Reg<T> toReg() const
+	{
+		static_assert(mipp::N<T>() == N, "mipp::Msk<N>: T type is invalid.");
+		return Reg<T>(mipp::toreg<N>(this->m));
+	}
+#else
+	template <typename T>
+	inline Reg<T> toReg() const
+	{
+		return this->m ? (T)1 : (T)0;
+	}
+#endif
+
+	~Msk() {}
+
+#ifndef MIPP_NO_INTRINSICS
+	inline void set0(              ) { m = mipp::set0<N>(   ); }
+	inline void set1(const bool val) { m = mipp::set1<N>(val); }
+#else
+	inline void set0(              ) { m = 0;                   }
+	inline void set1(const bool val) { m = val ? ~0 : 0;        }
+#endif
+
+#ifndef MIPP_NO_INTRINSICS
+	inline Msk<N> andb  (const Msk<N>   v) const { return mipp::andb  <N>(m, v.m); }
+	inline Msk<N> andnb (const Msk<N>   v) const { return mipp::andnb <N>(m, v.m); }
+	inline Msk<N> notb  ()                 const { return mipp::notb  <N>(m);      }
+	inline Msk<N> orb   (const Msk<N>   v) const { return mipp::orb   <N>(m, v.m); }
+	inline Msk<N> xorb  (const Msk<N>   v) const { return mipp::xorb  <N>(m, v.m); }
+	inline Msk<N> lshift(const uint32_t n) const { return mipp::lshift<N>(m, n);   }
+	inline Msk<N> rshift(const uint32_t n) const { return mipp::rshift<N>(m, n);   }
+	inline bool   testz (const Msk<N>   v) const { return mipp::testz <N>(m, v.m); }
+	inline bool   testz ()                 const { return mipp::testz <N>(m);      }
+#else
+	inline Msk<N> andb  (const Msk<N>   v) const { return mipp_scop::andb<msk>( m, v.m);                  }
+	inline Msk<N> andnb (const Msk<N>   v) const { return mipp_scop::andb<msk>(~m, v.m);                  }
+	inline Msk<N> notb  ()                 const { return (msk)~m;                                        }
+	inline Msk<N> orb   (const Msk<N>   v) const { return (msk)(m | v.m);                                 }
+	inline Msk<N> xorb  (const Msk<N>   v) const { return mipp_scop::xorb  <msk>(m, v.m);                 }
+	inline Msk<N> lshift(const uint32_t n) const { return mipp_scop::lshift<msk>(m, n * sizeof(msk) * 8); }
+	inline Msk<N> rshift(const uint32_t n) const { return mipp_scop::rshift<msk>(m, n * sizeof(msk) * 8); }
+	inline bool   testz (const Msk<N>   v) const { return mipp_scop::andb  <msk>(m, v.m) == 0 ? 1 : 0;    }
+	inline bool   testz ()                 const { return !m;                                             }
+#endif
+
+	template <typename T> inline Reg<T> andb  (const Reg<T> v)  const { return this->toReg<T>().andb (v); }
+	template <typename T> inline Reg<T> andnb (const Reg<T> v)  const { return this->toReg<T>().andnb(v); }
+	template <typename T> inline Reg<T> orb   (const Reg<T> v)  const { return this->toReg<T>().orb  (v); }
+	template <typename T> inline Reg<T> xorb  (const Reg<T> v)  const { return this->toReg<T>().xorb (v); }
+
+	inline Msk<N>  operator~  (                )       { return this->notb();                    }
+
+//	template <typename T>
+//	inline Reg<T>  operator^  (const Reg<T>   v) const { return this->xorb(v);                   }
+	inline Msk<N>& operator^= (const Msk<N>  &v)       { m =    this->xorb(v).m;  return *this;  }
+	inline Msk<N>  operator^  (const Msk<N>   v) const { return this->xorb(v);                   }
+
+//	template <typename T>
+//	inline Reg<T>  operator|  (const Reg<T>   v) const { return this->orb(v);                    }
+	inline Msk<N>& operator|= (const Msk<N>  &v)       { m =    this->orb(v).m;   return *this;  }
+	inline Msk<N>  operator|  (const Msk<N>   v) const { return this->orb(v);                    }
+
+//	template <typename T>
+//	inline Reg<T>  operator&  (const Reg<T>   v) const { return this->andb(v);                   }
+	inline Msk<N>& operator&= (const Msk<N>  &v)       { m =    this->andb(v).m;  return *this;  }
+	inline Msk<N>  operator&  (const Msk<N>   v) const { return this->andb(v);                   }
+
+	inline Msk<N>& operator<<=(const uint32_t n)       { m =    this->lshift(n).m; return *this; }
+	inline Msk<N>  operator<< (const uint32_t n) const { return this->lshift(n);                 }
+
+	inline Msk<N>& operator>>=(const uint32_t n)       { m =    this->rshift(n).m; return *this; }
+	inline Msk<N>  operator>> (const uint32_t n) const { return this->rshift(n);                 }
+
+#ifndef MIPP_NO_INTRINSICS
+	inline bool operator[](size_t index) const
+	{
+#ifdef MIPP_AVX512
+		return (this->m >> index) & 0x1;
+#else
+		uint8_t* ptr = (uint8_t*)&this->m;
+		return ptr[index * (mipp::RegisterSizeBit / (N * 8))];
+#endif
+	}
+#else
+	inline bool operator[](size_t index) const { return m; }
+#endif
+};
+
+template <typename T>
+class Reg_2
+{
+public:
+#ifndef MIPP_NO_INTRINSICS
+	reg_2 r;
+#else
+	T r;
+#endif
+
+#ifndef MIPP_NO_INTRINSICS
+	Reg_2(const reg_2 r) : r(r)   {}
+#else
+	Reg_2(const T val  ) : r(val) {}
+#endif
+
+	virtual ~Reg_2() {}
+
+#ifndef MIPP_NO_INTRINSICS
+	template <typename T2> inline Reg<T2> cvt() const { return mipp::cvt<T,T2>(r); }
+#else
+	template <typename T2> inline Reg<T2> cvt() const { return (T2)std::round(r);  }
+#endif
+
+#ifndef MIPP_NO_INTRINSICS
+	inline const T& operator[](size_t index) const { return *((T*)&this->r + index); }
+#else
+	inline const T& operator[](size_t index) const { return r; }
+#endif
+};
+
+template <typename T>
+class Regx2
+{
+public:
+	Reg<T> val[2];
+
+	Regx2(                    )                                             {}
+	Regx2(Reg<T> r1, Reg<T> r2) : val{r1, r2}                               {}
+#ifndef MIPP_NO_INTRINSICS
+	Regx2(regx2 r2            ) : val{Reg<T>(r2.val[0]), Reg<T>(r2.val[1])} {}
+#endif
+
+	inline const Reg<T>& operator[](size_t index) const { return val[index]; }
+
+	~Regx2() {}
+};
+
+#ifndef MIPP_NO_INTRINSICS
+template <typename T>
+std::ostream& operator<<(std::ostream& os, const Reg<T>& r)
+{
+	dump<T>(r.r, os); return os;
+}
+
+template <int N>
+std::ostream& operator<<(std::ostream& os, const Msk<N>& m)
+{
+	dump<N>(m.m, os); return os;
+}
+#else
+template <typename T>
+std::ostream& operator<<(std::ostream& os, const Reg<T>& r)
+{
+	os << +r.r;
+	return os;
+}
+
+template <int N>
+std::ostream& operator<<(std::ostream& os, const Msk<N>& m)
+{
+	os << (m.m ? 1 : 0);
+	return os;
+}
+#endif
+
+//template <typename T> inline Reg<T>      load         (const T* in)                                           { Reg<T> r; r.load (in); return r; }
+//template <typename T> inline Reg<T>      loadu        (const T* in)                                           { Reg<T> r; r.loadu(in); return r; }
+//template <typename T> inline void        store        (T* out, const Reg<T> v)                                { v.store (out);                   }
+//template <typename T> inline void        storeu       (T* out, const Reg<T> v)                                { v.storeu(out);                   }
+//template <typename T> inline Reg<T>      set          (const T in[N<T>()])                                    { Reg<T> r; r.set(in);   return r; }
+//#ifdef _MSC_VER
+//template <int      N> inline Msk<N>      set          (const bool in[])                                       { Msk<N> m; m.set(in);   return m; }
+//#else
+//template <int      N> inline Msk<N>      set          (const bool in[N])                                      { Msk<N> m; m.set(in);   return m; }
+//#endif
+//template <typename T> inline Reg<T>      set1         (const T val)                                           { Reg<T> r; r.set1(val); return r; }
+//template <int      N> inline Msk<N>      set1         (const bool val)                                        { Msk<N> m; m.set1(val); return m; }
+//template <typename T> inline Reg<T>      set0         ()                                                      { Reg<T> r; r.set0();    return r; }
+//template <int      N> inline Msk<N>      set0         ()                                                      { Msk<N> m; m.set0();    return m; }
+template <typename T> inline Reg<T>      shuff        (const Reg<T> v1, const Reg<T> v2)                      { return v1.shuff(v2);             }
+template <typename T> inline Reg<T>      shuff2       (const Reg<T> v1, const Reg<T> v2)                      { return v1.shuff2(v2);            }
+template <typename T> inline Reg<T>      shuff4       (const Reg<T> v1, const Reg<T> v2)                      { return v1.shuff4(v2);            }
+template <typename T> inline Reg<T>      interleavelo (const Reg<T> v1, const Reg<T> v2)                      { return v1.interleavelo(v2);      }
+template <typename T> inline Reg<T>      interleavehi (const Reg<T> v1, const Reg<T> v2)                      { return v1.interleavehi(v2);      }
+template <typename T> inline Reg<T>      interleavelo2(const Reg<T> v1, const Reg<T> v2)                      { return v1.interleavelo2(v2);     }
+template <typename T> inline Reg<T>      interleavehi2(const Reg<T> v1, const Reg<T> v2)                      { return v1.interleavehi2(v2);     }
+template <typename T> inline Reg<T>      interleavelo4(const Reg<T> v1, const Reg<T> v2)                      { return v1.interleavelo4(v2);     }
+template <typename T> inline Reg<T>      interleavehi4(const Reg<T> v1, const Reg<T> v2)                      { return v1.interleavehi4(v2);     }
+template <typename T> inline Regx2<T>    interleave   (const Reg<T> v1, const Reg<T> v2)                      { return v1.interleave(v2);        }
+template <typename T> inline Regx2<T>    interleave2  (const Reg<T> v1, const Reg<T> v2)                      { return v1.interleave2(v2);       }
+template <typename T> inline Regx2<T>    interleave4  (const Reg<T> v1, const Reg<T> v2)                      { return v1.interleave4(v2);       }
+template <typename T> inline Reg<T>      interleave   (const Reg<T> v)                                        { return v.interleave();           }
+template <typename T> inline Regx2<T>    interleavex2 (const Reg<T> v1, const Reg<T> v2)                      { return v1.interleavex2(v2);      }
+template <typename T> inline Reg<T>      interleavex4 (const Reg<T> v)                                        { return v.interleavex4();         }
+template <typename T> inline Reg<T>      interleavex16(const Reg<T> v)                                        { return v.interleavex16();        }
+template <typename T> inline Reg<T>      andb         (const Reg<T> v1, const Reg<T> v2)                      { return v1.andb(v2);              }
+template <int      N> inline Msk<N>      andb         (const Msk<N> v1, const Msk<N> v2)                      { return v1.andb(v2);              }
+template <typename T> inline Reg<T>      andb         (const Reg<T> v1, const Msk<N<T>()> v2)                 { return v1.andb(v2);              }
+template <typename T> inline Reg<T>      andb         (const Msk<N<T>()> v1, const Reg<T> v2)                 { return v1.andb(v2);              }
+template <typename T> inline Reg<T>      andnb        (const Reg<T> v1, const Reg<T>v2)                       { return v1.andnb(v2);             }
+template <int      N> inline Msk<N>      andnb        (const Msk<N> v1, const Msk<N>v2)                       { return v1.andnb(v2);             }
+template <typename T> inline Reg<T>      andnb        (const Reg<T> v1, const Msk<N<T>()> v2)                 { return v1.andnb(v2);             }
+template <typename T> inline Reg<T>      andnb        (const Msk<N<T>()> v1, const Reg<T> v2)                 { return v1.andnb(v2);             }
+template <typename T> inline Reg<T>      notb         (const Reg<T> v)                                        { return v.notb();                 }
+template <int      N> inline Msk<N>      notb         (const Msk<N> v)                                        { return v.notb();                 }
+template <typename T> inline Reg<T>      orb          (const Reg<T> v1, const Reg<T> v2)                      { return v1.orb(v2);               }
+template <int      N> inline Msk<N>      orb          (const Msk<N> v1, const Msk<N> v2)                      { return v1.orb(v2);               }
+template <typename T> inline Reg<T>      orb          (const Reg<T> v1, const Msk<N<T>()> v2)                 { return v1.orb(v2);               }
+template <typename T> inline Reg<T>      orb          (const Msk<N<T>()> v1, const Reg<T> v2)                 { return v1.orb(v2);               }
+template <typename T> inline Reg<T>      xorb         (const Reg<T> v1, const Reg<T> v2)                      { return v1.xorb(v2);              }
+template <int      N> inline Msk<N>      xorb         (const Msk<N> v1, const Msk<N> v2)                      { return v1.xorb(v2);              }
+template <typename T> inline Reg<T>      xorb         (const Reg<T> v1, const Msk<N<T>()> v2)                 { return v1.xorb(v2);              }
+template <typename T> inline Reg<T>      xorb         (const Msk<N<T>()> v1, const Reg<T> v2)                 { return v1.xorb(v2);              }
+template <typename T> inline Reg<T>      lshift       (const Reg<T> v,  const uint32_t n)                     { return v.lshift(n);              }
+template <int      N> inline Msk<N>      lshift       (const Msk<N> v,  const uint32_t n)                     { return v.lshift(n);              }
+template <typename T> inline Reg<T>      rshift       (const Reg<T> v,  const uint32_t n)                     { return v.rshift(n);              }
+template <int      N> inline Msk<N>      rshift       (const Msk<N> v,  const uint32_t n)                     { return v.rshift(n);              }
+template <typename T> inline Msk<N<T>()> cmpeq        (const Reg<T> v1, const Reg<T> v2)                      { return v1.cmpeq(v2);             }
+template <typename T> inline Msk<N<T>()> cmpneq       (const Reg<T> v1, const Reg<T> v2)                      { return v1.cmpneq(v2);            }
+template <typename T> inline Msk<N<T>()> cmplt        (const Reg<T> v1, const Reg<T> v2)                      { return v1.cmplt(v2);             }
+template <typename T> inline Msk<N<T>()> cmple        (const Reg<T> v1, const Reg<T> v2)                      { return v1.cmple(v2);             }
+template <typename T> inline Msk<N<T>()> cmpgt        (const Reg<T> v1, const Reg<T> v2)                      { return v1.cmpgt(v2);             }
+template <typename T> inline Msk<N<T>()> cmpge        (const Reg<T> v1, const Reg<T> v2)                      { return v1.cmpge(v2);             }
+template <typename T> inline Reg<T>      add          (const Reg<T> v1, const Reg<T> v2)                      { return v1.add(v2);               }
+template <typename T> inline Reg<T>      sub          (const Reg<T> v1, const Reg<T> v2)                      { return v1.sub(v2);               }
+template <typename T> inline Reg<T>      mul          (const Reg<T> v1, const Reg<T> v2)                      { return v1.mul(v2);               }
+template <typename T> inline Reg<T>      div          (const Reg<T> v1, const Reg<T> v2)                      { return v1.div(v2);               }
+template <typename T> inline Reg<T>      min          (const Reg<T> v1, const Reg<T> v2)                      { return v1.min(v2);               }
+template <typename T> inline Reg<T>      max          (const Reg<T> v1, const Reg<T> v2)                      { return v1.max(v2);               }
+template <typename T> inline Reg<T>      msb          (const Reg<T> v)                                        { return v.msb();                  }
+template <typename T> inline Reg<T>      msb          (const Reg<T> v1, const Reg<T> v2)                      { return v1.msb(v2);               }
+template <typename T> inline Msk<N<T>()> sign         (const Reg<T> v)                                        { return v.sign();                 }
+template <typename T> inline Reg<T>      neg          (const Reg<T> v1, const Reg<T> v2)                      { return v1.neg(v2);               }
+template <typename T> inline Reg<T>      neg          (const Reg<T> v1, const Msk<N<T>()> v2)                 { return v1.neg(v2);               }
+template <typename T> inline Reg<T>      copysign     (const Reg<T> v1, const Reg<T> v2)                      { return v1.copysign(v2);          }
+template <typename T> inline Reg<T>      copysign     (const Reg<T> v1, const Msk<N<T>()> v2)                 { return v1.copysign(v2);          }
+template <typename T> inline Reg<T>      abs          (const Reg<T> v)                                        { return v.abs();                  }
+template <typename T> inline Reg<T>      sqrt         (const Reg<T> v)                                        { return v.sqrt();                 }
+template <typename T> inline Reg<T>      rsqrt        (const Reg<T> v)                                        { return v.rsqrt();                }
+template <typename T> inline Reg<T>      log          (const Reg<T> v)                                        { return v.log();                  }
+template <typename T> inline Reg<T>      exp          (const Reg<T> v)                                        { return v.exp();                  }
+template <typename T> inline Reg<T>      sin          (const Reg<T> v)                                        { return v.sin();                  }
+template <typename T> inline Reg<T>      cos          (const Reg<T> v)                                        { return v.cos();                  }
+template <typename T> inline Reg<T>      tan          (const Reg<T> v)                                        { return v.tan();                  }
+template <typename T> inline void        sincos       (const Reg<T> x,        Reg<T> &s,       Reg<T> &c)     { return x.sincos(s,c);            }
+template <typename T> inline Reg<T>      sinh         (const Reg<T> v)                                        { return v.sinh();                 }
+template <typename T> inline Reg<T>      cosh         (const Reg<T> v)                                        { return v.cosh();                 }
+template <typename T> inline Reg<T>      tanh         (const Reg<T> v)                                        { return v.tanh();                 }
+template <typename T> inline Reg<T>      asinh        (const Reg<T> v)                                        { return v.asinh();                }
+template <typename T> inline Reg<T>      acosh        (const Reg<T> v)                                        { return v.acosh();                }
+template <typename T> inline Reg<T>      atanh        (const Reg<T> v)                                        { return v.atanh();                }
+template <typename T> inline Reg<T>      fmadd        (const Reg<T> v1, const Reg<T> v2, const Reg<T> v3)     { return v1.fmadd(v2, v3);         }
+template <typename T> inline Reg<T>      fnmadd       (const Reg<T> v1, const Reg<T> v2, const Reg<T> v3)     { return v1.fnmadd(v2, v3);        }
+template <typename T> inline Reg<T>      fmsub        (const Reg<T> v1, const Reg<T> v2, const Reg<T> v3)     { return v1.fmsub(v2, v3);         }
+template <typename T> inline Reg<T>      fnmsub       (const Reg<T> v1, const Reg<T> v2, const Reg<T> v3)     { return v1.fnmsub(v2, v3);        }
+template <typename T> inline Reg<T>      blend        (const Reg<T> v1, const Reg<T> v2, const Msk<N<T>()> m) { return v1.blend(v2, m );         }
+template <typename T> inline Reg<T>      lrot         (const Reg<T> v)                                        { return v.lrot();                 }
+template <typename T> inline Reg<T>      rrot         (const Reg<T> v)                                        { return v.rrot();                 }
+template <typename T> inline Reg<T>      div2         (const Reg<T> v)                                        { return v.div2();                 }
+template <typename T> inline Reg<T>      div4         (const Reg<T> v)                                        { return v.div4();                 }
+template <typename T> inline Reg<T>      sat          (const Reg<T> v, T min, T max)                          { return v.sat(min, max);          }
+template <typename T> inline Reg<T>      round        (const Reg<T> v)                                        { return v.round();                }
+template <typename T> inline bool        testz        (const Reg<T> v1, const Reg<T> v2)                      { return v1.testz(v2);             }
+template <int      N> inline bool        testz        (const Msk<N> v1, const Msk<N> v2)                      { return v1.testz(v2);             }
+template <typename T> inline bool        testz        (const Reg<T> v1)                                       { return v1.testz();               }
+template <int      N> inline bool        testz        (const Msk<N> v1)                                       { return v1.testz();               }
+template <typename T> inline     T       sum          (const Reg<T> v)                                        { return v.sum();                  }
+template <typename T> inline     T       hadd         (const Reg<T> v)                                        { return v.hadd();                 }
+template <typename T> inline     T       hmul         (const Reg<T> v)                                        { return v.hmul();                 }
+template <typename T> inline     T       hmin         (const Reg<T> v)                                        { return v.hmin();                 }
+template <typename T> inline     T       hmax         (const Reg<T> v)                                        { return v.hmax();                 }
+
+template <typename T>
+inline Reg<T> toReg(const Msk<N<T>()> m)
+{
+	return m.template toReg<T>();
+}
+
+template <typename T1, typename T2>
+inline Reg<T2> cvt(const Reg<T1> v) {
+	return v.template cvt<T2>();
+}
+
+template <typename T1, typename T2>
+inline Reg<T2> cvt(const Reg_2<T1> v) {
+	return v.template cvt<T2>();
+}
+
+template <typename T1, typename T2>
+inline Reg<T2> pack(const Reg<T1> v1, const Reg<T1> v2) {
+	return v1.template pack<T2>(v2);
+}
+
+template <typename T1, typename T2>
+inline Reg<T2> cast(const Reg<T1> v)
+{
+	return v.template cast<T2>();
+}
+
+
+#ifndef MIPP_NO_INTRINSICS
+// ------------------------------------------------------------------------------------------------------- ARM NEON-128
+// --------------------------------------------------------------------------------------------------------------------
+#if defined(__ARM_NEON__) || defined(__ARM_NEON)
+// original file: ../external/MIPP/src/mipp_impl_NEON.hxx
+
+// #include "mipp.h"
+
+// ------------------------------------------------------------------------------------------------------- ARM NEON-128
+// --------------------------------------------------------------------------------------------------------------------
+#if defined(__ARM_NEON__) || defined(__ARM_NEON)
+
+	// ---------------------------------------------------------------------------------------------------------- loadu
+#ifdef __aarch64__
+	template <>
+	inline reg loadu<double>(const double *mem_addr) {
+		return (reg) vld1q_f64(mem_addr);
+	}
+#endif
+
+	template <>
+	inline reg loadu<float>(const float *mem_addr) {
+		return vld1q_f32(mem_addr);
+	}
+
+#ifdef __aarch64__
+		template <>
+	inline reg loadu<int64_t>(const int64_t *mem_addr) {
+		return (reg) vld1q_s64(mem_addr);
+	}
+#endif
+
+	template <>
+	inline reg loadu<int32_t>(const int32_t *mem_addr) {
+		return (reg) vld1q_s32(mem_addr);
+	}
+
+	template <>
+	inline reg loadu<int16_t>(const int16_t *mem_addr) {
+		return (reg) vld1q_s16((int16_t*) mem_addr);
+	}
+
+	template <>
+	inline reg loadu<int8_t>(const int8_t *mem_addr) {
+		return (reg) vld1q_s8((int8_t*) mem_addr);
+	}
+
+	// ----------------------------------------------------------------------------------------------------------- load
+#ifdef MIPP_ALIGNED_LOADS
+#ifdef __aarch64__
+	template <>
+	inline reg load<double>(const double *mem_addr) {
+		return (reg) vld1q_f64(mem_addr);
+	}
+#endif
+
+	template <>
+	inline reg load<float>(const float *mem_addr) {
+		return vld1q_f32(mem_addr);
+	}
+
+#ifdef __aarch64__
+		template <>
+	inline reg load<int64_t>(const int64_t *mem_addr) {
+		return (reg) vld1q_s64(mem_addr);
+	}
+#endif
+
+	template <>
+	inline reg load<int32_t>(const int32_t *mem_addr) {
+		return (reg) vld1q_s32(mem_addr);
+	}
+
+	template <>
+	inline reg load<int16_t>(const int16_t *mem_addr) {
+		return (reg) vld1q_s16((int16_t*) mem_addr);
+	}
+
+	template <>
+	inline reg load<int8_t>(const int8_t *mem_addr) {
+		return (reg) vld1q_s8((int8_t*) mem_addr);
+	}
+#else
+	template <>
+	inline reg load<double>(const double *mem_addr) {
+		return mipp::loadu<double>(mem_addr);
+	}
+
+	template <>
+	inline reg load<float>(const float *mem_addr) {
+		return mipp::loadu<float>(mem_addr);
+	}
+
+	template <>
+	inline reg load<int64_t>(const int64_t *mem_addr) {
+		return mipp::loadu<int64_t>(mem_addr);
+	}
+
+	template <>
+	inline reg load<int32_t>(const int32_t *mem_addr) {
+		return mipp::loadu<int32_t>(mem_addr);
+	}
+
+	template <>
+	inline reg load<int16_t>(const int16_t *mem_addr) {
+		return mipp::loadu<int16_t>(mem_addr);
+	}
+
+	template <>
+	inline reg load<int8_t>(const int8_t *mem_addr) {
+		return mipp::loadu<int8_t>(mem_addr);
+	}
+#endif
+
+	// --------------------------------------------------------------------------------------------------------- storeu
+#ifdef __aarch64__
+	template <>
+	inline void storeu<double>(double *mem_addr, const reg v) {
+		vst1q_f64(mem_addr, (float64x2_t)v);
+	}
+#endif
+
+	template <>
+	inline void storeu<float>(float *mem_addr, const reg v) {
+		vst1q_f32(mem_addr, v);
+	}
+
+#ifdef __aarch64__
+	template <>
+	inline void storeu<int64_t>(int64_t *mem_addr, const reg v) {
+		vst1q_s64(mem_addr, (int64x2_t)v);
+	}
+#endif
+
+	template <>
+	inline void storeu<int32_t>(int32_t *mem_addr, const reg v) {
+		vst1q_s32(mem_addr, (int32x4_t)v);
+	}
+
+	template <>
+	inline void storeu<int16_t>(int16_t *mem_addr, const reg v) {
+		vst1q_s16((int16_t*) mem_addr, (int16x8_t) v);
+	}
+
+	template <>
+	inline void storeu<int8_t>(int8_t *mem_addr, const reg v) {
+		vst1q_s8((int8_t*) mem_addr, (int8x16_t) v);
+	}
+
+	// ---------------------------------------------------------------------------------------------------------- store
+#ifdef MIPP_ALIGNED_LOADS
+#ifdef __aarch64__
+	template <>
+	inline void store<double>(double *mem_addr, const reg v) {
+		vst1q_f64(mem_addr, (float64x2_t)v);
+	}
+#endif
+
+	template <>
+	inline void store<float>(float *mem_addr, const reg v) {
+		vst1q_f32(mem_addr, v);
+	}
+
+#ifdef __aarch64__
+	template <>
+	inline void store<int64_t>(int64_t *mem_addr, const reg v) {
+		vst1q_s64(mem_addr, (int64x2_t)v);
+	}
+#endif
+
+	template <>
+	inline void store<int32_t>(int32_t *mem_addr, const reg v) {
+		vst1q_s32(mem_addr, (int32x4_t)v);
+	}
+
+	template <>
+	inline void store<int16_t>(int16_t *mem_addr, const reg v) {
+		vst1q_s16((int16_t*) mem_addr, (int16x8_t) v);
+	}
+
+	template <>
+	inline void store<int8_t>(int8_t *mem_addr, const reg v) {
+		vst1q_s8((int8_t*) mem_addr, (int8x16_t) v);
+	}
+#else
+	template <>
+	inline void store<double>(double *mem_addr, const reg v) {
+		mipp::storeu<double>(mem_addr, v);
+	}
+
+	template <>
+	inline void store<float>(float *mem_addr, const reg v) {
+		mipp::storeu<float>(mem_addr, v);
+	}
+
+	template <>
+	inline void store<int64_t>(int64_t *mem_addr, const reg v) {
+		mipp::storeu<int64_t>(mem_addr, v);
+	}
+
+	template <>
+	inline void store<int32_t>(int32_t *mem_addr, const reg v) {
+		mipp::storeu<int32_t>(mem_addr, v);
+	}
+
+	template <>
+	inline void store<int16_t>(int16_t *mem_addr, const reg v) {
+		mipp::storeu<int16_t>(mem_addr, v);
+	}
+
+	template <>
+	inline void store<int8_t>(int8_t *mem_addr, const reg v) {
+		mipp::storeu<int8_t>(mem_addr, v);
+	}
+#endif
+
+	// ------------------------------------------------------------------------------------------------------------ set
+	template <>
+	inline reg set<double>(const double vals[nElReg<double>()]) {
+		return load<double>(vals);
+	}
+
+	template <>
+	inline reg set<float>(const float vals[nElReg<float>()]) {
+		return load<float>(vals);
+	}
+
+	template <>
+	inline reg set<int64_t>(const int64_t vals[nElReg<int64_t>()]) {
+		return load<int64_t>(vals);
+	}
+
+	template <>
+	inline reg set<int32_t>(const int32_t vals[nElReg<int32_t>()]) {
+		return load<int32_t>(vals);
+	}
+
+	template <>
+	inline reg set<int16_t>(const int16_t vals[nElReg<int16_t>()]) {
+		return load<int16_t>(vals);
+	}
+
+	template <>
+	inline reg set<int8_t>(const int8_t vals[nElReg<int8_t>()]) {
+		return load<int8_t>(vals);
+	}
+
+	// ----------------------------------------------------------------------------------------------------- set (mask)
+#ifdef __aarch64__
+	template <>
+	inline msk set<2>(const bool vals[2]) {
+		uint64_t v[2] = {vals[0] ? (uint64_t)0xFFFFFFFFFFFFFFFF : (uint64_t)0,
+		                 vals[1] ? (uint64_t)0xFFFFFFFFFFFFFFFF : (uint64_t)0};
+		return (msk) set<int64_t>((int64_t*)v);
+	}
+#endif
+
+	template <>
+	inline msk set<4>(const bool vals[4]) {
+		uint32_t v[4] = {vals[0] ? (uint32_t)0xFFFFFFFF : (uint32_t)0, vals[1] ? (uint32_t)0xFFFFFFFF : (uint32_t)0,
+		                 vals[2] ? (uint32_t)0xFFFFFFFF : (uint32_t)0, vals[3] ? (uint32_t)0xFFFFFFFF : (uint32_t)0};
+		return (msk) set<int32_t>((int32_t*)v);
+	}
+
+	template <>
+	inline msk set<8>(const bool vals[8]) {
+		uint16_t v[8] = {vals[ 0] ? (uint16_t)0xFFFF : (uint16_t)0, vals[ 1] ? (uint16_t)0xFFFF : (uint16_t)0,
+		                 vals[ 2] ? (uint16_t)0xFFFF : (uint16_t)0, vals[ 3] ? (uint16_t)0xFFFF : (uint16_t)0,
+		                 vals[ 4] ? (uint16_t)0xFFFF : (uint16_t)0, vals[ 5] ? (uint16_t)0xFFFF : (uint16_t)0,
+		                 vals[ 6] ? (uint16_t)0xFFFF : (uint16_t)0, vals[ 7] ? (uint16_t)0xFFFF : (uint16_t)0};
+		return (msk) set<int16_t>((int16_t*)v);
+	}
+
+	template <>
+	inline msk set<16>(const bool vals[16]) {
+		uint8_t v[16] = {vals[ 0] ? (uint8_t)0xFF : (uint8_t)0, vals[ 1] ? (uint8_t)0xFF : (uint8_t)0,
+		                 vals[ 2] ? (uint8_t)0xFF : (uint8_t)0, vals[ 3] ? (uint8_t)0xFF : (uint8_t)0,
+		                 vals[ 4] ? (uint8_t)0xFF : (uint8_t)0, vals[ 5] ? (uint8_t)0xFF : (uint8_t)0,
+		                 vals[ 6] ? (uint8_t)0xFF : (uint8_t)0, vals[ 7] ? (uint8_t)0xFF : (uint8_t)0,
+		                 vals[ 8] ? (uint8_t)0xFF : (uint8_t)0, vals[ 9] ? (uint8_t)0xFF : (uint8_t)0,
+		                 vals[10] ? (uint8_t)0xFF : (uint8_t)0, vals[11] ? (uint8_t)0xFF : (uint8_t)0,
+		                 vals[12] ? (uint8_t)0xFF : (uint8_t)0, vals[13] ? (uint8_t)0xFF : (uint8_t)0,
+		                 vals[14] ? (uint8_t)0xFF : (uint8_t)0, vals[15] ? (uint8_t)0xFF : (uint8_t)0};
+		return (msk) set<int8_t>((int8_t*)v);
+	}
+
+	// ----------------------------------------------------------------------------------------------------------- set1
+#ifdef __aarch64__
+	template <>
+	inline reg set1<double>(const double val) {
+		return (reg) vdupq_n_f64(val);
+	}
+#endif
+
+	template <>
+	inline reg set1<float>(const float val) {
+		return vdupq_n_f32(val);
+	}
+
+#ifdef __aarch64__
+		template <>
+	inline reg set1<int64_t>(const int64_t val) {
+		return (reg) vdupq_n_s64(val);
+	}
+#endif
+
+	template <>
+	inline reg set1<int32_t>(const int32_t val) {
+		return (reg) vdupq_n_s32(val);
+	}
+
+	template <>
+	inline reg set1<int16_t>(const int16_t val) {
+		return (reg) vdupq_n_s16(val);
+	}
+
+	template <>
+	inline reg set1<int8_t>(const int8_t val) {
+		return (reg) vdupq_n_s8(val);
+	}
+
+	// ---------------------------------------------------------------------------------------------------- set1 (mask)
+#ifdef __aarch64__
+		template <>
+	inline msk set1<2>(const bool val) {
+		return (msk) vdupq_n_u64(val ? 0xFFFFFFFFFFFFFFFF : 0);
+	}
+#endif
+
+	template <>
+	inline msk set1<4>(const bool val) {
+		return (msk) vdupq_n_u32(val ? 0xFFFFFFFF : 0);
+	}
+
+	template <>
+	inline msk set1<8>(const bool val) {
+		return (msk) vdupq_n_u16(val ? 0xFFFF : 0);
+	}
+
+	template <>
+	inline msk set1<16>(const bool val) {
+		return (msk) vdupq_n_u8(val ? 0xFF : 0);
+	}
+
+	// ----------------------------------------------------------------------------------------------------------- set0
+#ifdef __aarch64__
+	template <>
+	inline reg set0<double>() {
+		return (reg) vdupq_n_f64(0.0);
+	}
+#endif
+
+	template <>
+	inline reg set0<float>() {
+		return vdupq_n_f32(0.f);
+	}
+
+#ifdef __aarch64__
+	template <>
+	inline reg set0<int64_t>() {
+		return (reg) vdupq_n_s64(0);
+	}
+#endif
+
+	template <>
+	inline reg set0<int32_t>() {
+		return (reg) vdupq_n_s32(0);
+	}
+
+	template <>
+	inline reg set0<int16_t>() {
+		return (reg) vdupq_n_s16(0);
+	}
+
+	template <>
+	inline reg set0<int8_t>() {
+		return (reg) vdupq_n_s8(0);
+	}
+
+	// ---------------------------------------------------------------------------------------------------- set0 (mask)
+#ifdef __aarch64__
+	template <>
+	inline msk set0<2>() {
+		return (msk) vdupq_n_u64(0);
+	}
+#endif
+
+	template <>
+	inline msk set0<4>() {
+		return (msk) vdupq_n_u32(0);
+	}
+
+	template <>
+	inline msk set0<8>() {
+		return (msk) vdupq_n_u16(0);
+	}
+
+	template <>
+	inline msk set0<16>() {
+		return (msk) vdupq_n_u8(0);
+	}
+
+	// ------------------------------------------------------------------------------------------------------------ low
+#ifdef __aarch64__
+	template <>
+	inline reg_2 low<double>(const reg v) {
+		return (reg_2) vget_low_f64((float64x2_t) v);
+	}
+#endif
+
+	template <>
+	inline reg_2 low<float>(const reg v) {
+		return (reg_2) vget_low_f32((float32x4_t) v);
+	}
+
+#ifdef __aarch64__
+	template <>
+	inline reg_2 low<int64_t>(const reg v) {
+		return (reg_2) vget_low_f64((float64x2_t) v);
+	}
+#endif
+
+	template <>
+	inline reg_2 low<int32_t>(const reg v) {
+		return (reg_2) vget_low_f32((float32x4_t) v);
+	}
+
+	template <>
+	inline reg_2 low<int16_t>(const reg v) {
+		return (reg_2) vget_low_f32((float32x4_t) v);
+	}
+
+	template <>
+	inline reg_2 low<int8_t>(const reg v) {
+		return (reg_2) vget_low_f32((float32x4_t) v);
+	}
+
+	// ----------------------------------------------------------------------------------------------------------- high
+#ifdef __aarch64__
+	template <>
+	inline reg_2 high<double>(const reg v) {
+		return (reg_2) vget_high_f64((float64x2_t) v);
+	}
+#endif
+
+	template <>
+	inline reg_2 high<float>(const reg v) {
+		return (reg_2) vget_high_f32((float32x4_t) v);
+	}
+
+#ifdef __aarch64__
+	template <>
+	inline reg_2 high<int64_t>(const reg v) {
+		return (reg_2) vget_high_f64((float64x2_t) v);
+	}
+#endif
+
+	template <>
+	inline reg_2 high<int32_t>(const reg v) {
+		return (reg_2) vget_high_f32((float32x4_t) v);
+	}
+
+	template <>
+	inline reg_2 high<int16_t>(const reg v) {
+		return (reg_2) vget_high_f32((float32x4_t) v);
+	}
+
+	template <>
+	inline reg_2 high<int8_t>(const reg v) {
+		return (reg_2) vget_high_f32((float32x4_t) v);
+	}
+
+	// ---------------------------------------------------------------------------------------------------------- cmask
+#ifdef __aarch64__
+	template <>
+	inline reg cmask<double>(const uint32_t val[nElReg<double>()]) {
+		int8_t val_bis[nElReg<int8_t>()] = {(int8_t)(val[0]*8 + 0), (int8_t)(val[0]*8 + 1),
+		                                    (int8_t)(val[0]*8 + 2), (int8_t)(val[0]*8 + 3),
+		                                    (int8_t)(val[0]*8 + 4), (int8_t)(val[0]*8 + 5),
+		                                    (int8_t)(val[0]*8 + 6), (int8_t)(val[0]*8 + 7),
+		                                    (int8_t)(val[1]*8 + 0), (int8_t)(val[1]*8 + 1),
+		                                    (int8_t)(val[1]*8 + 2), (int8_t)(val[1]*8 + 3),
+		                                    (int8_t)(val[1]*8 + 4), (int8_t)(val[1]*8 + 5),
+		                                    (int8_t)(val[1]*8 + 6), (int8_t)(val[1]*8 + 7)};
+		return mipp::set<int8_t>(val_bis);
+	}
+#endif
+
+	template <>
+	inline reg cmask<float>(const uint32_t val[nElReg<float>()]) {
+		int8_t val_bis[nElReg<int8_t>()] = {(int8_t)(val[0]*4 + 0), (int8_t)(val[0]*4 + 1),
+		                                    (int8_t)(val[0]*4 + 2), (int8_t)(val[0]*4 + 3),
+		                                    (int8_t)(val[1]*4 + 0), (int8_t)(val[1]*4 + 1),
+		                                    (int8_t)(val[1]*4 + 2), (int8_t)(val[1]*4 + 3),
+		                                    (int8_t)(val[2]*4 + 0), (int8_t)(val[2]*4 + 1),
+		                                    (int8_t)(val[2]*4 + 2), (int8_t)(val[2]*4 + 3),
+		                                    (int8_t)(val[3]*4 + 0), (int8_t)(val[3]*4 + 1),
+		                                    (int8_t)(val[3]*4 + 2), (int8_t)(val[3]*4 + 3)};
+		return mipp::set<int8_t>(val_bis);
+	}
+
+#ifdef __aarch64__
+	template <>
+	inline reg cmask<int64_t>(const uint32_t val[nElReg<int64_t>()]) {
+		int8_t val_bis[nElReg<int8_t>()] = {(int8_t)(val[0]*8 + 0), (int8_t)(val[0]*8 + 1),
+		                                    (int8_t)(val[0]*8 + 2), (int8_t)(val[0]*8 + 3),
+		                                    (int8_t)(val[0]*8 + 4), (int8_t)(val[0]*8 + 5),
+		                                    (int8_t)(val[0]*8 + 6), (int8_t)(val[0]*8 + 7),
+		                                    (int8_t)(val[1]*8 + 0), (int8_t)(val[1]*8 + 1),
+		                                    (int8_t)(val[1]*8 + 2), (int8_t)(val[1]*8 + 3),
+		                                    (int8_t)(val[1]*8 + 4), (int8_t)(val[1]*8 + 5),
+		                                    (int8_t)(val[1]*8 + 6), (int8_t)(val[1]*8 + 7)};
+		return mipp::set<int8_t>(val_bis);
+	}
+#endif
+
+	template <>
+	inline reg cmask<int32_t>(const uint32_t val[nElReg<int32_t>()]) {
+		int8_t val_bis[nElReg<int8_t>()] = {(int8_t)(val[0]*4 + 0), (int8_t)(val[0]*4 + 1),
+		                                    (int8_t)(val[0]*4 + 2), (int8_t)(val[0]*4 + 3),
+		                                    (int8_t)(val[1]*4 + 0), (int8_t)(val[1]*4 + 1),
+		                                    (int8_t)(val[1]*4 + 2), (int8_t)(val[1]*4 + 3),
+		                                    (int8_t)(val[2]*4 + 0), (int8_t)(val[2]*4 + 1),
+		                                    (int8_t)(val[2]*4 + 2), (int8_t)(val[2]*4 + 3),
+		                                    (int8_t)(val[3]*4 + 0), (int8_t)(val[3]*4 + 1),
+		                                    (int8_t)(val[3]*4 + 2), (int8_t)(val[3]*4 + 3)};
+		return mipp::set<int8_t>(val_bis);
+	}
+
+	template <>
+	inline reg cmask<int16_t>(const uint32_t val[nElReg<int16_t>()]) {
+		int8_t val_bis[nElReg<int8_t>()] = {(int8_t)(val[0]*2 + 0), (int8_t)(val[0]*2 + 1),
+		                                    (int8_t)(val[1]*2 + 0), (int8_t)(val[1]*2 + 1),
+		                                    (int8_t)(val[2]*2 + 0), (int8_t)(val[2]*2 + 1),
+		                                    (int8_t)(val[3]*2 + 0), (int8_t)(val[3]*2 + 1),
+		                                    (int8_t)(val[4]*2 + 0), (int8_t)(val[4]*2 + 1),
+		                                    (int8_t)(val[5]*2 + 0), (int8_t)(val[5]*2 + 1),
+		                                    (int8_t)(val[6]*2 + 0), (int8_t)(val[6]*2 + 1),
+		                                    (int8_t)(val[7]*2 + 0), (int8_t)(val[7]*2 + 1)};
+		return mipp::set<int8_t>(val_bis);
+	}
+
+	template <>
+	inline reg cmask<int8_t>(const uint32_t val[nElReg<int8_t>()]) {
+		int8_t val_bis[nElReg<int8_t>()] = {(int8_t)val[ 0], (int8_t)val[ 1],
+		                                    (int8_t)val[ 2], (int8_t)val[ 3],
+		                                    (int8_t)val[ 4], (int8_t)val[ 5],
+		                                    (int8_t)val[ 6], (int8_t)val[ 7],
+		                                    (int8_t)val[ 8], (int8_t)val[ 9],
+		                                    (int8_t)val[10], (int8_t)val[11],
+		                                    (int8_t)val[12], (int8_t)val[13],
+		                                    (int8_t)val[14], (int8_t)val[15]};
+		return mipp::set<int8_t>(val_bis);
+	}
+
+	// --------------------------------------------------------------------------------------------------------- cmask2
+#ifdef __aarch64__
+	template <>
+	inline reg cmask2<double>(const uint32_t val[nElReg<double>()/2]) {
+		int8_t val_bis[nElReg<int8_t>()] = {(int8_t)(val[0]*8 + 0+0), (int8_t)(val[0]*8 + 1+0),
+		                                    (int8_t)(val[0]*8 + 2+0), (int8_t)(val[0]*8 + 3+0),
+		                                    (int8_t)(val[0]*8 + 4+0), (int8_t)(val[0]*8 + 5+0),
+		                                    (int8_t)(val[0]*8 + 6+0), (int8_t)(val[0]*8 + 7+0),
+		                                    (int8_t)(val[0]*8 + 0+8), (int8_t)(val[0]*8 + 1+8),
+		                                    (int8_t)(val[0]*8 + 2+8), (int8_t)(val[0]*8 + 3+8),
+		                                    (int8_t)(val[0]*8 + 4+8), (int8_t)(val[0]*8 + 5+8),
+		                                    (int8_t)(val[0]*8 + 6+8), (int8_t)(val[0]*8 + 7+8)};
+		return mipp::set<int8_t>(val_bis);
+	}
+#endif
+
+	template <>
+	inline reg cmask2<float>(const uint32_t val[nElReg<float>()/2]) {
+		int8_t val_bis[nElReg<int8_t>()] = {(int8_t)(val[0]*4 + 0+0), (int8_t)(val[0]*4 + 1+0),
+		                                    (int8_t)(val[0]*4 + 2+0), (int8_t)(val[0]*4 + 3+0),
+		                                    (int8_t)(val[1]*4 + 0+0), (int8_t)(val[1]*4 + 1+0),
+		                                    (int8_t)(val[1]*4 + 2+0), (int8_t)(val[1]*4 + 3+0),
+		                                    (int8_t)(val[0]*4 + 0+8), (int8_t)(val[0]*4 + 1+8),
+		                                    (int8_t)(val[0]*4 + 2+8), (int8_t)(val[0]*4 + 3+8),
+		                                    (int8_t)(val[1]*4 + 0+8), (int8_t)(val[1]*4 + 1+8),
+		                                    (int8_t)(val[1]*4 + 2+8), (int8_t)(val[1]*4 + 3+8)};
+		return mipp::set<int8_t>(val_bis);
+	}
+
+#ifdef __aarch64__
+	template <>
+	inline reg cmask2<int64_t>(const uint32_t val[nElReg<int64_t>()/2]) {
+		int8_t val_bis[nElReg<int8_t>()] = {(int8_t)(val[0]*8 + 0+0), (int8_t)(val[0]*8 + 1+0),
+		                                    (int8_t)(val[0]*8 + 2+0), (int8_t)(val[0]*8 + 3+0),
+		                                    (int8_t)(val[0]*8 + 4+0), (int8_t)(val[0]*8 + 5+0),
+		                                    (int8_t)(val[0]*8 + 6+0), (int8_t)(val[0]*8 + 7+0),
+		                                    (int8_t)(val[0]*8 + 0+8), (int8_t)(val[0]*8 + 1+8),
+		                                    (int8_t)(val[0]*8 + 2+8), (int8_t)(val[0]*8 + 3+8),
+		                                    (int8_t)(val[0]*8 + 4+8), (int8_t)(val[0]*8 + 5+8),
+		                                    (int8_t)(val[0]*8 + 6+8), (int8_t)(val[0]*8 + 7+8)};
+		return mipp::set<int8_t>(val_bis);
+	}
+#endif
+
+	template <>
+	inline reg cmask2<int32_t>(const uint32_t val[nElReg<int32_t>()/2]) {
+		int8_t val_bis[nElReg<int8_t>()] = {(int8_t)(val[0]*4 + 0+0), (int8_t)(val[0]*4 + 1+0),
+		                                    (int8_t)(val[0]*4 + 2+0), (int8_t)(val[0]*4 + 3+0),
+		                                    (int8_t)(val[1]*4 + 0+0), (int8_t)(val[1]*4 + 1+0),
+		                                    (int8_t)(val[1]*4 + 2+0), (int8_t)(val[1]*4 + 3+0),
+		                                    (int8_t)(val[0]*4 + 0+8), (int8_t)(val[0]*4 + 1+8),
+		                                    (int8_t)(val[0]*4 + 2+8), (int8_t)(val[0]*4 + 3+8),
+		                                    (int8_t)(val[1]*4 + 0+8), (int8_t)(val[1]*4 + 1+8),
+		                                    (int8_t)(val[1]*4 + 2+8), (int8_t)(val[1]*4 + 3+8)};
+		return mipp::set<int8_t>(val_bis);
+	}
+
+	template <>
+	inline reg cmask2<int16_t>(const uint32_t val[nElReg<int16_t>()/2]) {
+		int8_t val_bis[nElReg<int8_t>()] = {(int8_t)(val[0]*2 + 0+0), (int8_t)(val[0]*2 + 1+0),
+		                                    (int8_t)(val[1]*2 + 0+0), (int8_t)(val[1]*2 + 1+0),
+		                                    (int8_t)(val[2]*2 + 0+0), (int8_t)(val[2]*2 + 1+0),
+		                                    (int8_t)(val[3]*2 + 0+0), (int8_t)(val[3]*2 + 1+0),
+		                                    (int8_t)(val[0]*2 + 0+8), (int8_t)(val[0]*2 + 1+8),
+		                                    (int8_t)(val[1]*2 + 0+8), (int8_t)(val[1]*2 + 1+8),
+		                                    (int8_t)(val[2]*2 + 0+8), (int8_t)(val[2]*2 + 1+8),
+		                                    (int8_t)(val[3]*2 + 0+8), (int8_t)(val[3]*2 + 1+8)};
+		return mipp::set<int8_t>(val_bis);
+	}
+
+	template <>
+	inline reg cmask2<int8_t>(const uint32_t val[nElReg<int8_t>()/2]) {
+		int8_t val_bis[nElReg<int8_t>()] = {(int8_t)(val[ 0]+0), (int8_t)(val[ 1]+0),
+		                                    (int8_t)(val[ 2]+0), (int8_t)(val[ 3]+0),
+		                                    (int8_t)(val[ 4]+0), (int8_t)(val[ 5]+0),
+		                                    (int8_t)(val[ 6]+0), (int8_t)(val[ 7]+0),
+		                                    (int8_t)(val[ 0]+8), (int8_t)(val[ 1]+8),
+		                                    (int8_t)(val[ 2]+8), (int8_t)(val[ 3]+8),
+		                                    (int8_t)(val[ 4]+8), (int8_t)(val[ 5]+8),
+		                                    (int8_t)(val[ 6]+8), (int8_t)(val[ 7]+8)};
+		return mipp::set<int8_t>(val_bis);
+	}
+
+	// --------------------------------------------------------------------------------------------------------- cmask4
+	template <>
+	inline reg cmask4<float>(const uint32_t val[nElReg<float>()/4]) {
+		int8_t val_bis[nElReg<int8_t>()] = {(int8_t)(val[0]*4 + 0+ 0), (int8_t)(val[0]*4 + 1+ 0),
+		                                    (int8_t)(val[0]*4 + 2+ 0), (int8_t)(val[0]*4 + 3+ 0),
+		                                    (int8_t)(val[0]*4 + 0+ 4), (int8_t)(val[0]*4 + 1+ 4),
+		                                    (int8_t)(val[0]*4 + 2+ 4), (int8_t)(val[0]*4 + 3+ 4),
+		                                    (int8_t)(val[0]*4 + 0+ 8), (int8_t)(val[0]*4 + 1+ 8),
+		                                    (int8_t)(val[0]*4 + 2+ 8), (int8_t)(val[0]*4 + 3+ 8),
+		                                    (int8_t)(val[0]*4 + 0+12), (int8_t)(val[0]*4 + 1+12),
+		                                    (int8_t)(val[0]*4 + 2+12), (int8_t)(val[0]*4 + 3+12)};
+		return mipp::set<int8_t>(val_bis);
+	}
+
+	template <>
+	inline reg cmask4<int32_t>(const uint32_t val[nElReg<int32_t>()/4]) {
+		int8_t val_bis[nElReg<int8_t>()] = {(int8_t)(val[0]*4 + 0+ 0), (int8_t)(val[0]*4 + 1+ 0),
+		                                    (int8_t)(val[0]*4 + 2+ 0), (int8_t)(val[0]*4 + 3+ 0),
+		                                    (int8_t)(val[0]*4 + 0+ 4), (int8_t)(val[0]*4 + 1+ 4),
+		                                    (int8_t)(val[0]*4 + 2+ 4), (int8_t)(val[0]*4 + 3+ 4),
+		                                    (int8_t)(val[0]*4 + 0+ 8), (int8_t)(val[0]*4 + 1+ 8),
+		                                    (int8_t)(val[0]*4 + 2+ 8), (int8_t)(val[0]*4 + 3+ 8),
+		                                    (int8_t)(val[0]*4 + 0+12), (int8_t)(val[0]*4 + 1+12),
+		                                    (int8_t)(val[0]*4 + 2+12), (int8_t)(val[0]*4 + 3+12)};
+		return mipp::set<int8_t>(val_bis);
+	}
+
+	template <>
+	inline reg cmask4<int16_t>(const uint32_t val[nElReg<int16_t>()/4]) {
+		int8_t val_bis[nElReg<int8_t>()] = {(int8_t)(val[0]*2 + 0+ 0), (int8_t)(val[0]*2 + 1+ 0),
+		                                    (int8_t)(val[1]*2 + 0+ 0), (int8_t)(val[1]*2 + 1+ 0),
+		                                    (int8_t)(val[0]*2 + 0+ 4), (int8_t)(val[0]*2 + 1+ 4),
+		                                    (int8_t)(val[1]*2 + 0+ 4), (int8_t)(val[1]*2 + 1+ 4),
+		                                    (int8_t)(val[0]*2 + 0+ 8), (int8_t)(val[0]*2 + 1+ 8),
+		                                    (int8_t)(val[1]*2 + 0+ 8), (int8_t)(val[1]*2 + 1+ 8),
+		                                    (int8_t)(val[0]*2 + 0+12), (int8_t)(val[0]*2 + 1+12),
+		                                    (int8_t)(val[1]*2 + 0+12), (int8_t)(val[1]*2 + 1+12)};
+		return mipp::set<int8_t>(val_bis);
+	}
+
+	template <>
+	inline reg cmask4<int8_t>(const uint32_t val[nElReg<int8_t>()/4]) {
+		int8_t val_bis[nElReg<int8_t>()] = {(int8_t)(val[ 0]+ 0), (int8_t)(val[ 1]+ 0),
+		                                    (int8_t)(val[ 2]+ 0), (int8_t)(val[ 3]+ 0),
+		                                    (int8_t)(val[ 0]+ 4), (int8_t)(val[ 1]+ 4),
+		                                    (int8_t)(val[ 2]+ 4), (int8_t)(val[ 3]+ 4),
+		                                    (int8_t)(val[ 0]+ 8), (int8_t)(val[ 1]+ 8),
+		                                    (int8_t)(val[ 2]+ 8), (int8_t)(val[ 3]+ 8),
+		                                    (int8_t)(val[ 0]+12), (int8_t)(val[ 1]+12),
+		                                    (int8_t)(val[ 2]+12), (int8_t)(val[ 3]+12)};
+		return mipp::set<int8_t>(val_bis);
+	}
+
+	// ---------------------------------------------------------------------------------------------------------- shuff
+	template <>
+	inline reg shuff<double>(const reg v, const reg cm) {
+		uint8x8x2_t v2 = {{vget_low_u8((uint8x16_t)v), vget_high_u8((uint8x16_t)v)}};
+		uint8x8_t low  = vtbl2_u8(v2, vget_low_u8 ((uint8x16_t)cm));
+		uint8x8_t high = vtbl2_u8(v2, vget_high_u8((uint8x16_t)cm));
+
+		return (reg)vcombine_u8(low, high);
+	}
+
+	template <>
+	inline reg shuff<float>(const reg v, const reg cm) {
+		uint8x8x2_t v2 = {{vget_low_u8((uint8x16_t)v), vget_high_u8((uint8x16_t)v)}};
+		uint8x8_t low  = vtbl2_u8(v2, vget_low_u8 ((uint8x16_t)cm));
+		uint8x8_t high = vtbl2_u8(v2, vget_high_u8((uint8x16_t)cm));
+
+		return (reg)vcombine_u8(low, high);
+	}
+
+	template <>
+	inline reg shuff<int64_t>(const reg v, const reg cm) {
+		uint8x8x2_t v2 = {{vget_low_u8((uint8x16_t)v), vget_high_u8((uint8x16_t)v)}};
+		uint8x8_t low  = vtbl2_u8(v2, vget_low_u8 ((uint8x16_t)cm));
+		uint8x8_t high = vtbl2_u8(v2, vget_high_u8((uint8x16_t)cm));
+
+		return (reg)vcombine_u8(low, high);
+	}
+
+	template <>
+	inline reg shuff<int32_t>(const reg v, const reg cm) {
+		uint8x8x2_t v2 = {{vget_low_u8((uint8x16_t)v), vget_high_u8((uint8x16_t)v)}};
+		uint8x8_t low  = vtbl2_u8(v2, vget_low_u8 ((uint8x16_t)cm));
+		uint8x8_t high = vtbl2_u8(v2, vget_high_u8((uint8x16_t)cm));
+
+		return (reg)vcombine_u8(low, high);
+	}
+
+	template <>
+	inline reg shuff<int16_t>(const reg v, const reg cm) {
+		uint8x8x2_t v2 = {{vget_low_u8((uint8x16_t)v), vget_high_u8((uint8x16_t)v)}};
+		uint8x8_t low  = vtbl2_u8(v2, vget_low_u8 ((uint8x16_t)cm));
+		uint8x8_t high = vtbl2_u8(v2, vget_high_u8((uint8x16_t)cm));
+
+		return (reg)vcombine_u8(low, high);
+	}
+
+	template <>
+	inline reg shuff<int8_t>(const reg v, const reg cm) {
+		uint8x8x2_t v2 = {{vget_low_u8((uint8x16_t)v), vget_high_u8((uint8x16_t)v)}};
+		uint8x8_t low  = vtbl2_u8(v2, vget_low_u8 ((uint8x16_t)cm));
+		uint8x8_t high = vtbl2_u8(v2, vget_high_u8((uint8x16_t)cm));
+
+		return (reg)vcombine_u8(low, high);
+	}
+
+	// --------------------------------------------------------------------------------------------------------- shuff2
+	template <>
+	inline reg shuff2<double>(const reg v, const reg cm) {
+		return mipp::shuff<double>(v, cm);
+	}
+
+	template <>
+	inline reg shuff2<float>(const reg v, const reg cm) {
+		return mipp::shuff<float>(v, cm);
+	}
+
+	template <>
+	inline reg shuff2<int64_t>(const reg v, const reg cm) {
+		return mipp::shuff<int64_t>(v, cm);
+	}
+
+	template <>
+	inline reg shuff2<int32_t>(const reg v, const reg cm) {
+		return mipp::shuff<int32_t>(v, cm);
+	}
+
+	template <>
+	inline reg shuff2<int16_t>(const reg v, const reg cm) {
+		return mipp::shuff<int16_t>(v, cm);
+	}
+
+	template <>
+	inline reg shuff2<int8_t>(const reg v, const reg cm) {
+		return mipp::shuff<int8_t>(v, cm);
+	}
+
+	// --------------------------------------------------------------------------------------------------------- shuff4
+	template <>
+	inline reg shuff4<float>(const reg v, const reg cm) {
+		return mipp::shuff<float>(v, cm);
+	}
+
+	template <>
+	inline reg shuff4<int32_t>(const reg v, const reg cm) {
+		return mipp::shuff<int32_t>(v, cm);
+	}
+
+	template <>
+	inline reg shuff4<int16_t>(const reg v, const reg cm) {
+		return mipp::shuff<int16_t>(v, cm);
+	}
+
+	template <>
+	inline reg shuff4<int8_t>(const reg v, const reg cm) {
+		return mipp::shuff<int8_t>(v, cm);
+	}
+
+	// --------------------------------------------------------------------------------------------------- interleavelo
+	template <>
+	inline reg interleavelo<double>(const reg v1, const reg v2) {
+		// v1  = [a0, b0], v2 = [a1, b1]
+		// res = [a0, a1]
+		return (reg)vcombine_u64(vget_low_u64((uint64x2_t)v1), vget_low_u64((uint64x2_t)v2));
+	}
+
+	template <>
+	inline reg interleavelo<float>(const reg v1, const reg v2) {
+		// v1  = [a0, b0, c0, d0], v2 = [a1, b1, c1, d1]
+		// res = [a0, a1, b0, b1]
+		uint32x2x2_t res = vzip_u32(vget_low_u32((uint32x4_t)v1), vget_low_u32((uint32x4_t)v2));
+		return (reg)vcombine_u32(res.val[0], res.val[1]);
+	}
+
+	template <>
+	inline reg interleavelo<int64_t>(const reg v1, const reg v2) {
+		// v1  = [a0, b0], v2 = [a1, b1]
+		// res = [a0, a1]
+		return (reg)vcombine_u64(vget_low_u64((uint64x2_t)v1), vget_low_u64((uint64x2_t)v2));
+	}
+
+	template <>
+	inline reg interleavelo<int32_t>(const reg v1, const reg v2) {
+		// v1  = [a0, b0, c0, d0], v2 = [a1, b1, c1, d1]
+		// res = [a0, a1, b0, b1]
+		uint32x2x2_t res = vzip_u32(vget_low_u32((uint32x4_t)v1), vget_low_u32((uint32x4_t)v2));
+		return (reg)vcombine_u32(res.val[0], res.val[1]);
+	}
+
+	template <>
+	inline reg interleavelo<int16_t>(const reg v1, const reg v2) {
+		uint16x4x2_t res = vzip_u16(vget_low_u16((uint16x8_t)v1), vget_low_u16((uint16x8_t)v2));
+		return (reg)vcombine_u16(res.val[0], res.val[1]);
+	}
+
+	template <>
+	inline reg interleavelo<int8_t>(const reg v1, const reg v2) {
+		uint8x8x2_t res = vzip_u8(vget_low_u8((uint8x16_t)v1), vget_low_u8((uint8x16_t)v2));
+		return (reg)vcombine_u8(res.val[0], res.val[1]);
+	}
+
+	// --------------------------------------------------------------------------------------------------- interleavehi
+	template <>
+	inline reg interleavehi<double>(const reg v1, const reg v2) {
+		// v1  = [a0, b0], v2 = [a1, b1]
+		// res = [b0, b1]
+		return (reg)vcombine_u64(vget_high_u64((uint64x2_t)v1), vget_high_u64((uint64x2_t)v2));
+	}
+
+	template <>
+	inline reg interleavehi<float>(const reg v1, const reg v2) {
+		// v1  = [a0, b0, c0, d0], v2 = [a1, b1, c1, d1]
+		// res = [c0, c1, d0, d1]
+		uint32x2x2_t res = vzip_u32(vget_high_u32((uint32x4_t)v1), vget_high_u32((uint32x4_t)v2));
+		return (reg)vcombine_u32(res.val[0], res.val[1]);
+	}
+
+	template <>
+	inline reg interleavehi<int64_t>(const reg v1, const reg v2) {
+		// v1  = [a0, b0], v2 = [a1, b1]
+		// res = [b0, b1]
+		return (reg)vcombine_u64(vget_high_u64((uint64x2_t)v1), vget_high_u64((uint64x2_t)v2));
+	}
+
+	template <>
+	inline reg interleavehi<int32_t>(const reg v1, const reg v2) {
+		// v1  = [a0, b0, c0, d0], v2 = [a1, b1, c1, d1]
+		// res = [c0, c1, d0, d1]
+		uint32x2x2_t res = vzip_u32(vget_high_u32((uint32x4_t)v1), vget_high_u32((uint32x4_t)v2));
+		return (reg)vcombine_u32(res.val[0], res.val[1]);
+	}
+
+	template <>
+	inline reg interleavehi<int16_t>(const reg v1, const reg v2) {
+		uint16x4x2_t res = vzip_u16(vget_high_u16((uint16x8_t)v1), vget_high_u16((uint16x8_t)v2));
+		return (reg)vcombine_u16(res.val[0], res.val[1]);
+	}
+
+	template <>
+	inline reg interleavehi<int8_t>(const reg v1, const reg v2) {
+		uint8x8x2_t res = vzip_u8(vget_high_u8((uint8x16_t)v1), vget_high_u8((uint8x16_t)v2));
+		return (reg)vcombine_u8(res.val[0], res.val[1]);
+	}
+
+	// -------------------------------------------------------------------------------------------------- interleavelo2
+	template <>
+	inline reg interleavelo2<float>(const reg v1, const reg v2) {
+		uint32x2x2_t res1 = vzip_u32(vget_low_u32 ((uint32x4_t)v1), vget_low_u32 ((uint32x4_t)v2));
+		uint32x2x2_t res2 = vzip_u32(vget_high_u32((uint32x4_t)v1), vget_high_u32((uint32x4_t)v2));
+
+		return (reg) vcombine_u32(res1.val[0], res2.val[0]);
+	}
+
+	template <>
+	inline reg interleavelo2<int32_t>(const reg v1, const reg v2) {
+		uint32x2x2_t res1 = vzip_u32(vget_low_u32 ((uint32x4_t)v1), vget_low_u32 ((uint32x4_t)v2));
+		uint32x2x2_t res2 = vzip_u32(vget_high_u32((uint32x4_t)v1), vget_high_u32((uint32x4_t)v2));
+
+		return (reg)vcombine_u32(res1.val[0], res2.val[0]);
+	}
+
+	template <>
+	inline reg interleavelo2<int16_t>(const reg v1, const reg v2) {
+		uint16x4x2_t res1 = vzip_u16(vget_low_u16 ((uint16x8_t)v1), vget_low_u16 ((uint16x8_t)v2));
+		uint16x4x2_t res2 = vzip_u16(vget_high_u16((uint16x8_t)v1), vget_high_u16((uint16x8_t)v2));
+
+		return (reg)vcombine_u16(res1.val[0], res2.val[0]);
+	}
+
+	template <>
+	inline reg interleavelo2<int8_t>(const reg v1, const reg v2) {
+		uint8x8x2_t res1 = vzip_u8(vget_low_u8 ((uint8x16_t)v1), vget_low_u8 ((uint8x16_t)v2));
+		uint8x8x2_t res2 = vzip_u8(vget_high_u8((uint8x16_t)v1), vget_high_u8((uint8x16_t)v2));
+
+		return (reg)vcombine_u8(res1.val[0], res2.val[0]);
+	}
+
+	// -------------------------------------------------------------------------------------------------- interleavehi2
+	template <>
+	inline reg interleavehi2<float>(const reg v1, const reg v2) {
+		uint32x2x2_t res1 = vzip_u32(vget_low_u32 ((uint32x4_t)v1), vget_low_u32 ((uint32x4_t)v2));
+		uint32x2x2_t res2 = vzip_u32(vget_high_u32((uint32x4_t)v1), vget_high_u32((uint32x4_t)v2));
+
+		return (reg) vcombine_u32(res1.val[1], res2.val[1]);
+	}
+
+	template <>
+	inline reg interleavehi2<int32_t>(const reg v1, const reg v2) {
+		uint32x2x2_t res1 = vzip_u32(vget_low_u32 ((uint32x4_t)v1), vget_low_u32 ((uint32x4_t)v2));
+		uint32x2x2_t res2 = vzip_u32(vget_high_u32((uint32x4_t)v1), vget_high_u32((uint32x4_t)v2));
+
+		return (reg)vcombine_u32(res1.val[1], res2.val[1]);
+	}
+
+	template <>
+	inline reg interleavehi2<int16_t>(const reg v1, const reg v2) {
+		uint16x4x2_t res1 = vzip_u16(vget_low_u16 ((uint16x8_t)v1), vget_low_u16 ((uint16x8_t)v2));
+		uint16x4x2_t res2 = vzip_u16(vget_high_u16((uint16x8_t)v1), vget_high_u16((uint16x8_t)v2));
+
+		return (reg)vcombine_u16(res1.val[1], res2.val[1]);
+	}
+
+	template <>
+	inline reg interleavehi2<int8_t>(const reg v1, const reg v2) {
+		uint8x8x2_t res1 = vzip_u8(vget_low_u8 ((uint8x16_t)v1), vget_low_u8 ((uint8x16_t)v2));
+		uint8x8x2_t res2 = vzip_u8(vget_high_u8((uint8x16_t)v1), vget_high_u8((uint8x16_t)v2));
+
+		return (reg)vcombine_u8(res1.val[1], res2.val[1]);
+	}
+
+
+	// ----------------------------------------------------------------------------------------------------- interleave
+	template <>
+	inline regx2 interleave<double>(const reg v1, const reg v2) {
+		// v1         = [a0, b0], v2         = [a1, b1]
+		// res.val[0] = [a0, a1], res.val[1] = [b0, b1]
+		regx2 res = {{(reg)vcombine_u64(vget_low_u64 ((uint64x2_t)v1), vget_low_u64 ((uint64x2_t)v2)),
+		              (reg)vcombine_u64(vget_high_u64((uint64x2_t)v1), vget_high_u64((uint64x2_t)v2))}};
+		return res;
+	}
+
+	template <>
+	inline regx2 interleave<float>(const reg v1, const reg v2) {
+		// v1         = [a0, b0, c0, d0], v2         = [a1, b1, c1, d1]
+		// res.val[0] = [a0, a1, b0, b1], res.val[1] = [c0, c1, d0, d1]
+		uint32x2x2_t res0 = vzip_u32(vget_low_u32 ((uint32x4_t)v1), vget_low_u32 ((uint32x4_t)v2));
+		uint32x2x2_t res1 = vzip_u32(vget_high_u32((uint32x4_t)v1), vget_high_u32((uint32x4_t)v2));
+
+		regx2 res = {{(reg)vcombine_u32(res0.val[0], res0.val[1]),
+		              (reg)vcombine_u32(res1.val[0], res1.val[1])}};
+
+		return res;
+	}
+
+	template <>
+	inline regx2 interleave<int64_t>(const reg v1, const reg v2) {
+		// v1         = [a0, b0], v2         = [a1, b1]
+		// res.val[0] = [a0, a1], res.val[1] = [b0, b1]
+		regx2 res = {{(reg)vcombine_u64(vget_low_u64 ((uint64x2_t)v1), vget_low_u64 ((uint64x2_t)v2)),
+		              (reg)vcombine_u64(vget_high_u64((uint64x2_t)v1), vget_high_u64((uint64x2_t)v2))}};
+		return res;
+	}
+
+	template <>
+	inline regx2 interleave<int32_t>(const reg v1, const reg v2) {
+		// v1  = [a0, b0, c0, d0], v2 = [a1, b1, c1, d1]
+		// res = [a0, a1, b0, b1]
+		uint32x2x2_t res0 = vzip_u32(vget_low_u32 ((uint32x4_t)v1), vget_low_u32 ((uint32x4_t)v2));
+		uint32x2x2_t res1 = vzip_u32(vget_high_u32((uint32x4_t)v1), vget_high_u32((uint32x4_t)v2));
+
+		regx2 res = {{(reg)vcombine_u32(res0.val[0], res0.val[1]),
+		              (reg)vcombine_u32(res1.val[0], res1.val[1])}};
+
+		return res;
+	}
+
+	template <>
+	inline regx2 interleave<int16_t>(const reg v1, const reg v2) {
+		uint16x4x2_t res0 = vzip_u16(vget_low_u16 ((uint16x8_t)v1), vget_low_u16 ((uint16x8_t)v2));
+		uint16x4x2_t res1 = vzip_u16(vget_high_u16((uint16x8_t)v1), vget_high_u16((uint16x8_t)v2));
+
+		regx2 res = {{(reg)vcombine_u16(res0.val[0], res0.val[1]),
+		              (reg)vcombine_u16(res1.val[0], res1.val[1])}};
+
+		return res;
+	}
+
+	template <>
+	inline regx2 interleave<int8_t>(const reg v1, const reg v2) {
+		uint8x8x2_t res0 = vzip_u8(vget_low_u8 ((uint8x16_t)v1), vget_low_u8 ((uint8x16_t)v2));
+		uint8x8x2_t res1 = vzip_u8(vget_high_u8((uint8x16_t)v1), vget_high_u8((uint8x16_t)v2));
+
+		regx2 res = {{(reg)vcombine_u8(res0.val[0], res0.val[1]),
+		              (reg)vcombine_u8(res1.val[0], res1.val[1])}};
+
+		return res;
+	}
+
+	// ---------------------------------------------------------------------------------------------------- interleave2
+	template <>
+	inline regx2 interleave2<float>(const reg v1, const reg v2) {
+		uint32x2x2_t res1 = vzip_u32(vget_low_u32 ((uint32x4_t)v1), vget_low_u32 ((uint32x4_t)v2));
+		uint32x2x2_t res2 = vzip_u32(vget_high_u32((uint32x4_t)v1), vget_high_u32((uint32x4_t)v2));
+
+		regx2 res = {{(reg) vcombine_u32(res1.val[0], res2.val[0]),
+		              (reg) vcombine_u32(res1.val[1], res2.val[1])}};
+
+		return res;
+	}
+
+	template <>
+	inline regx2 interleave2<int32_t>(const reg v1, const reg v2) {
+		uint32x2x2_t res1 = vzip_u32(vget_low_u32 ((uint32x4_t)v1), vget_low_u32 ((uint32x4_t)v2));
+		uint32x2x2_t res2 = vzip_u32(vget_high_u32((uint32x4_t)v1), vget_high_u32((uint32x4_t)v2));
+
+		regx2 res = {{(reg) vcombine_u32(res1.val[0], res2.val[0]),
+		              (reg) vcombine_u32(res1.val[1], res2.val[1])}};
+
+		return res;
+	}
+
+	template <>
+	inline regx2 interleave2<int16_t>(const reg v1, const reg v2) {
+		uint16x4x2_t res1 = vzip_u16(vget_low_u16 ((uint16x8_t)v1), vget_low_u16 ((uint16x8_t)v2));
+		uint16x4x2_t res2 = vzip_u16(vget_high_u16((uint16x8_t)v1), vget_high_u16((uint16x8_t)v2));
+
+		regx2 res = {{(reg) vcombine_u16(res1.val[0], res2.val[0]),
+		              (reg) vcombine_u16(res1.val[1], res2.val[1])}};
+
+		return res;
+	}
+
+	template <>
+	inline regx2 interleave2<int8_t>(const reg v1, const reg v2) {
+		uint8x8x2_t res1 = vzip_u8(vget_low_u8 ((uint8x16_t)v1), vget_low_u8 ((uint8x16_t)v2));
+		uint8x8x2_t res2 = vzip_u8(vget_high_u8((uint8x16_t)v1), vget_high_u8((uint8x16_t)v2));
+
+		regx2 res = {{(reg) vcombine_u8(res1.val[0], res2.val[0]),
+		              (reg) vcombine_u8(res1.val[1], res2.val[1])}};
+
+		return res;
+	}
+
+	// ----------------------------------------------------------------------------------------------------------- andb
+#ifdef __aarch64__
+	template <>
+	inline reg andb<double>(const reg v1, const reg v2) {
+		return (reg) vandq_u64((uint64x2_t) v1, (uint64x2_t) v2);
+	}
+#endif
+
+	template <>
+	inline reg andb<float>(const reg v1, const reg v2) {
+		return (reg) vandq_u32((uint32x4_t) v1, (uint32x4_t) v2);
+	}
+
+#ifdef __aarch64__
+	template <>
+	inline reg andb<int64_t>(const reg v1, const reg v2) {
+		return (reg) vandq_u64((uint64x2_t) v1, (uint64x2_t) v2);
+	}
+#endif
+
+	template <>
+	inline reg andb<int32_t>(const reg v1, const reg v2) {
+		return (reg) vandq_u32((uint32x4_t) v1, (uint32x4_t) v2);
+	}
+
+	template <>
+	inline reg andb<int16_t>(const reg v1, const reg v2) {
+		return (reg) vandq_u16((uint16x8_t) v1, (uint16x8_t) v2);
+	}
+
+	template <>
+	inline reg andb<int8_t>(const reg v1, const reg v2) {
+		return (reg) vandq_u8((uint8x16_t) v1, (uint8x16_t) v2);
+	}
+
+	// ---------------------------------------------------------------------------------------------------- andb (mask)
+#ifdef __aarch64__
+	template <>
+	inline msk andb<2>(const msk v1, const msk v2) {
+		return (msk) vandq_u64((uint64x2_t) v1, (uint64x2_t) v2);
+	}
+#endif
+
+	template <>
+	inline msk andb<4>(const msk v1, const msk v2) {
+		return (msk) vandq_u32((uint32x4_t) v1, (uint32x4_t) v2);
+	}
+
+	template <>
+	inline msk andb<8>(const msk v1, const msk v2) {
+		return (msk) vandq_u16((uint16x8_t) v1, (uint16x8_t) v2);
+	}
+
+	template <>
+	inline msk andb<16>(const msk v1, const msk v2) {
+		return (msk) vandq_u8((uint8x16_t) v1, (uint8x16_t) v2);
+	}
+
+	// ----------------------------------------------------------------------------------------------------------- notb
+#ifdef __aarch64__
+	template <>
+	inline reg notb<double>(const reg v) {
+		return (reg) vmvnq_u32((uint32x4_t) v);
+	}
+#endif
+
+	template <>
+	inline reg notb<float>(const reg v) {
+		return (reg) vmvnq_u32((uint32x4_t) v);
+	}
+
+#ifdef __aarch64__
+	template <>
+	inline reg notb<int64_t>(const reg v) {
+		return (reg) vmvnq_u32((uint32x4_t) v);
+	}
+#endif
+
+	template <>
+	inline reg notb<int32_t>(const reg v) {
+		return (reg) vmvnq_u32((uint32x4_t) v);
+	}
+
+	template <>
+	inline reg notb<int16_t>(const reg v) {
+		return (reg) vmvnq_u16((uint16x8_t) v);
+	}
+
+	template <>
+	inline reg notb<int8_t>(const reg v) {
+		return (reg) vmvnq_u8((uint8x16_t) v);
+	}
+
+	// ---------------------------------------------------------------------------------------------------- notb (mask)
+#ifdef __aarch64__
+	template <>
+	inline msk notb<2>(const msk v) {
+		return (msk) vmvnq_u32((uint32x4_t) v);
+	}
+#endif
+
+	template <>
+	inline msk notb<4>(const msk v) {
+		return (msk) vmvnq_u32((uint32x4_t) v);
+	}
+
+	template <>
+	inline msk notb<8>(const msk v) {
+		return (msk) vmvnq_u16((uint16x8_t) v);
+	}
+
+	template <>
+	inline msk notb<16>(const msk v) {
+		return (msk) vmvnq_u8((uint8x16_t) v);
+	}
+
+	// ---------------------------------------------------------------------------------------------------------- andnb
+#ifdef __aarch64__
+	template <>
+	inline reg andnb<double>(const reg v1, const reg v2) {
+		return (reg) vandq_u32(vmvnq_u32((uint32x4_t) v1), (uint32x4_t) v2);
+	}
+#endif
+
+	template <>
+	inline reg andnb<float>(const reg v1, const reg v2) {
+		return (reg) vandq_u32(vmvnq_u32((uint32x4_t) v1), (uint32x4_t) v2);
+	}
+
+#ifdef __aarch64__
+	template <>
+	inline reg andnb<int64_t>(const reg v1, const reg v2) {
+		return (reg) vandq_u32(vmvnq_u32((uint32x4_t) v1), (uint32x4_t) v2);
+	}
+#endif
+
+	template <>
+	inline reg andnb<int32_t>(const reg v1, const reg v2) {
+		return (reg) vandq_u32(vmvnq_u32((uint32x4_t) v1), (uint32x4_t) v2);
+	}
+
+	template <>
+	inline reg andnb<int16_t>(const reg v1, const reg v2) {
+		return (reg) vandq_u16(vmvnq_u16((uint16x8_t) v1), (uint16x8_t) v2);
+	}
+
+	template <>
+	inline reg andnb<int8_t>(const reg v1, const reg v2) {
+		return (reg) vandq_u8(vmvnq_u8((uint8x16_t) v1), (uint8x16_t) v2);
+	}
+
+	// --------------------------------------------------------------------------------------------------- andnb (mask)
+#ifdef __aarch64__
+	template <>
+	inline msk andnb<2>(const msk v1, const msk v2) {
+		return (msk) vandq_u32(vmvnq_u32((uint32x4_t) v1), (uint32x4_t) v2);
+	}
+#endif
+
+	template <>
+	inline msk andnb<4>(const msk v1, const msk v2) {
+		return (msk) vandq_u32(vmvnq_u32((uint32x4_t) v1), (uint32x4_t) v2);
+	}
+
+	template <>
+	inline msk andnb<8>(const msk v1, const msk v2) {
+		return (msk) vandq_u16(vmvnq_u16((uint16x8_t) v1), (uint16x8_t) v2);
+	}
+
+	template <>
+	inline msk andnb<16>(const msk v1, const msk v2) {
+		return (msk) vandq_u8(vmvnq_u8((uint8x16_t) v1), (uint8x16_t) v2);
+	}
+
+	// ------------------------------------------------------------------------------------------------------------ orb
+#ifdef __aarch64__
+	template <>
+	inline reg orb<double>(const reg v1, const reg v2) {
+		return (reg) vorrq_u64((uint64x2_t) v1, (uint64x2_t) v2);
+	}
+#endif
+
+	template <>
+	inline reg orb<float>(const reg v1, const reg v2) {
+		return (reg) vorrq_u32((uint32x4_t) v1, (uint32x4_t) v2);
+	}
+
+#ifdef __aarch64__
+	template <>
+	inline reg orb<int64_t>(const reg v1, const reg v2) {
+		return (reg) vorrq_u64((uint64x2_t) v1, (uint64x2_t) v2);
+	}
+#endif
+
+	template <>
+	inline reg orb<int32_t>(const reg v1, const reg v2) {
+		return (reg) vorrq_u32((uint32x4_t) v1, (uint32x4_t) v2);
+	}
+
+	template <>
+	inline reg orb<int16_t>(const reg v1, const reg v2) {
+		return (reg) vorrq_u16((uint16x8_t) v1, (uint16x8_t) v2);
+	}
+
+	template <>
+	inline reg orb<int8_t>(const reg v1, const reg v2) {
+		return (reg) vorrq_u8((uint8x16_t) v1, (uint8x16_t) v2);
+	}
+
+	// ----------------------------------------------------------------------------------------------------- orb (mask)
+#ifdef __aarch64__
+	template <>
+	inline msk orb<2>(const msk v1, const msk v2) {
+		return (msk) vorrq_u64((uint64x2_t) v1, (uint64x2_t) v2);
+	}
+#endif
+
+	template <>
+	inline msk orb<4>(const msk v1, const msk v2) {
+		return (msk) vorrq_u32((uint32x4_t) v1, (uint32x4_t) v2);
+	}
+
+	template <>
+	inline msk orb<8>(const msk v1, const msk v2) {
+		return (msk) vorrq_u16((uint16x8_t) v1, (uint16x8_t) v2);
+	}
+
+	template <>
+	inline msk orb<16>(const msk v1, const msk v2) {
+		return (msk) vorrq_u8((uint8x16_t) v1, (uint8x16_t) v2);
+	}
+
+	// ----------------------------------------------------------------------------------------------------------- xorb
+#ifdef __aarch64__
+	template <>
+	inline reg xorb<double>(const reg v1, const reg v2) {
+		return (reg) veorq_u64((uint64x2_t) v1, (uint64x2_t) v2);
+	}
+#endif
+
+	template <>
+	inline reg xorb<float>(const reg v1, const reg v2) {
+		return (reg) veorq_u32((uint32x4_t) v1, (uint32x4_t) v2);
+	}
+
+#ifdef __aarch64__
+	template <>
+	inline reg xorb<int64_t>(const reg v1, const reg v2) {
+		return (reg) veorq_u64((uint64x2_t) v1, (uint64x2_t) v2);
+	}
+#endif
+
+	template <>
+	inline reg xorb<int32_t>(const reg v1, const reg v2) {
+		return (reg) veorq_u32((uint32x4_t) v1, (uint32x4_t) v2);
+	}
+
+	template <>
+	inline reg xorb<int16_t>(const reg v1, const reg v2) {
+		return (reg) veorq_u16((uint16x8_t) v1, (uint16x8_t) v2);
+	}
+
+	template <>
+	inline reg xorb<int8_t>(const reg v1, const reg v2) {
+		return (reg) veorq_u8((uint8x16_t) v1, (uint8x16_t) v2);
+	}
+
+	// ---------------------------------------------------------------------------------------------------- xorb (mask)
+#ifdef __aarch64__
+	template <>
+	inline msk xorb<2>(const msk v1, const msk v2) {
+		return (msk) veorq_u64((uint64x2_t) v1, (uint64x2_t) v2);
+	}
+#endif
+
+	template <>
+	inline msk xorb<4>(const msk v1, const msk v2) {
+		return (msk) veorq_u32((uint32x4_t) v1, (uint32x4_t) v2);
+	}
+
+	template <>
+	inline msk xorb<8>(const msk v1, const msk v2) {
+		return (msk) veorq_u16((uint16x8_t) v1, (uint16x8_t) v2);
+	}
+
+	template <>
+	inline msk xorb<16>(const msk v1, const msk v2) {
+		return (msk) veorq_u8((uint8x16_t) v1, (uint8x16_t) v2);
+	}
+
+	// --------------------------------------------------------------------------------------------------------- lshift
+#ifdef __aarch64__
+	template <>
+	inline reg lshift<int64_t>(const reg v1, const uint32_t n) {
+		return (reg) vshlq_u64((uint64x2_t) v1, (int64x2_t)mipp::set1<int64_t>(n));
+	}
+#endif
+
+	template <>
+	inline reg lshift<int32_t>(const reg v1, const uint32_t n) {
+		return (reg) vshlq_u32((uint32x4_t) v1, (int32x4_t)mipp::set1<int32_t>(n));
+	}
+
+	template <>
+	inline reg lshift<int16_t>(const reg v1, const uint32_t n) {
+		return (reg) vshlq_u16((uint16x8_t) v1, (int16x8_t)mipp::set1<int16_t>((int16_t) n));
+	}
+
+	template <>
+	inline reg lshift<int8_t>(const reg v1, const uint32_t n) {
+		return (reg) vshlq_u8((uint8x16_t) v1, (int8x16_t)mipp::set1<int8_t>((int8_t) n));
+	}
+
+	// -------------------------------------------------------------------------------------------------- lshift (mask)
+#ifndef __clang__
+#ifdef __aarch64__
+	template <>
+	inline msk lshift<2>(const msk v1, const uint32_t n) {
+		const auto s = n * 8;
+		     if (s <=  0) return v1;
+		else if (s >  15) return set0<2>();
+		else              return (msk)vextq_s8(vdupq_n_s8(0), (int8x16_t)v1, 16 - s);
+	}
+#endif
+
+	template <>
+	inline msk lshift<4>(const msk v1, const uint32_t n) {
+		const auto s = n * 4;
+		     if (s <=  0) return v1;
+		else if (s >  15) return set0<4>();
+		else              return (msk)vextq_s8(vdupq_n_s8(0), (int8x16_t)v1, 16 - s);
+	}
+
+	template <>
+	inline msk lshift<8>(const msk v1, const uint32_t n) {
+		const auto s = n * 2;
+		     if (s <=  0) return v1;
+		else if (s >  15) return set0<8>();
+		else              return (msk)vextq_s8(vdupq_n_s8(0), (int8x16_t)v1, 16 - s);
+	}
+
+	template <>
+	inline msk lshift<16>(const msk v1, const uint32_t n) {
+		const auto s = n;
+		     if (s <=  0) return v1;
+		else if (s >  15) return set0<16>();
+		else              return (msk)vextq_s8(vdupq_n_s8(0), (int8x16_t)v1, 16 - s);
+	}
+#endif
+
+	// --------------------------------------------------------------------------------------------------------- rshift
+#ifdef __aarch64__
+	template <>
+	inline reg rshift<int64_t>(const reg v1, const uint32_t n) {
+		return (reg) vshlq_u64((uint64x2_t) v1, (int64x2_t)mipp::set1<int64_t>(-n));
+	}
+#endif
+
+	template <>
+	inline reg rshift<int32_t>(const reg v1, const uint32_t n) {
+		return (reg) vshlq_u32((uint32x4_t) v1, (int32x4_t)mipp::set1<int32_t>(-n));
+	}
+
+	template <>
+	inline reg rshift<int16_t>(const reg v1, const uint32_t n) {
+		return (reg) vshlq_u16((uint16x8_t) v1, (int16x8_t)mipp::set1<int16_t>((int16_t)-n));
+	}
+
+	template <>
+	inline reg rshift<int8_t>(const reg v1, const uint32_t n) {
+		return (reg) vshlq_u8((uint8x16_t) v1, (int8x16_t)mipp::set1<int8_t>((int8_t)-n));
+	}
+
+	// -------------------------------------------------------------------------------------------------- rshift (mask)
+#ifndef __clang__
+#ifdef __aarch64__
+	template <>
+	inline msk rshift<2>(const msk v1, const uint32_t n) {
+		const auto s = n * 8;
+		     if (s <= 0) return v1;
+		else if (s > 15) return set0<4>();
+		else             return (msk)vextq_s8((int8x16_t)v1, vdupq_n_s8(0), s);
+	}
+#endif
+
+	template <>
+	inline msk rshift<4>(const msk v1, const uint32_t n) {
+		const auto s = n * 4;
+		     if (s <= 0) return v1;
+		else if (s > 15) return set0<4>();
+		else             return (msk)vextq_s8((int8x16_t)v1, vdupq_n_s8(0), s);
+	}
+
+	template <>
+	inline msk rshift<8>(const msk v1, const uint32_t n) {
+		const auto s = n * 2;
+		     if (s <= 0) return v1;
+		else if (s > 15) return set0<8>();
+		else             return (msk)vextq_s8((int8x16_t)v1, vdupq_n_s8(0), s);
+	}
+
+	template <>
+	inline msk rshift<16>(const msk v1, const uint32_t n) {
+		const auto s = n;
+		     if (s <= 0) return v1;
+		else if (s > 15) return set0<16>();
+		else             return (msk)vextq_s8((int8x16_t)v1, vdupq_n_s8(0), s);
+	}
+#endif
+
+	// ---------------------------------------------------------------------------------------------------------- blend
+#ifdef __aarch64__
+	template <>
+	inline reg blend<double>(const reg v1, const reg v2, const msk m) {
+		return (reg) vbslq_f64((uint64x2_t)m, (float64x2_t)v1, (float64x2_t)v2);
+	}
+#endif
+
+	template <>
+	inline reg blend<float>(const reg v1, const reg v2, const msk m) {
+		return (reg) vbslq_f32((uint32x4_t)m, (float32x4_t)v1, (float32x4_t)v2);
+	}
+
+#ifdef __aarch64__
+	template <>
+	inline reg blend<int64_t>(const reg v1, const reg v2, const msk m) {
+		return (reg) vbslq_u64((uint64x2_t)m, (uint64x2_t)v1, (uint64x2_t)v2);
+	}
+#endif
+
+	template <>
+	inline reg blend<int32_t>(const reg v1, const reg v2, const msk m) {
+		return (reg) vbslq_u32((uint32x4_t)m, (uint32x4_t)v1, (uint32x4_t)v2);
+	}
+
+	template <>
+	inline reg blend<int16_t>(const reg v1, const reg v2, const msk m) {
+		return (reg) vbslq_u16((uint16x8_t)m, (uint16x8_t)v1, (uint16x8_t)v2);
+	}
+
+	template <>
+	inline reg blend<int8_t>(const reg v1, const reg v2, const msk m) {
+		return (reg) vbslq_u8((uint8x16_t)m, (uint8x16_t)v1, (uint8x16_t)v2);
+	}
+
+	// ---------------------------------------------------------------------------------------------------------- cmpeq
+#ifdef __aarch64__
+	template <>
+	inline msk cmpeq<double>(const reg v1, const reg v2) {
+		return (msk) vceqq_f64((float64x2_t)v1, (float64x2_t)v2);
+	}
+#endif
+
+	template <>
+	inline msk cmpeq<float>(const reg v1, const reg v2) {
+		return (msk) vceqq_f32(v1, v2);
+	}
+
+#ifdef __aarch64__
+	template <>
+	inline msk cmpeq<int64_t>(const reg v1, const reg v2) {
+		return (msk) vceqq_s64((int64x2_t) v1, (int64x2_t) v2);
+	}
+#endif
+
+	template <>
+	inline msk cmpeq<int32_t>(const reg v1, const reg v2) {
+		return (msk) vceqq_s32((int32x4_t) v1, (int32x4_t) v2);
+	}
+
+	template <>
+	inline msk cmpeq<int16_t>(const reg v1, const reg v2) {
+		return (msk) vceqq_s16((int16x8_t) v1, (int16x8_t) v2);
+	}
+
+	template <>
+	inline msk cmpeq<int8_t>(const reg v1, const reg v2) {
+		return (msk) vceqq_s8((int8x16_t) v1, (int8x16_t) v2);
+	}
+
+	// --------------------------------------------------------------------------------------------------------- cmpneq
+#ifdef __aarch64__
+	template <>
+	inline msk cmpneq<double>(const reg v1, const reg v2) {
+		return (msk) notb<2>(cmpeq<double>(v1, v2));
+	}
+#endif
+
+	template <>
+	inline msk cmpneq<float>(const reg v1, const reg v2) {
+		return (msk) vmvnq_u32((uint32x4_t) vceqq_f32(v1, v2));
+	}
+
+#ifdef __aarch64__
+	template <>
+	inline msk cmpneq<int64_t>(const reg v1, const reg v2) {
+		return (msk) notb<2>(cmpeq<int64_t>(v1, v2));
+	}
+#endif
+
+	template <>
+	inline msk cmpneq<int32_t>(const reg v1, const reg v2) {
+		return (msk) vmvnq_u32((uint32x4_t) vceqq_s32((int32x4_t) v1, (int32x4_t) v2));
+	}
+
+	template <>
+	inline msk cmpneq<int16_t>(const reg v1, const reg v2) {
+		return (msk) vmvnq_u16((uint16x8_t) vceqq_s16((int16x8_t) v1, (int16x8_t) v2));
+	}
+
+	template <>
+	inline msk cmpneq<int8_t>(const reg v1, const reg v2) {
+		return (msk) vmvnq_u8((uint8x16_t) vceqq_s8((int8x16_t) v1, (int8x16_t) v2));
+	}
+
+	// ---------------------------------------------------------------------------------------------------------- cmplt
+#ifdef __aarch64__
+	template <>
+	inline msk cmplt<double>(const reg v1, const reg v2) {
+		return (msk) vcltq_f64((float64x2_t)v1, (float64x2_t)v2);
+	}
+#endif
+
+	template <>
+	inline msk cmplt<float>(const reg v1, const reg v2) {
+		return (msk) vcltq_f32(v1, v2);
+	}
+
+#ifdef __aarch64__
+	template <>
+	inline msk cmplt<int64_t>(const reg v1, const reg v2) {
+		return (msk) vcltq_s64((int64x2_t) v1, (int64x2_t) v2);
+	}
+#endif
+
+	template <>
+	inline msk cmplt<int32_t>(const reg v1, const reg v2) {
+		return (msk) vcltq_s32((int32x4_t) v1, (int32x4_t) v2);
+	}
+
+	template <>
+	inline msk cmplt<int16_t>(const reg v1, const reg v2) {
+		return (msk) vcltq_s16((int16x8_t) v1, (int16x8_t) v2);
+	}
+
+	template <>
+	inline msk cmplt<int8_t>(const reg v1, const reg v2) {
+		return (msk) vcltq_s8((int8x16_t) v1, (int8x16_t) v2);
+	}
+
+	// ---------------------------------------------------------------------------------------------------------- cmple
+#ifdef __aarch64__
+	template <>
+	inline msk cmple<double>(const reg v1, const reg v2) {
+		return (msk) vcleq_f64((float64x2_t)v1, (float64x2_t)v2);
+	}
+#endif
+
+	template <>
+	inline msk cmple<float>(const reg v1, const reg v2) {
+		return (msk) vcleq_f32(v1, v2);
+	}
+
+#ifdef __aarch64__
+	template <>
+	inline msk cmple<int64_t>(const reg v1, const reg v2) {
+		return (msk) vcleq_s64((int64x2_t) v1, (int64x2_t) v2);
+	}
+#endif
+
+	template <>
+	inline msk cmple<int32_t>(const reg v1, const reg v2) {
+		return (msk) vcleq_s32((int32x4_t) v1, (int32x4_t) v2);
+	}
+
+	template <>
+	inline msk cmple<int16_t>(const reg v1, const reg v2) {
+		return (msk) vcleq_s16((int16x8_t) v1, (int16x8_t) v2);
+	}
+
+	template <>
+	inline msk cmple<int8_t>(const reg v1, const reg v2) {
+		return (msk) vcleq_s8((int8x16_t) v1, (int8x16_t) v2);
+	}
+
+	// ---------------------------------------------------------------------------------------------------------- cmpgt
+#ifdef __aarch64__
+	template <>
+	inline msk cmpgt<double>(const reg v1, const reg v2) {
+		return (msk) vcgtq_f64((float64x2_t)v1, (float64x2_t)v2);
+	}
+#endif
+
+	template <>
+	inline msk cmpgt<float>(const reg v1, const reg v2) {
+		return (msk) vcgtq_f32(v1, v2);
+	}
+
+#ifdef __aarch64__
+	template <>
+	inline msk cmpgt<int64_t>(const reg v1, const reg v2) {
+		return (msk) vcgtq_s64((int64x2_t) v1, (int64x2_t) v2);
+	}
+#endif
+
+	template <>
+	inline msk cmpgt<int32_t>(const reg v1, const reg v2) {
+		return (msk) vcgtq_s32((int32x4_t) v1, (int32x4_t) v2);
+	}
+
+	template <>
+	inline msk cmpgt<int16_t>(const reg v1, const reg v2) {
+		return (msk) vcgtq_s16((int16x8_t) v1, (int16x8_t) v2);
+	}
+
+	template <>
+	inline msk cmpgt<int8_t>(const reg v1, const reg v2) {
+		return (msk) vcgtq_s8((int8x16_t) v1, (int8x16_t) v2);
+	}
+
+	// ---------------------------------------------------------------------------------------------------------- cmpge
+#ifdef __aarch64__
+	template <>
+	inline msk cmpge<double>(const reg v1, const reg v2) {
+		return (msk) vcgeq_f64((float64x2_t)v1, (float64x2_t)v2);
+	}
+#endif
+
+	template <>
+	inline msk cmpge<float>(const reg v1, const reg v2) {
+		return (msk) vcgeq_f32(v1, v2);
+	}
+
+#ifdef __aarch64__
+	template <>
+	inline msk cmpge<int64_t>(const reg v1, const reg v2) {
+		return (msk) vcgeq_s64((int64x2_t) v1, (int64x2_t) v2);
+	}
+#endif
+
+	template <>
+	inline msk cmpge<int32_t>(const reg v1, const reg v2) {
+		return (msk) vcgeq_s32((int32x4_t) v1, (int32x4_t) v2);
+	}
+
+	template <>
+	inline msk cmpge<int16_t>(const reg v1, const reg v2) {
+		return (msk) vcgeq_s16((int16x8_t) v1, (int16x8_t) v2);
+	}
+
+	template <>
+	inline msk cmpge<int8_t>(const reg v1, const reg v2) {
+		return (msk) vcgeq_s8((int8x16_t) v1, (int8x16_t) v2);
+	}
+
+	// ------------------------------------------------------------------------------------------------------------ add
+#ifdef __aarch64__
+	template <>
+	inline reg add<double>(const reg v1, const reg v2) {
+		return (reg) vaddq_f64((float64x2_t)v1, (float64x2_t)v2);
+	}
+#endif
+
+	template <>
+	inline reg add<float>(const reg v1, const reg v2) {
+		return vaddq_f32(v1, v2);
+	}
+
+#ifdef __aarch64__
+	template <>
+	inline reg add<int64_t>(const reg v1, const reg v2) {
+		return (reg) vaddq_s64((int64x2_t) v1, (int64x2_t)v2);
+	}
+#endif
+
+	template <>
+	inline reg add<int32_t>(const reg v1, const reg v2) {
+		return (reg) vaddq_s32((int32x4_t) v1, (int32x4_t)v2);
+	}
+
+	template <>
+	inline reg add<int16_t>(const reg v1, const reg v2) {
+		return (reg) vqaddq_s16((int16x8_t) v1, (int16x8_t)v2);
+	}
+
+	template <>
+	inline reg add<int8_t>(const reg v1, const reg v2) {
+		return (reg) vqaddq_s8((int8x16_t) v1, (int8x16_t)v2);
+	}
+
+	// ------------------------------------------------------------------------------------------------------------ sub
+#ifdef __aarch64__
+	template <>
+	inline reg sub<double>(const reg v1, const reg v2) {
+		return (reg) vsubq_f64((float64x2_t)v1, (float64x2_t)v2);
+	}
+#endif
+
+	template <>
+	inline reg sub<float>(const reg v1, const reg v2) {
+		return vsubq_f32(v1, v2);
+	}
+
+#ifdef __aarch64__
+	template <>
+	inline reg sub<int64_t>(const reg v1, const reg v2) {
+		return (reg) vsubq_s64((int64x2_t) v1, (int64x2_t) v2);
+	}
+#endif
+
+	template <>
+	inline reg sub<int32_t>(const reg v1, const reg v2) {
+		return (reg) vsubq_s32((int32x4_t) v1, (int32x4_t) v2);
+	}
+
+	template <>
+	inline reg sub<int16_t>(const reg v1, const reg v2) {
+		return (reg) vqsubq_s16((int16x8_t) v1, (int16x8_t) v2);
+	}
+
+	template <>
+	inline reg sub<int8_t>(const reg v1, const reg v2) {
+		return (reg) vqsubq_s8((int8x16_t) v1, (int8x16_t) v2);
+	}
+
+	// ------------------------------------------------------------------------------------------------------------ mul
+#ifdef __aarch64__
+	template <>
+	inline reg mul<double>(const reg v1, const reg v2) {
+		return (reg) vmulq_f64((float64x2_t)v1, (float64x2_t)v2);
+	}
+#endif
+
+	template <>
+	inline reg mul<float>(const reg v1, const reg v2) {
+		return vmulq_f32(v1, v2);
+	}
+
+	template <>
+	inline reg mul<int32_t>(const reg v1, const reg v2) {
+		return (reg) vmulq_s32((int32x4_t) v1, (int32x4_t) v2);
+	}
+
+	template <>
+	inline reg mul<int16_t>(const reg v1, const reg v2) {
+		return (reg) vmulq_s16((int16x8_t) v1, (int16x8_t) v2);
+	}
+
+	template <>
+	inline reg mul<int8_t>(const reg v1, const reg v2) {
+		return (reg) vmulq_s8((int8x16_t) v1, (int8x16_t) v2);
+	}
+
+	// ------------------------------------------------------------------------------------------------------------ div
+#ifdef __aarch64__
+	template <>
+	inline reg div<double>(const reg v1, const reg v2) {
+		return (reg) vdivq_f64((float64x2_t)v1, (float64x2_t)v2);
+	}
+#endif
+
+#ifdef __aarch64__
+	template <>
+	inline reg div<float>(const reg v1, const reg v2) {
+		return vdivq_f32(v1, v2);
+	}
+#else
+	template <>
+	inline reg div<float>(const reg v1, const reg v2) {
+		return mul<float>(v1, vrecpeq_f32(v2));
+	}
+#endif
+
+	// ------------------------------------------------------------------------------------------------------------ min
+#ifdef __aarch64__
+	template <>
+	inline reg min<double>(const reg v1, const reg v2) {
+		return (reg) vminq_f64((float64x2_t)v1, (float64x2_t)v2);
+	}
+#endif
+
+	template <>
+	inline reg min<float>(const reg v1, const reg v2) {
+		return vminq_f32(v1, v2);
+	}
+
+	template <>
+	inline reg min<int32_t>(const reg v1, const reg v2) {
+		return (reg) vminq_s32((int32x4_t) v1, (int32x4_t) v2);
+	}
+
+	template <>
+	inline reg min<int16_t>(const reg v1, const reg v2) {
+		return (reg) vminq_s16((int16x8_t) v1, (int16x8_t) v2);
+	}
+
+	template <>
+	inline reg min<int8_t>(const reg v1, const reg v2) {
+		return (reg) vminq_s8((int8x16_t) v1, (int8x16_t) v2);
+	}
+
+	// ------------------------------------------------------------------------------------------------------------ max
+#ifdef __aarch64__
+	template <>
+	inline reg max<double>(const reg v1, const reg v2) {
+		return (reg) vmaxq_f64((float64x2_t)v1, (float64x2_t)v2);
+	}
+#endif
+
+	template <>
+	inline reg max<float>(const reg v1, const reg v2) {
+		return vmaxq_f32(v1, v2);
+	}
+
+	template <>
+	inline reg max<int32_t>(const reg v1, const reg v2) {
+		return (reg) vmaxq_s32((int32x4_t) v1, (int32x4_t) v2);
+	}
+
+	template <>
+	inline reg max<int16_t>(const reg v1, const reg v2) {
+		return (reg) vmaxq_s16((int16x8_t) v1, (int16x8_t) v2);
+	}
+
+	template <>
+	inline reg max<int8_t>(const reg v1, const reg v2) {
+		return (reg) vmaxq_s8((int8x16_t) v1, (int8x16_t) v2);
+	}
+
+	// ----------------------------------------------------------------------------------------------------------- msb
+#ifdef __aarch64__
+	template <>
+	inline reg msb<double>(const reg v1) {
+		const reg msb_mask = set1<int64_t>(0x8000000000000000);
+		return andb<double>(v1, msb_mask);
+	}
+
+	template <>
+	inline reg msb<double>(const reg v1, const reg v2) {
+		reg msb_v1_v2 = xorb<double>(v1, v2);
+		    msb_v1_v2 = msb<double>(msb_v1_v2);
+		return msb_v1_v2;
+	}
+#endif
+
+	template <>
+	inline reg msb<float>(const reg v1) {
+		// msb_mask = 10000000000000000000000000000000 // 32 bits
+		const reg msb_mask = set1<int32_t>(0x80000000);
+
+		// indices  = 31 30 29 28 27 26 25 24 23 22 21 20 19 18 17 16 15 14 13 12 11 10  9  8  7  6  5  4  3  2  1  0
+		// msb_mask =  1  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0
+		// v1       =  ù  €  è  é  à  &  z  y  x  w  v  u  t  s  r  q  p  o  n  m  l  k  j  i  h  g  f  e  d  c  b  a
+		// res      =  ù  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0
+		return andb<float>(v1, msb_mask);
+	}
+
+	template <>
+	inline reg msb<float>(const reg v1, const reg v2) {
+		reg msb_v1_v2 = xorb<float>(v1, v2);
+		    msb_v1_v2 = msb<float>(msb_v1_v2);
+		return msb_v1_v2;
+	}
+
+#ifdef __aarch64__
+	template <>
+	inline reg msb<int64_t>(const reg v1) {
+		const reg msb_mask = set1<int64_t>(0x8000000000000000);
+		return andb<int64_t>(v1, msb_mask);
+	}
+
+	template <>
+	inline reg msb<int64_t>(const reg v1, const reg v2) {
+		reg msb_v1_v2 = xorb<int64_t>(v1, v2);
+		    msb_v1_v2 = msb<int64_t>(msb_v1_v2);
+		return msb_v1_v2;
+	}
+#endif
+
+	template <>
+	inline reg msb<int32_t>(const reg v1) {
+		const reg msb_mask = set1<int32_t>(0x80000000);
+		return andb<int32_t>(v1, msb_mask);
+	}
+
+	template <>
+	inline reg msb<int32_t>(const reg v1, const reg v2) {
+		reg msb_v1_v2 = xorb<int32_t>(v1, v2);
+		    msb_v1_v2 = msb<int32_t>(msb_v1_v2);
+		return msb_v1_v2;
+	}
+
+	template <>
+	inline reg msb<int16_t>(const reg v1) {
+		const reg msb_mask = set1<int16_t>(0x8000);
+		return andb<int16_t>(v1, msb_mask);
+	}
+
+	template <>
+	inline reg msb<int16_t>(const reg v1, const reg v2) {
+		reg msb_v1_v2 = xorb<int16_t>(v1, v2);
+		    msb_v1_v2 = msb<int16_t>(msb_v1_v2);
+		return msb_v1_v2;
+	}
+
+	template <>
+	inline reg msb<int8_t>(const reg v1) {
+		const reg msb_mask = set1<int8_t>(0x80);
+		return andb<int8_t>(v1, msb_mask);
+	}
+
+	template <>
+	inline reg msb<int8_t>(const reg v1, const reg v2) {
+		reg msb_v1_v2 = xorb<int8_t>(v1, v2);
+		    msb_v1_v2 = msb<int8_t>(msb_v1_v2);
+		return msb_v1_v2;
+	}
+
+	// ----------------------------------------------------------------------------------------------------------- sign
+	template <>
+	inline msk sign<double>(const reg v1) {
+		return cmplt<double>(v1, set0<double>());
+	}
+
+	template <>
+	inline msk sign<float>(const reg v1) {
+		return cmplt<float>(v1, set0<float>());
+	}
+
+	template <>
+	inline msk sign<int64_t>(const reg v1) {
+		return cmplt<int64_t>(v1, set0<int64_t>());
+	}
+
+	template <>
+	inline msk sign<int32_t>(const reg v1) {
+		return cmplt<int32_t>(v1, set0<int32_t>());
+	}
+
+	template <>
+	inline msk sign<int16_t>(const reg v1) {
+		return cmplt<int16_t>(v1, set0<int16_t>());
+	}
+
+	template <>
+	inline msk sign<int8_t>(const reg v1) {
+		return cmplt<int8_t>(v1, set0<int8_t>());
+	}
+
+	// ------------------------------------------------------------------------------------------------------------ neg
+#ifdef __aarch64__
+	template <>
+	inline reg neg<double>(const reg v1, const reg v2) {
+		return xorb<double>(v1, msb<double>(v2));
+	}
+
+	template <>
+	inline reg neg<double>(const reg v1, const msk v2) {
+		return neg<double>(v1, toreg<2>(v2));
+	}
+#endif
+
+	template <>
+	inline reg neg<float>(const reg v1, const reg v2) {
+		return xorb<float>(v1, msb<float>(v2));
+	}
+
+	template <>
+	inline reg neg<float>(const reg v1, const msk v2) {
+		return neg<float>(v1, toreg<4>(v2));
+	}
+
+#ifdef __aarch64__
+	template <>
+	inline reg neg<int64_t>(const reg v1, const reg v2) {
+		reg neg_v1 = (reg) vqnegq_s64((int64x2_t) v1);
+		reg v2_2   = orb  <int64_t>(v2, set1<int64_t>(1)); // hack to avoid -0 case
+		reg mask   = toreg<2>(cmplt<int64_t>(v2_2, set0<int64_t>()));
+		reg res1   = andb <int64_t>(mask, neg_v1);
+		reg res2   = andb <int64_t>(notb<int64_t>(mask), v1);
+		reg res    = orb  <int64_t>(res1, res2);
+		return res;
+	}
+
+	template <>
+	inline reg neg<int64_t>(const reg v1, const msk v2) {
+		return neg<int64_t>(v1, toreg<2>(v2));
+	}
+#endif
+
+	template <>
+	inline reg neg<int32_t>(const reg v1, const reg v2) {
+		reg neg_v1 = (reg) vqnegq_s32((int32x4_t) v1);
+		reg v2_2   = orb  <int32_t>(v2, set1<int32_t>(1)); // hack to avoid -0 case
+		reg mask   = toreg<4>(cmplt<int32_t>(v2_2, set0<int32_t>()));
+		reg res1   = andb <int32_t>(mask, neg_v1);
+		reg res2   = andb <int32_t>(notb<int32_t>(mask), v1);
+		reg res    = orb  <int32_t>(res1, res2);
+		return res;
+	}
+
+	template <>
+	inline reg neg<int32_t>(const reg v1, const msk v2) {
+		return neg<int32_t>(v1, toreg<4>(v2));
+	}
+
+	template <>
+	inline reg neg<int16_t>(const reg v1, const reg v2) {
+		reg neg_v1 = (reg) vqnegq_s16((int16x8_t) v1);
+		reg v2_2   = orb  <int16_t>(v2, set1<int16_t>(1)); // hack to avoid -0 case
+		reg mask   = toreg<8>(cmplt<int16_t>(v2_2, set0<int16_t>()));
+		reg res1   = andb <int16_t>(mask, neg_v1);
+		reg res2   = andb <int16_t>(notb<int16_t>(mask), v1);
+		reg res    = orb  <int16_t>(res1, res2);
+		return res;
+	}
+
+	template <>
+	inline reg neg<int16_t>(const reg v1, const msk v2) {
+		return neg<int16_t>(v1, toreg<8>(v2));
+	}
+
+	template <>
+	inline reg neg<int8_t>(const reg v1, const reg v2) {
+		reg neg_v1 = (reg) vqnegq_s8((int8x16_t) v1);
+		reg v2_2   = orb  <int8_t>(v2, set1<int8_t>(1)); // hack to avoid -0 case
+		reg mask   = toreg<16>(cmplt<int8_t>(v2_2, set0<int8_t>()));
+		reg res1   = andb <int8_t>(mask, neg_v1);
+		reg res2   = andb <int8_t>(notb<int8_t>(mask), v1);
+		reg res    = orb  <int8_t>(res1, res2);
+		return res;
+	}
+
+	template <>
+	inline reg neg<int8_t>(const reg v1, const msk v2) {
+		return neg<int8_t>(v1, toreg<16>(v2));
+	}
+
+	// ------------------------------------------------------------------------------------------------------------ abs
+#ifdef __aarch64__
+	template <>
+	inline reg abs<double>(const reg v1) {
+		return (reg) vabsq_f64((float64x2_t)v1);
+	}
+#endif
+
+	template <>
+	inline reg abs<float>(const reg v1) {
+		return vabsq_f32(v1);
+	}
+
+#ifdef __aarch64__
+	template <>
+	inline reg abs<int64_t>(const reg v1) {
+		return (reg) vabsq_s64((int64x2_t)v1);
+	}
+#endif
+
+	template <>
+	inline reg abs<int32_t>(const reg v1) {
+		return (reg) vabsq_s32((int32x4_t)v1);
+	}
+
+	template <>
+	inline reg abs<int16_t>(const reg v1) {
+		return (reg) vabsq_s16((int16x8_t)v1);
+	}
+
+	template <>
+	inline reg abs<int8_t>(const reg v1) {
+		return (reg) vabsq_s8((int8x16_t)v1);
+	}
+
+	// ---------------------------------------------------------------------------------------------------------- rsqrt
+#ifdef __aarch64__
+	template <>
+	inline reg rsqrt<double>(const reg v1) {
+		return (reg) vrsqrteq_f64((float64x2_t)v1);
+	}
+#endif
+
+	template <>
+	inline reg rsqrt<float>(const reg v1) {
+		return vrsqrteq_f32(v1);
+	}
+
+	// ----------------------------------------------------------------------------------------------------------- sqrt
+#ifdef __aarch64__
+	template <>
+	inline reg sqrt<double>(const reg v1) {
+		return (reg) vrecpeq_f64((float64x2_t) rsqrt<double>(v1));
+	}
+#endif
+
+	template <>
+	inline reg sqrt<float>(const reg v1) {
+		return vrecpeq_f32(rsqrt<float>(v1));
+	}
+
+	// ------------------------------------------------------------------------------------------------------------ log
+	template <>
+	inline reg log<float>(const reg v) {
+		auto v_bis = v;
+		return (reg) log_ps(v_bis);
+	}
+
+	// ------------------------------------------------------------------------------------------------------------ exp
+	template <>
+	inline reg exp<float>(const reg v) {
+		auto v_bis = v;
+		return (reg) exp_ps(v_bis);
+	}
+
+	// ------------------------------------------------------------------------------------------------------------ sin
+	template <>
+	inline reg sin<float>(const reg v) {
+		auto v_bis = v;
+		return (reg) sin_ps(v_bis);
+	}
+
+	// ------------------------------------------------------------------------------------------------------------ cos
+	template <>
+	inline reg cos<float>(const reg v) {
+		auto v_bis = v;
+		return (reg) cos_ps(v_bis);
+	}
+
+	// --------------------------------------------------------------------------------------------------------- sincos
+	template <>
+	inline void sincos<float>(const reg x, reg &s, reg &c) {
+		sincos_ps(x, &s, &c);
+	}
+
+	// ---------------------------------------------------------------------------------------------------------- fmadd
+#ifdef __aarch64__
+	template <>
+	inline reg fmadd<double>(const reg v1, const reg v2, const reg v3) {
+#ifdef __ARM_FEATURE_FMA
+		return (reg) vfmaq_f64((float64x2_t)v3, (float64x2_t)v1, (float64x2_t)v2);
+#else
+ 		return add<double>(mul<double>(v1, v2), v3);
+ #endif
+	}
+#endif
+
+	template <>
+	inline reg fmadd<float>(const reg v1, const reg v2, const reg v3) {
+#ifdef __ARM_FEATURE_FMA
+		return (reg) vfmaq_f32((float32x4_t)v3, (float32x4_t)v1, (float32x4_t)v2);
+#else
+ 		return add<float>(mul<float>(v1, v2), v3);
+#endif
+	}
+
+	// --------------------------------------------------------------------------------------------------------- fnmadd
+#ifdef __aarch64__
+	template <>
+	inline reg fnmadd<double>(const reg v1, const reg v2, const reg v3) {
+#if defined(__ARM_FEATURE_FMA) && !defined(__clang__)
+		return (reg) vfmsq_f64((float64x2_t)v3, (float64x2_t)v1, (float64x2_t)v2);
+#else
+ 		return sub<double>(v3, mul<double>(v1, v2));
+#endif
+	}
+#endif
+
+	template <>
+	inline reg fnmadd<float>(const reg v1, const reg v2, const reg v3) {
+#if defined(__ARM_FEATURE_FMA) && !defined(__clang__)
+		return (reg) vfmsq_f32((float32x4_t)v3, (float32x4_t)v1, (float32x4_t)v2);
+#else
+ 		return sub<float>(v3, mul<float>(v1, v2));
+#endif
+	}
+
+	// ---------------------------------------------------------------------------------------------------------- fmsub
+	template <>
+	inline reg fmsub<double>(const reg v1, const reg v2, const reg v3) {
+		return fmadd<double>(v1, v2, xorb<double>(v3, set1<int64_t>(0x8000000000000000)));
+	}
+
+	template <>
+	inline reg fmsub<float>(const reg v1, const reg v2, const reg v3) {
+		return fmadd<float>(v1, v2, xorb<float>(v3, set1<int32_t>(0x80000000)));
+	}
+
+	// --------------------------------------------------------------------------------------------------------- fnmsub
+	template <>
+	inline reg fnmsub<double>(const reg v1, const reg v2, const reg v3) {
+		return xorb<double>(fmadd<double>(v1, v2, v3), set1<int64_t>(0x8000000000000000));
+	}
+
+	template <>
+	inline reg fnmsub<float>(const reg v1, const reg v2, const reg v3) {
+		return xorb<float>(fmadd<float>(v1, v2, v3), set1<int32_t>(0x80000000));
+	}
+
+	// ----------------------------------------------------------------------------------------------------------- lrot
+#ifdef __aarch64__
+	template <>
+	inline reg lrot<double>(const reg v1) {
+		return (reg) vextq_f64((float64x2_t)v1, (float64x2_t)v1, 1);
+	}
+#endif
+
+	template <>
+	inline reg lrot<float>(const reg v1) {
+		return vextq_f32(v1, v1, 1);
+	}
+
+	template <>
+	inline reg lrot<int64_t>(const reg v1) {
+		return (reg) vextq_u64((uint64x2_t)v1, (uint64x2_t)v1, 1);
+	}
+
+	template <>
+	inline reg lrot<int32_t>(const reg v1) {
+		return (reg) vextq_u32((uint32x4_t)v1, (uint32x4_t)v1, 1);
+	}
+
+	template <>
+	inline reg lrot<int16_t>(const reg v1) {
+		return (reg) vextq_u16((uint16x8_t)v1, (uint16x8_t)v1, 1);
+	}
+
+	template <>
+	inline reg lrot<int8_t>(const reg v1) {
+		return (reg) vextq_u8((uint8x16_t)v1, (uint8x16_t)v1, 1);
+	}
+
+	// ----------------------------------------------------------------------------------------------------------- rrot
+#ifdef __aarch64__
+	template <>
+	inline reg rrot<double>(const reg v1) {
+		return (reg) vextq_f64((float64x2_t)v1, (float64x2_t)v1, 1);
+	}
+#endif
+
+	template <>
+	inline reg rrot<float>(const reg v1) {
+		return vextq_f32(v1, v1, 3);
+	}
+
+	template <>
+	inline reg rrot<int64_t>(const reg v1) {
+		return (reg) vextq_u64((uint64x2_t)v1, (uint64x2_t)v1, 1);
+	}
+
+	template <>
+	inline reg rrot<int32_t>(const reg v1) {
+		return (reg) vextq_u32((uint32x4_t)v1, (uint32x4_t)v1, 3);
+	}
+
+	template <>
+	inline reg rrot<int16_t>(const reg v1) {
+		return (reg) vextq_u16((uint16x8_t)v1, (uint16x8_t)v1, 7);
+	}
+
+	template <>
+	inline reg rrot<int8_t>(const reg v1) {
+		return (reg) vextq_u8((uint8x16_t)v1, (uint8x16_t)v1, 15);
+	}
+
+	// ----------------------------------------------------------------------------------------------------------- div2
+#ifdef __aarch64__
+	template <>
+	inline reg div2<double>(const reg v1) {
+		return mul<double>(v1, set1<double>(0.5));
+	}
+#endif
+
+	template <>
+	inline reg div2<float>(const reg v1) {
+		return mul<float>(v1, set1<float>(0.5f));
+	}
+
+#ifdef __aarch64__
+	template <>
+	inline reg div2<int64_t>(const reg v1) {
+		reg abs_v1 = abs<int64_t>(v1);
+		reg sh = rshift<int64_t>(abs_v1, 1);
+		return neg<int64_t>(sh, v1);
+	}
+#endif
+
+	template <>
+	inline reg div2<int32_t>(const reg v1) {
+		reg abs_v1 = abs<int32_t>(v1);
+		reg sh = rshift<int32_t>(abs_v1, 1);
+		return neg<int32_t>(sh, v1);
+	}
+
+	template <>
+	inline reg div2<int16_t>(const reg v1) {
+		reg abs_v1 = abs<int16_t>(v1);
+		reg sh = rshift<int16_t>(abs_v1, 1);
+		return neg<int16_t>(sh, v1);
+	}
+
+	template <>
+	inline reg div2<int8_t>(const reg v1) {
+		reg abs_v1 = abs<int8_t>(v1);
+		reg sh = rshift<int8_t>(abs_v1, 1);
+		return neg<int8_t>(sh, v1);
+	}
+
+	// ----------------------------------------------------------------------------------------------------------- div4
+#ifdef __aarch64__
+	template <>
+	inline reg div4<double>(const reg v1) {
+		return mul<double>(v1, set1<double>(0.25));
+	}
+#endif
+
+	template <>
+	inline reg div4<float>(const reg v1) {
+		return mul<float>(v1, set1<float>(0.25f));
+	}
+
+#ifdef __aarch64__
+	template <>
+	inline reg div4<int64_t>(const reg v1) {
+		reg abs_v1 = abs<int64_t>(v1);
+		reg sh = rshift<int64_t>(abs_v1, 2);
+		return neg<int64_t>(sh, v1);
+	}
+#endif
+
+	template <>
+	inline reg div4<int32_t>(const reg v1) {
+		reg abs_v1 = abs<int32_t>(v1);
+		reg sh = rshift<int32_t>(abs_v1, 2);
+		return neg<int32_t>(sh, v1);
+	}
+
+	template <>
+	inline reg div4<int16_t>(const reg v1) {
+		reg abs_v1 = abs<int16_t>(v1);
+		reg sh = rshift<int16_t>(abs_v1, 2);
+		return neg<int16_t>(sh, v1);
+	}
+
+	template <>
+	inline reg div4<int8_t>(const reg v1) {
+		reg abs_v1 = abs<int8_t>(v1);
+		reg sh = rshift<int8_t>(abs_v1, 2);
+		return neg<int8_t>(sh, v1);
+	}
+
+	// ------------------------------------------------------------------------------------------------------------ sat
+#ifdef __aarch64__
+	template <>
+	inline reg sat<double>(const reg v1, double min, double max) {
+		return mipp::min<double>(mipp::max<double>(v1, set1<double>(min)), set1<double>(max));
+	}
+#endif
+
+	template <>
+	inline reg sat<float>(const reg v1, float min, float max) {
+		return mipp::min<float>(mipp::max<float>(v1, set1<float>(min)), set1<float>(max));
+	}
+
+#ifdef __aarch64__
+	template <>
+	inline reg sat<int64_t>(const reg v1, int64_t min, int64_t max) {
+		return mipp::min<int64_t>(mipp::max<int64_t>(v1, set1<int64_t>(min)), set1<int64_t>(max));
+	}
+#endif
+
+	template <>
+	inline reg sat<int32_t>(const reg v1, int32_t min, int32_t max) {
+		return mipp::min<int32_t>(mipp::max<int32_t>(v1, set1<int32_t>(min)), set1<int32_t>(max));
+	}
+
+	template <>
+	inline reg sat<int16_t>(const reg v1, int16_t min, int16_t max) {
+		return mipp::min<int16_t>(mipp::max<int16_t>(v1, set1<int16_t>(min)), set1<int16_t>(max));
+	}
+
+	template <>
+	inline reg sat<int8_t>(const reg v1, int8_t min, int8_t max) {
+		return mipp::min<int8_t>(mipp::max<int8_t>(v1, set1<int8_t>(min)), set1<int8_t>(max));
+	}
+
+	// ---------------------------------------------------------------------------------------------------------- round
+#ifdef __aarch64__
+	template <>
+	inline reg round<double>(const reg v) {
+		return (reg) vrndnq_f64((float64x2_t) v);
+	}
+
+	template <>
+	inline reg round<float>(const reg v) {
+		return (reg) vrndnq_f32((float32x4_t) v);
+	}
+#else
+	template <>
+	inline reg round<float>(const reg v) {
+		auto half = mipp::orb<float>(mipp::msb<float>(v), mipp::set1<float>(0.5f));
+		auto tmp = mipp::add<float>(v, half);
+		return vcvtq_f32_s32(vcvtq_s32_f32(tmp));
+	}
+
+#endif
+
+	// ------------------------------------------------------------------------------------------------------------ cvt
+#ifdef __aarch64__
+	template <>
+	inline reg cvt<double,int64_t>(const reg v) {
+		return (reg) vcvtq_s64_f64((float64x2_t) round<double>(v));
+	}
+
+	template <>
+	inline reg cvt<int64_t,double>(const reg v) {
+		return (reg) vcvtq_f64_s64((int64x2_t) v);
+	}
+#endif
+
+	template <>
+	inline reg cvt<float,int32_t>(const reg v) {
+		return (reg) vcvtq_s32_f32((float32x4_t) round<float>(v));
+	}
+
+	template <>
+	inline reg cvt<int32_t,float>(const reg v) {
+		return (reg) vcvtq_f32_s32((int32x4_t) v);
+	}
+
+	template <>
+	inline reg cvt<int8_t,int16_t>(const reg_2 v) {
+		return (reg) vmovl_s8((int8x8_t) v);
+	}
+
+	template <>
+	inline reg cvt<int16_t,int32_t>(const reg_2 v) {
+		return (reg) vmovl_s16((int16x4_t) v);
+	}
+
+	template <>
+	inline reg cvt<int32_t,int64_t>(const reg_2 v) {
+		return (reg) vmovl_s32((int32x2_t) v);
+	}
+
+	// ----------------------------------------------------------------------------------------------------------- pack
+	template <>
+	inline reg pack<int64_t,int32_t>(const reg v1, const reg v2) {
+		return (reg) vcombine_s32(vqmovn_s64((int64x2_t) v1), vqmovn_s64((int64x2_t) v2));
+	}
+
+	template <>
+	inline reg pack<int32_t,int16_t>(const reg v1, const reg v2) {
+		return (reg) vcombine_s16(vqmovn_s32((int32x4_t) v1), vqmovn_s32((int32x4_t) v2));
+	}
+
+	template <>
+	inline reg pack<int16_t,int8_t>(const reg v1, const reg v2) {
+		return (reg) vcombine_s8(vqmovn_s16((int16x8_t) v1), vqmovn_s16((int16x8_t) v2));
+	}
+
+	// ------------------------------------------------------------------------------------------------------ reduction
+#ifdef __aarch64__
+	template <red_op<double> OP>
+	struct _reduction<double,OP>
+	{
+		static reg apply(const reg v1) {
+			auto val = v1;
+
+			val = OP(val, (reg) vextq_f64((float64x2_t)val, (float64x2_t)val, 1));
+
+			return val;
+		}
+	};
+
+	template <Red_op<double> OP>
+	struct _Reduction<double,OP>
+	{
+		static Reg<double> apply(const Reg<double> v1) {
+			auto val = v1;
+
+			val = OP(val, Reg<double>((reg) vextq_f64((float64x2_t)val.r, (float64x2_t)val.r, 1)));
+
+			return val;
+		}
+	};
+#endif
+
+	template <red_op<float> OP>
+	struct _reduction<float,OP>
+	{
+		static reg apply(const reg v1) {
+			auto val = v1;
+
+			val = OP(val, (reg) vextq_f32(val, val, 2));
+
+			float32x2_t low1  = vrev64_f32(vget_low_f32 (val));
+			float32x2_t high1 = vrev64_f32(vget_high_f32(val));
+			val = OP(val, vcombine_f32(low1, high1));
+
+			return val;
+		}
+	};
+
+	template <Red_op<float> OP>
+	struct _Reduction<float,OP>
+	{
+		static Reg<float> apply(const Reg<float> v1) {
+			auto val = v1;
+
+			val = OP(val, Reg<float>((reg) vextq_f32(val.r, val.r, 2)));
+
+			float32x2_t low1  = vrev64_f32(vget_low_f32 (val.r));
+			float32x2_t high1 = vrev64_f32(vget_high_f32(val.r));
+			val = OP(val, Reg<float>(vcombine_f32(low1, high1)));
+
+			return val;
+		}
+	};
+
+#ifdef __aarch64__
+	template <red_op<int64_t> OP>
+	struct _reduction<int64_t,OP>
+	{
+		static reg apply(const reg v1) {
+			auto val = v1;
+
+			val = OP(val, (reg) vextq_s64((int64x2_t)val, (int64x2_t)val, 1));
+
+			return val;
+		}
+	};
+
+	template <Red_op<int64_t> OP>
+	struct _Reduction<int64_t,OP>
+	{
+		static Reg<int64_t> apply(const Reg<int64_t> v1) {
+			auto val = v1;
+
+			val = OP(val, Reg<int64_t>((reg) vextq_s64((int64x2_t)val.r, (int64x2_t)val.r, 1)));
+
+			return val;
+		}
+	};
+#endif
+
+	template <red_op<int32_t> OP>
+	struct _reduction<int32_t,OP>
+	{
+		static reg apply(const reg v1) {
+			auto val = v1;
+
+			val = OP(val, (reg) vextq_s32((int32x4_t) val, (int32x4_t) val, 2));
+
+			int32x2_t low1  = vrev64_s32((int32x2_t) vget_low_s32 ((int32x4_t) val));
+			int32x2_t high1 = vrev64_s32((int32x2_t) vget_high_s32((int32x4_t) val));
+			val = OP(val, (reg) vcombine_s32((int32x2_t) low1, (int32x2_t) high1));
+
+			return val;
+		}
+	};
+
+	template <Red_op<int32_t> OP>
+	struct _Reduction<int32_t,OP>
+	{
+		static Reg<int32_t> apply(const Reg<int32_t> v1) {
+			auto val = v1;
+
+			val = OP(val, Reg<int32_t>((reg) vextq_s32((int32x4_t) val.r, (int32x4_t) val.r, 2)));
+
+			int32x2_t low1  = vrev64_s32((int32x2_t) vget_low_s32 ((int32x4_t) val.r));
+			int32x2_t high1 = vrev64_s32((int32x2_t) vget_high_s32((int32x4_t) val.r));
+			val = OP(val, Reg<int32_t>((reg) vcombine_s32((int32x2_t) low1, (int32x2_t) high1)));
+
+			return val;
+		}
+	};
+
+	template <red_op<int16_t> OP>
+	struct _reduction<int16_t,OP>
+	{
+		static reg apply(const reg v1) {
+			auto val = v1;
+
+			val = OP(val, (reg) vextq_s32((int32x4_t) val, (int32x4_t) val, 2));
+
+			int32x2_t low1  = vrev64_s32((int32x2_t) vget_low_s32 ((int32x4_t) val));
+			int32x2_t high1 = vrev64_s32((int32x2_t) vget_high_s32((int32x4_t) val));
+			val = OP(val, (reg) vcombine_s32((int32x2_t) low1, (int32x2_t) high1));
+
+			int16x4_t low2  = vrev32_s16((int16x4_t) vget_low_s32((int32x4_t) val));
+			int16x4_t high2 = vrev32_s16((int16x4_t) vget_high_s32((int32x4_t) val));
+			val = OP(val, (reg) vcombine_s32((int32x2_t) low2, (int32x2_t) high2));
+
+			return val;
+		}
+	};
+
+	template <Red_op<int16_t> OP>
+	struct _Reduction<int16_t,OP>
+	{
+		static Reg<int16_t> apply(const Reg<int16_t> v1) {
+			auto val = v1;
+
+			val = OP(val, Reg<int16_t>((reg) vextq_s32((int32x4_t) val.r, (int32x4_t) val.r, 2)));
+
+			int32x2_t low1  = vrev64_s32((int32x2_t) vget_low_s32 ((int32x4_t) val.r));
+			int32x2_t high1 = vrev64_s32((int32x2_t) vget_high_s32((int32x4_t) val.r));
+			val = OP(val, Reg<int16_t>((reg) vcombine_s32((int32x2_t) low1, (int32x2_t) high1)));
+
+			int16x4_t low2  = vrev32_s16((int16x4_t) vget_low_s32((int32x4_t) val.r));
+			int16x4_t high2 = vrev32_s16((int16x4_t) vget_high_s32((int32x4_t) val.r));
+			val = OP(val, Reg<int16_t>((reg) vcombine_s32((int32x2_t) low2, (int32x2_t) high2)));
+
+			return val;
+		}
+	};
+
+	template <red_op<int8_t> OP>
+	struct _reduction<int8_t,OP>
+	{
+		static reg apply(const reg v1) {
+			auto val = v1;
+
+			val = OP(val, (reg) vextq_s32((int32x4_t) val, (int32x4_t) val, 2));
+
+			int32x2_t low1  = vrev64_s32((int32x2_t) vget_low_s32 ((int32x4_t) val));
+			int32x2_t high1 = vrev64_s32((int32x2_t) vget_high_s32((int32x4_t) val));
+			val = OP(val, (reg) vcombine_s32((int32x2_t) low1, (int32x2_t) high1));
+
+			int16x4_t low2  = vrev32_s16((int16x4_t) vget_low_s32((int32x4_t) val));
+			int16x4_t high2 = vrev32_s16((int16x4_t) vget_high_s32((int32x4_t) val));
+			val = OP(val, (reg) vcombine_s32((int32x2_t) low2, (int32x2_t) high2));
+
+			int8x8_t low3  = vrev16_s8((int8x8_t) vget_low_s32((int32x4_t) val));
+			int8x8_t high3 = vrev16_s8((int8x8_t) vget_high_s32((int32x4_t) val));
+			val = OP(val, (reg) vcombine_s32((int32x2_t) low3, (int32x2_t) high3));
+
+			return val;
+		}
+	};
+
+	template <Red_op<int8_t> OP>
+	struct _Reduction<int8_t,OP>
+	{
+		static Reg<int8_t> apply(const Reg<int8_t> v1) {
+			auto val = v1;
+
+			val = OP(val, Reg<int8_t>((reg) vextq_s32((int32x4_t) val.r, (int32x4_t) val.r, 2)));
+
+			int32x2_t low1  = vrev64_s32((int32x2_t) vget_low_s32 ((int32x4_t) val.r));
+			int32x2_t high1 = vrev64_s32((int32x2_t) vget_high_s32((int32x4_t) val.r));
+			val = OP(val, Reg<int8_t>((reg) vcombine_s32((int32x2_t) low1, (int32x2_t) high1)));
+
+			int16x4_t low2  = vrev32_s16((int16x4_t) vget_low_s32((int32x4_t) val.r));
+			int16x4_t high2 = vrev32_s16((int16x4_t) vget_high_s32((int32x4_t) val.r));
+			val = OP(val, Reg<int8_t>((reg) vcombine_s32((int32x2_t) low2, (int32x2_t) high2)));
+
+			int8x8_t low3  = vrev16_s8((int8x8_t) vget_low_s32((int32x4_t) val.r));
+			int8x8_t high3 = vrev16_s8((int8x8_t) vget_high_s32((int32x4_t) val.r));
+			val = OP(val, Reg<int8_t>((reg) vcombine_s32((int32x2_t) low3, (int32x2_t) high3)));
+
+			return val;
+		}
+	};
+
+	// ---------------------------------------------------------------------------------------------------------- testz
+#ifdef __aarch64__
+	template <>
+	inline bool testz<int64_t>(const reg v1, const reg v2) {
+		auto andvec = mipp::andb<int64_t>(v1, v2);
+		return mipp::reduction<int64_t, mipp::orb<int64_t>>::sapply(andvec) == 0;
+	}
+#endif
+
+	template <>
+	inline bool testz<int32_t>(const reg v1, const reg v2) {
+		auto andvec = mipp::andb<int32_t>(v1, v2);
+		return mipp::reduction<int32_t, mipp::orb<int32_t>>::sapply(andvec) == 0;
+	}
+
+	template <>
+	inline bool testz<int16_t>(const reg v1, const reg v2) {
+		auto andvec = mipp::andb<int16_t>(v1, v2);
+		return mipp::reduction<int16_t, mipp::orb<int16_t>>::sapply(andvec) == 0;
+	}
+
+	template <>
+	inline bool testz<int8_t>(const reg v1, const reg v2) {
+		auto andvec = mipp::andb<int8_t>(v1, v2);
+		return mipp::reduction<int8_t, mipp::orb<int8_t>>::sapply(andvec) == 0;
+	}
+
+#ifdef __aarch64__
+	template <>
+	inline bool testz<int64_t>(const reg v1) {
+		auto tmp = vorr_u64(vget_low_u64((uint64x2_t)v1), vget_high_u64((uint64x2_t)v1));
+		return !vget_lane_u64(tmp, 0);
+	}
+
+	template <>
+	inline bool testz<int32_t>(const reg v1) {
+		auto tmp = vorr_u64(vget_low_u64((uint64x2_t)v1), vget_high_u64((uint64x2_t)v1));
+		return !vget_lane_u64(tmp, 0);
+	}
+
+	template <>
+	inline bool testz<int16_t>(const reg v1) {
+		auto tmp = vorr_u64(vget_low_u64((uint64x2_t)v1), vget_high_u64((uint64x2_t)v1));
+		return !vget_lane_u64(tmp, 0);
+	}
+
+	template <>
+	inline bool testz<int8_t>(const reg v1) {
+		auto tmp = vorr_u64(vget_low_u64((uint64x2_t)v1), vget_high_u64((uint64x2_t)v1));
+		return !vget_lane_u64(tmp, 0);
+	}
+#else
+	template <>
+	inline bool testz<int32_t>(const reg v1) {
+		uint32x2_t v2 = vorr_u32(vget_low_u32((uint32x4_t)v1), vget_high_u32((uint32x4_t)v1));
+		return !(vget_lane_u32(vpmax_u32(v2, v2), 0));
+	}
+
+	template <>
+	inline bool testz<int16_t>(const reg v1) {
+		uint32x2_t v2 = vorr_u32(vget_low_u32((uint32x4_t)v1), vget_high_u32((uint32x4_t)v1));
+		return !(vget_lane_u32(vpmax_u32(v2, v2), 0));
+	}
+
+	template <>
+	inline bool testz<int8_t>(const reg v1) {
+		uint32x2_t v2 = vorr_u32(vget_low_u32((uint32x4_t)v1), vget_high_u32((uint32x4_t)v1));
+		return !(vget_lane_u32(vpmax_u32(v2, v2), 0));
+	}
+#endif
+
+	// --------------------------------------------------------------------------------------------------- testz (mask)
+#ifdef __aarch64__
+	template <>
+	inline bool testz<2>(const msk v1, const msk v2) {
+		auto andvec = mipp::andb<2>(v1, v2);
+		return mipp::reduction<int64_t, mipp::orb<int64_t>>::sapply(mipp::toreg<2>(andvec)) == 0;
+	}
+#endif
+
+	template <>
+	inline bool testz<4>(const msk v1, const msk v2) {
+		auto andvec = mipp::andb<4>(v1, v2);
+		return mipp::reduction<int32_t, mipp::orb<int32_t>>::sapply(mipp::toreg<4>(andvec)) == 0;
+	}
+
+	template <>
+	inline bool testz<8>(const msk v1, const msk v2) {
+		auto andvec = mipp::andb<8>(v1, v2);
+		return mipp::reduction<int16_t, mipp::orb<int16_t>>::sapply(mipp::toreg<8>(andvec)) == 0;
+	}
+
+	template <>
+	inline bool testz<16>(const msk v1, const msk v2) {
+		auto andvec = mipp::andb<16>(v1, v2);
+		return mipp::reduction<int8_t, mipp::orb<int8_t>>::sapply(mipp::toreg<16>(andvec)) == 0;
+	}
+
+#ifdef __aarch64__
+	template <>
+	inline bool testz<2>(const msk v1) {
+		auto tmp = vorr_u64(vget_low_u64((uint64x2_t)v1), vget_high_u64((uint64x2_t)v1));
+		return !vget_lane_u64(tmp, 0);
+	}
+
+	template <>
+	inline bool testz<4>(const msk v1) {
+		auto tmp = vorr_u64(vget_low_u64((uint64x2_t)v1), vget_high_u64((uint64x2_t)v1));
+		return !vget_lane_u64(tmp, 0);
+	}
+
+	template <>
+	inline bool testz<8>(const msk v1) {
+		auto tmp = vorr_u64(vget_low_u64((uint64x2_t)v1), vget_high_u64((uint64x2_t)v1));
+		return !vget_lane_u64(tmp, 0);
+	}
+
+	template <>
+	inline bool testz<16>(const msk v1) {
+		auto tmp = vorr_u64(vget_low_u64((uint64x2_t)v1), vget_high_u64((uint64x2_t)v1));
+		return !vget_lane_u64(tmp, 0);
+	}
+#else
+	template <>
+	inline bool testz<4>(const msk v1) {
+		uint32x2_t v2 = vorr_u32(vget_low_u32((uint32x4_t)v1), vget_high_u32((uint32x4_t)v1));
+		return !(vget_lane_u32(vpmax_u32(v2, v2), 0));
+	}
+
+	template <>
+	inline bool testz<8>(const msk v1) {
+		uint32x2_t v2 = vorr_u32(vget_low_u32((uint32x4_t)v1), vget_high_u32((uint32x4_t)v1));
+		return !(vget_lane_u32(vpmax_u32(v2, v2), 0));
+	}
+
+	template <>
+	inline bool testz<16>(const msk v1) {
+		uint32x2_t v2 = vorr_u32(vget_low_u32((uint32x4_t)v1), vget_high_u32((uint32x4_t)v1));
+		return !(vget_lane_u32(vpmax_u32(v2, v2), 0));
+	}
+#endif
+
+	// ------------------------------------------------------------------------------------------------------ transpose
+	template <>
+	inline void transpose<int16_t>(reg tab[nElReg<int16_t>()]) {
+		// /!\ this implementation can be further improved by using the dedicated VTRN instructions.
+		//
+		// Transpose the 8x8 matrix:
+		// -------------------------
+		// tab[0] = [a0, a1, a2, a3, a4, a5, a6, a7]        tab[0] = [a0, b0, c0, d0, e0, f0, g0, h0]
+		// tab[1] = [b0, b1, b2, b3, b4, b5, b6, b7]        tab[1] = [a1, b1, c1, d1, e1, f1, g1, h1]
+		// tab[2] = [c0, c1, c2, c3, c4, c5, c6, c7]        tab[2] = [a2, b2, c2, d2, e2, f2, g2, h2]
+		// tab[3] = [d0, d1, d2, d3, d4, d5, d6, d7]        tab[3] = [a3, b3, c3, d3, e3, f3, g3, h3]
+		// tab[4] = [e0, e1, e2, e3, e4, e5, e6, e7]   =>   tab[4] = [a4, b4, c4, d4, e4, f4, g4, h4]
+		// tab[5] = [f0, f1, f2, f3, f4, f5, f6, f7]        tab[5] = [a5, b5, c5, d5, e5, f5, g5, h5]
+		// tab[6] = [g0, g1, g2, g3, g4, g5, g6, g7]        tab[6] = [a6, b6, c6, d6, e6, f6, g6, h6]
+		// tab[7] = [h0, h1, h2, h3, h4, h5, h6, h7]        tab[7] = [a7, b7, c7, d7, e7, f7, g7, h7]
+
+		auto ab = mipp::interleave<int16_t>(tab[0], tab[1]);
+		auto cd = mipp::interleave<int16_t>(tab[2], tab[3]);
+		auto ef = mipp::interleave<int16_t>(tab[4], tab[5]);
+		auto gh = mipp::interleave<int16_t>(tab[6], tab[7]);
+
+		auto a03b03 = ab.val[0];
+		auto c03d03 = cd.val[0];
+		auto e03f03 = ef.val[0];
+		auto g03h03 = gh.val[0];
+		auto a47b47 = ab.val[1];
+		auto c47d47 = cd.val[1];
+		auto e47f47 = ef.val[1];
+		auto g47h47 = gh.val[1];
+
+		auto a03b03c03d03 = mipp::interleave<int32_t>(a03b03, c03d03);
+		auto e03f03g03h03 = mipp::interleave<int32_t>(e03f03, g03h03);
+		auto a47b47c47d47 = mipp::interleave<int32_t>(a47b47, c47d47);
+		auto e47f47g47h47 = mipp::interleave<int32_t>(e47f47, g47h47);
+
+		auto a01b01c01d01 = a03b03c03d03.val[0];
+		auto a23b23c23d23 = a03b03c03d03.val[1];
+		auto e01f01g01h01 = e03f03g03h03.val[0];
+		auto e23f23g23h23 = e03f03g03h03.val[1];
+		auto a45b45c45d45 = a47b47c47d47.val[0];
+		auto a67b67c67d67 = a47b47c47d47.val[1];
+		auto e45f45g45h45 = e47f47g47h47.val[0];
+		auto e67f67g67h67 = e47f47g47h47.val[1];
+
+		auto a01b01c01d01e01f01g01h01 = mipp::interleave<int64_t>(a01b01c01d01, e01f01g01h01);
+		auto a23b23c23d23e23f23g23h23 = mipp::interleave<int64_t>(a23b23c23d23, e23f23g23h23);
+		auto a45b45c45d45e45f45g45h45 = mipp::interleave<int64_t>(a45b45c45d45, e45f45g45h45);
+		auto a67b67c67d67e67f67g67h67 = mipp::interleave<int64_t>(a67b67c67d67, e67f67g67h67);
+
+		auto a0b0c0d0e0f0g0h0 = a01b01c01d01e01f01g01h01.val[0];
+		auto a1b1c1d1e1f1g1h1 = a01b01c01d01e01f01g01h01.val[1];
+		auto a2b2c2d2e2f2g2h2 = a23b23c23d23e23f23g23h23.val[0];
+		auto a3b3c3d3e3f3g3h3 = a23b23c23d23e23f23g23h23.val[1];
+		auto a4b4c4d4e4f4g4h4 = a45b45c45d45e45f45g45h45.val[0];
+		auto a5b5c5d5e5f5g5h5 = a45b45c45d45e45f45g45h45.val[1];
+		auto a6b6c6d6e6f6g6h6 = a67b67c67d67e67f67g67h67.val[0];
+		auto a7b7c7d7e7f7g7h7 = a67b67c67d67e67f67g67h67.val[1];
+
+		tab[0] = (reg)a0b0c0d0e0f0g0h0;
+		tab[1] = (reg)a1b1c1d1e1f1g1h1;
+		tab[2] = (reg)a2b2c2d2e2f2g2h2;
+		tab[3] = (reg)a3b3c3d3e3f3g3h3;
+		tab[4] = (reg)a4b4c4d4e4f4g4h4;
+		tab[5] = (reg)a5b5c5d5e5f5g5h5;
+		tab[6] = (reg)a6b6c6d6e6f6g6h6;
+		tab[7] = (reg)a7b7c7d7e7f7g7h7;
+	}
+
+	// --------------------------------------------------------------------------------------------------- transpose8x8
+	template <>
+	inline void transpose8x8<int8_t>(reg tab[8]) {
+		mipp::transpose<int16_t>(tab);
+	}
+#endif
+
+// -------------------------------------------------------------------------------------------------------- X86 AVX-512
+// --------------------------------------------------------------------------------------------------------------------
+#elif defined(__MIC__) || defined(__KNCNI__) || defined(__AVX512__) || defined(__AVX512F__)
+// original file: ../external/MIPP/src/mipp_impl_AVX512.hxx
+
+// #include "mipp.h"
+
+// -------------------------------------------------------------------------------------------------------- X86 AVX-512
+// --------------------------------------------------------------------------------------------------------------------
+#if defined(__MIC__) || defined(__KNCNI__) || defined(__AVX512__) || defined(__AVX512F__)
+
+	// ---------------------------------------------------------------------------------------------------------- blend
+	template <>
+	inline reg blend<double>(const reg v1, const reg v2, const msk m) {
+		return _mm512_castpd_ps(_mm512_mask_blend_pd((__mmask8)m, _mm512_castps_pd(v2), _mm512_castps_pd(v1)));
+	}
+
+	template <>
+	inline reg blend<float>(const reg v1, const reg v2, const msk m) {
+		return _mm512_mask_blend_ps((__mmask16)m, v2, v1);
+	}
+
+	template <>
+	inline reg blend<int64_t>(const reg v1, const reg v2, const msk m) {
+		return _mm512_castsi512_ps(_mm512_mask_blend_epi64((__mmask8)m, _mm512_castps_si512(v2), _mm512_castps_si512(v1)));
+	}
+
+
+	template <>
+	inline reg blend<int32_t>(const reg v1, const reg v2, const msk m) {
+		return _mm512_castsi512_ps(_mm512_mask_blend_epi32((__mmask16)m, _mm512_castps_si512(v2), _mm512_castps_si512(v1)));
+	}
+
+#if defined(__AVX512BW__)
+	template <>
+	inline reg blend<int16_t>(const reg v1, const reg v2, const msk m) {
+		return _mm512_castsi512_ps(_mm512_mask_blend_epi16((__mmask32)m, _mm512_castps_si512(v2), _mm512_castps_si512(v1)));
+	}
+
+	template <>
+	inline reg blend<int8_t>(const reg v1, const reg v2, const msk m) {
+		return _mm512_castsi512_ps(_mm512_mask_blend_epi8((__mmask64)m, _mm512_castps_si512(v2), _mm512_castps_si512(v1)));
+	}
+#endif
+
+
+	// ---------------------------------------------------------------------------------------------------------- loadu
+#if defined(__AVX512F__)
+	template <>
+	inline reg loadu<float>(const float *mem_addr) {
+		return _mm512_loadu_ps(mem_addr);
+	}
+
+	template <>
+	inline reg loadu<double>(const double *mem_addr) {
+		return _mm512_castpd_ps(_mm512_loadu_pd(mem_addr));
+	}
+
+	template <>
+	inline reg loadu<int64_t>(const int64_t *mem_addr) {
+		return _mm512_loadu_ps((const float*) mem_addr);
+	}
+
+	template <>
+	inline reg loadu<int32_t>(const int32_t *mem_addr) {
+		return _mm512_loadu_ps((const float*) mem_addr);
+	}
+
+	template <>
+	inline reg loadu<int16_t>(const int16_t *mem_addr) {
+		return _mm512_loadu_ps((const float*) mem_addr);
+	}
+
+	template <>
+	inline reg loadu<int8_t>(const int8_t *mem_addr) {
+		return _mm512_loadu_ps((const float*) mem_addr);
+	}
+#endif
+
+	// ----------------------------------------------------------------------------------------------------------- load
+#ifdef MIPP_ALIGNED_LOADS
+	template <>
+	inline reg load<float>(const float *mem_addr) {
+		return _mm512_load_ps(mem_addr);
+	}
+
+	template <>
+	inline reg load<double>(const double *mem_addr) {
+		return _mm512_castpd_ps(_mm512_load_pd(mem_addr));
+	}
+
+	template <>
+	inline reg load<int64_t>(const int64_t *mem_addr) {
+		return _mm512_load_ps((const float*) mem_addr);
+	}
+
+	template <>
+	inline reg load<int32_t>(const int32_t *mem_addr) {
+		return _mm512_load_ps((const float*) mem_addr);
+	}
+
+	template <>
+	inline reg load<int16_t>(const int16_t *mem_addr) {
+		return _mm512_load_ps((const float*) mem_addr);
+	}
+
+	template <>
+	inline reg load<int8_t>(const int8_t *mem_addr) {
+		return _mm512_load_ps((const float*) mem_addr);
+	}
+#else
+	template <>
+	inline reg load<float>(const float *mem_addr) {
+		return mipp::loadu<float>(mem_addr);
+	}
+
+	template <>
+	inline reg load<double>(const double *mem_addr) {
+		return mipp::loadu<double>(mem_addr);
+	}
+
+	template <>
+	inline reg load<int64_t>(const int64_t *mem_addr) {
+		return mipp::loadu<int64_t>(mem_addr);
+	}
+
+	template <>
+	inline reg load<int32_t>(const int32_t *mem_addr) {
+		return mipp::loadu<int32_t>(mem_addr);
+	}
+
+	template <>
+	inline reg load<int16_t>(const int16_t *mem_addr) {
+		return mipp::loadu<int16_t>(mem_addr);
+	}
+
+	template <>
+	inline reg load<int8_t>(const int8_t *mem_addr) {
+		return mipp::loadu<int8_t>(mem_addr);
+	}
+#endif
+
+	// --------------------------------------------------------------------------------------------------------- storeu
+#if defined(__AVX512F__)
+	template <>
+	inline void storeu<float>(float *mem_addr, const reg v) {
+		_mm512_storeu_ps(mem_addr, v);
+	}
+
+	template <>
+	inline void storeu<double>(double *mem_addr, const reg v) {
+		_mm512_storeu_pd(mem_addr, _mm512_castps_pd(v));
+	}
+
+	template <>
+	inline void storeu<int64_t>(int64_t *mem_addr, const reg v) {
+		_mm512_storeu_ps((float *)mem_addr, v);
+	}
+
+	template <>
+	inline void storeu<int32_t>(int32_t *mem_addr, const reg v) {
+		_mm512_storeu_ps((float *)mem_addr, v);
+	}
+
+	template <>
+	inline void storeu<int16_t>(int16_t *mem_addr, const reg v) {
+		_mm512_storeu_ps((float *)mem_addr, v);
+	}
+
+	template <>
+	inline void storeu<int8_t>(int8_t *mem_addr, const reg v) {
+		_mm512_storeu_ps((float *)mem_addr, v);
+	}
+#endif
+
+	// ---------------------------------------------------------------------------------------------------------- store
+#ifdef MIPP_ALIGNED_LOADS
+	template <>
+	inline void store<float>(float *mem_addr, const reg v) {
+		_mm512_store_ps(mem_addr, v);
+	}
+
+	template <>
+	inline void store<double>(double *mem_addr, const reg v) {
+		_mm512_store_pd(mem_addr, _mm512_castps_pd(v));
+	}
+
+	template <>
+	inline void store<int64_t>(int64_t *mem_addr, const reg v) {
+		_mm512_store_ps((float *)mem_addr, v);
+	}
+
+	template <>
+	inline void store<int32_t>(int32_t *mem_addr, const reg v) {
+		_mm512_store_ps((float *)mem_addr, v);
+	}
+
+	template <>
+	inline void store<int16_t>(int16_t *mem_addr, const reg v) {
+		_mm512_store_ps((float *)mem_addr, v);
+	}
+
+	template <>
+	inline void store<int8_t>(int8_t *mem_addr, const reg v) {
+		_mm512_store_ps((float *)mem_addr, v);
+	}
+#else
+	template <>
+	inline void store<float>(float *mem_addr, const reg v) {
+		mipp::storeu<float>(mem_addr, v);
+	}
+
+	template <>
+	inline void store<double>(double *mem_addr, const reg v) {
+		mipp::storeu<double>(mem_addr, v);
+	}
+
+	template <>
+	inline void store<int64_t>(int64_t *mem_addr, const reg v) {
+		mipp::storeu<int64_t>(mem_addr, v);
+	}
+
+	template <>
+	inline void store<int32_t>(int32_t *mem_addr, const reg v) {
+		mipp::storeu<int32_t>(mem_addr, v);
+	}
+
+	template <>
+	inline void store<int16_t>(int16_t *mem_addr, const reg v) {
+		mipp::storeu<int16_t>(mem_addr, v);
+	}
+
+	template <>
+	inline void store<int8_t>(int8_t *mem_addr, const reg v) {
+		mipp::storeu<int8_t>(mem_addr, v);
+	}
+#endif
+
+	// ---------------------------------------------------------------------------------------------------------- cmpeq
+	template <>
+	inline msk cmpeq<double>(const reg v1, const reg v2) {
+		return (msk) _mm512_cmp_pd_mask(_mm512_castps_pd(v1), _mm512_castps_pd(v2), _CMP_EQ_OQ);
+	}
+
+	template <>
+	inline msk cmpeq<float>(const reg v1, const reg v2) {
+		return (msk) _mm512_cmp_ps_mask(v1, v2, _CMP_EQ_OQ);
+	}
+
+#if defined(__AVX512F__)
+	template <>
+	inline msk cmpeq<int64_t>(const reg v1, const reg v2) {
+		return (msk) _mm512_cmpeq_epi64_mask(_mm512_castps_si512(v1), _mm512_castps_si512(v2));
+	}
+#endif
+
+	template <>
+	inline msk cmpeq<int32_t>(const reg v1, const reg v2) {
+		return (msk) _mm512_cmpeq_epi32_mask(_mm512_castps_si512(v1), _mm512_castps_si512(v2));
+	}
+
+#if defined(__AVX512BW__)
+	template <>
+	inline msk cmpeq<int16_t>(const reg v1, const reg v2) {
+		return (msk) _mm512_cmpeq_epi16_mask(_mm512_castps_si512(v1), _mm512_castps_si512(v2));
+	}
+
+	template <>
+	inline msk cmpeq<int8_t>(const reg v1, const reg v2) {
+		return (msk) _mm512_cmpeq_epi8_mask(_mm512_castps_si512(v1), _mm512_castps_si512(v2));
+	}
+#endif
+
+	// ----------------------------------------------------------------------------------------------------------- set1
+#ifdef __AVX512F__
+	template <>
+	inline reg set1<float>(const float val) {
+		return _mm512_set1_ps(val);
+	}
+
+	template <>
+	inline reg set1<double>(const double val) {
+		return _mm512_castpd_ps(_mm512_set1_pd(val));
+	}
+
+	template <>
+	inline reg set1<int64_t>(const int64_t val) {
+		return _mm512_castsi512_ps(_mm512_set1_epi64(val));
+	}
+
+	template <>
+	inline reg set1<int32_t>(const int32_t val) {
+		return _mm512_castsi512_ps(_mm512_set1_epi32(val));
+	}
+
+	template <>
+	inline reg set1<int16_t>(const int16_t val) {
+		return _mm512_castsi512_ps(_mm512_set1_epi16(val));
+	}
+
+	template <>
+	inline reg set1<int8_t>(const int8_t val) {
+		return _mm512_castsi512_ps(_mm512_set1_epi8(val));
+	}
+
+#elif defined(__MIC__) || defined(__KNCNI__)
+	template <>
+	inline reg set1<double>(const double val) {
+		double init[8] __attribute__((aligned(64))) = {val, val, val, val, val, val, val, val};
+		return load<double>(init);
+	}
+
+	template <>
+	inline reg set1<float>(const float val) {
+		float init[16] __attribute__((aligned(64))) = {val, val, val, val, val, val, val, val,
+		                                               val, val, val, val, val, val, val, val};
+		return load<float>(init);
+	}
+
+	template <>
+	inline reg set1<int64_t>(const int64_t val) {
+		int64_t init[8] __attribute__((aligned(64))) = {val, val, val, val, val, val, val, val};
+		return load<int64_t>(init);
+	}
+
+	template <>
+	inline reg set1<int32_t>(const int32_t val) {
+		int32_t init[16] __attribute__((aligned(64))) = {val, val, val, val, val, val, val, val,
+		                                                 val, val, val, val, val, val, val, val};
+		return load<int32_t>(init);
+	}
+#endif
+
+	// ---------------------------------------------------------------------------------------------------- set1 (mask)
+	template <>
+	inline msk set1<8>(const bool val) {
+		auto r1 = set1<int64_t>(val ? (uint64_t)0xFFFFFFFFFFFFFFFF : 0);
+		auto r2 = set1<int64_t>(      (uint64_t)0xFFFFFFFFFFFFFFFF    );
+
+		return (msk) cmpeq<int64_t>(r1, r2);
+	}
+
+	template <>
+	inline msk set1<16>(const bool val) {
+		auto r1 = set1<int32_t>(val ? 0xFFFFFFFF : 0);
+		auto r2 = set1<int32_t>(      0xFFFFFFFF    );
+
+		return (msk) cmpeq<int32_t>(r1, r2);
+	}
+
+	template <>
+	inline msk set1<32>(const bool val) {
+		auto r1 = set1<int16_t>(val ? 0xFFFF : 0);
+		auto r2 = set1<int16_t>(      0xFFFF    );
+
+		return (msk) cmpeq<int16_t>(r1, r2);
+	}
+
+	template <>
+	inline msk set1<64>(const bool val) {
+		auto r1 = set1<int8_t>(val ? 0xFF : 0);
+		auto r2 = set1<int8_t>(      0xFF    );
+
+		return (msk) cmpeq<int8_t>(r1, r2);
+	}
+
+	// ----------------------------------------------------------------------------------------------------------- set0
+#if defined(__AVX512F__)
+	template <>
+	inline reg set0<double>() {
+		return _mm512_castpd_ps(_mm512_setzero_pd());
+	}
+
+	template <>
+	inline reg set0<float>() {
+		return _mm512_setzero_ps();
+	}
+
+	template <>
+	inline reg set0<int64_t>() {
+		return _mm512_castsi512_ps(_mm512_setzero_si512());
+	}
+
+	template <>
+	inline reg set0<int32_t>() {
+		return _mm512_castsi512_ps(_mm512_setzero_si512());
+	}
+
+	template <>
+	inline reg set0<int16_t>() {
+		return _mm512_castsi512_ps(_mm512_setzero_si512());
+	}
+
+	template <>
+	inline reg set0<int8_t>() {
+		return _mm512_castsi512_ps(_mm512_setzero_si512());
+	}
+
+#elif defined(__MIC__) || defined(__KNCNI__)
+	template <>
+	inline reg set0<float>() {
+		return set1<float>(0.f);
+	}
+
+	template <>
+	inline reg set0<double>() {
+		return set1<double>(0.0);
+	}
+
+	template <>
+	inline reg set0<int32_t>() {
+		return set1<int32_t>(0);
+	}
+#endif
+
+	// ---------------------------------------------------------------------------------------------------- set0 (mask)
+	template <>
+	inline msk set0<8>() {
+//		auto r1 = set0<int32_t>(          );
+//		auto r2 = set1<int32_t>(0xFFFFFFFF);
+//
+//		return (msk) cmpeq<int32_t>(r1, r2);
+
+		msk m = 0;
+		return _mm512_kxor(m, m);
+	}
+
+	template <>
+	inline msk set0<16>() {
+//		auto r1 = set0<int32_t>(          );
+//		auto r2 = set1<int32_t>(0xFFFFFFFF);
+//
+//		return (msk) cmpeq<int32_t>(r1, r2);
+
+		msk m = 0;
+		return _mm512_kxor(m, m);
+	}
+
+	template <>
+	inline msk set0<32>() {
+//		auto r1 = set0<int32_t>(          );
+//		auto r2 = set1<int32_t>(0xFFFFFFFF);
+//
+//		return (msk) cmpeq<int32_t>(r1, r2);
+
+		msk m = 0;
+		return _mm512_kxor(m, m);
+	}
+
+	template <>
+	inline msk set0<64>() {
+//		auto r1 = set0<int32_t>(          );
+//		auto r2 = set1<int32_t>(0xFFFFFFFF);
+//
+//		return (msk) cmpeq<int32_t>(r1, r2);
+
+		msk m = 0;
+		return _mm512_kxor(m, m);
+	}
+
+	// ------------------------------------------------------------------------------------------------------------ set
+#if defined(__AVX512F__)
+	template <>
+	inline reg set<double>(const double vals[nElReg<double>()]) {
+		return _mm512_castpd_ps(_mm512_set_pd(vals[7], vals[6], vals[5], vals[4], vals[3], vals[2], vals[1], vals[0]));
+	}
+
+	template <>
+	inline reg set<float>(const float vals[nElReg<float>()]) {
+		return _mm512_set_ps(vals[15], vals[14], vals[13], vals[12], vals[11], vals[10], vals[9], vals[8],
+		                     vals[ 7], vals[ 6], vals[ 5], vals[ 4], vals[ 3], vals[ 2], vals[1], vals[0]);
+	}
+
+	template <>
+	inline reg set<int64_t>(const int64_t vals[nElReg<int64_t>()]) {
+		return _mm512_castsi512_ps(_mm512_set_epi64(vals[ 7], vals[ 6], vals[ 5], vals[ 4],
+		                                            vals[ 3], vals[ 2], vals[ 1], vals[ 0]));
+	}
+
+	template <>
+	inline reg set<int32_t>(const int32_t vals[nElReg<int32_t>()]) {
+		return _mm512_castsi512_ps(_mm512_set_epi32(vals[15], vals[14], vals[13], vals[12],
+		                                            vals[11], vals[10], vals[ 9], vals[ 8],
+		                                            vals[ 7], vals[ 6], vals[ 5], vals[ 4],
+		                                            vals[ 3], vals[ 2], vals[ 1], vals[ 0]));
+	}
+
+#ifdef __AVX512BW__
+
+	static __m512i _mm512_set_epi16 (short e31, short e30, short e29, short e28, short e27, short e26, short e25, short e24,
+	                                 short e23, short e22, short e21, short e20, short e19, short e18, short e17, short e16,
+	                                 short e15, short e14, short e13, short e12, short e11, short e10, short  e9, short  e8,
+	                                 short  e7, short  e6, short  e5, short  e4, short  e3, short  e2, short  e1, short  e0)
+	{
+		short data[32] = {e0,   e1,  e2,  e3,  e4,  e5,  e6,  e7,
+		                  e8,   e9, e10, e11, e12, e13, e14, e15,
+		                  e16, e17, e18, e19, e20, e21, e22, e23,
+		                  e24, e25, e26, e27, e28, e29, e30, e31};
+
+		return (__m512i)mipp::load<int16_t>((int16_t*)data);
+	}
+
+	static __m512i _mm512_setr_epi16 (short  e0, short  e1, short  e2, short  e3, short  e4, short  e5, short  e6, short  e7,
+	                                  short  e8, short  e9, short e10, short e11, short e12, short e13, short e14, short e15,
+	                                  short e16, short e17, short e18, short e19, short e20, short e21, short e22, short e23,
+	                                  short e24, short e25, short e26, short e27, short e28, short e29, short e30, short e31)
+	{
+		short data[32] = {e0,   e1,  e2,  e3,  e4,  e5,  e6,  e7,
+		                  e8,   e9, e10, e11, e12, e13, e14, e15,
+		                  e16, e17, e18, e19, e20, e21, e22, e23,
+		                  e24, e25, e26, e27, e28, e29, e30, e31};
+
+		return (__m512i)mipp::load<int16_t>((int16_t*)data);
+	}
+
+	static __m512i _mm512_set_epi8 (char e63, char e62, char e61, char e60, char e59, char e58, char e57, char e56,
+	                                char e55, char e54, char e53, char e52, char e51, char e50, char e49, char e48,
+	                                char e47, char e46, char e45, char e44, char e43, char e42, char e41, char e40,
+	                                char e39, char e38, char e37, char e36, char e35, char e34, char e33, char e32,
+	                                char e31, char e30, char e29, char e28, char e27, char e26, char e25, char e24,
+	                                char e23, char e22, char e21, char e20, char e19, char e18, char e17, char e16,
+	                                char e15, char e14, char e13, char e12, char e11, char e10, char  e9, char  e8,
+	                                char  e7, char  e6, char  e5, char  e4, char  e3, char  e2, char  e1, char  e0)
+	{
+		char data[64] = {e0,   e1,  e2,  e3,  e4,  e5,  e6,  e7,
+		                 e8,   e9, e10, e11, e12, e13, e14, e15,
+		                 e16, e17, e18, e19, e20, e21, e22, e23,
+		                 e24, e25, e26, e27, e28, e29, e30, e31,
+		                 e32, e33, e34, e35, e36, e37, e38, e39,
+		                 e40, e41, e42, e43, e44, e45, e46, e47,
+		                 e48, e49, e50, e51, e52, e53, e54, e55,
+		                 e56, e57, e58, e59, e60, e61, e62, e63};
+
+		return (__m512i)mipp::load<int8_t>((int8_t*)data);
+	}
+
+	static __m512i _mm512_setr_epi8 (char  e0, char  e1, char  e2, char  e3, char  e4, char  e5, char  e6, char  e7,
+	                                 char  e8, char  e9, char e10, char e11, char e12, char e13, char e14, char e15,
+	                                 char e16, char e17, char e18, char e19, char e20, char e21, char e22, char e23,
+	                                 char e24, char e25, char e26, char e27, char e28, char e29, char e30, char e31,
+	                                 char e32, char e33, char e34, char e35, char e36, char e37, char e38, char e39,
+	                                 char e40, char e41, char e42, char e43, char e44, char e45, char e46, char e47,
+	                                 char e48, char e49, char e50, char e51, char e52, char e53, char e54, char e55,
+	                                 char e56, char e57, char e58, char e59, char e60, char e61, char e62, char e63)
+	{
+		char data[64] = {e0,   e1,  e2,  e3,  e4,  e5,  e6,  e7,
+		                 e8,   e9, e10, e11, e12, e13, e14, e15,
+		                 e16, e17, e18, e19, e20, e21, e22, e23,
+		                 e24, e25, e26, e27, e28, e29, e30, e31,
+		                 e32, e33, e34, e35, e36, e37, e38, e39,
+		                 e40, e41, e42, e43, e44, e45, e46, e47,
+		                 e48, e49, e50, e51, e52, e53, e54, e55,
+		                 e56, e57, e58, e59, e60, e61, e62, e63};
+
+		return (__m512i)mipp::load<int8_t>((int8_t*)data);
+	}
+
+	template <>
+	inline reg set<int16_t>(const int16_t vals[nElReg<int16_t>()]) {
+		return _mm512_castsi512_ps(_mm512_set_epi16((int16_t)vals[31], (int16_t)vals[30], (int16_t)vals[29], (int16_t)vals[28],
+		                                            (int16_t)vals[27], (int16_t)vals[26], (int16_t)vals[25], (int16_t)vals[24],
+		                                            (int16_t)vals[23], (int16_t)vals[22], (int16_t)vals[21], (int16_t)vals[20],
+		                                            (int16_t)vals[19], (int16_t)vals[18], (int16_t)vals[17], (int16_t)vals[16],
+		                                            (int16_t)vals[15], (int16_t)vals[14], (int16_t)vals[13], (int16_t)vals[12],
+		                                            (int16_t)vals[11], (int16_t)vals[10], (int16_t)vals[ 9], (int16_t)vals[ 8],
+		                                            (int16_t)vals[ 7], (int16_t)vals[ 6], (int16_t)vals[ 5], (int16_t)vals[ 4],
+		                                            (int16_t)vals[ 3], (int16_t)vals[ 2], (int16_t)vals[ 1], (int16_t)vals[ 0]));
+	}
+
+	template <>
+	inline reg set<int8_t>(const int8_t vals[nElReg<int8_t>()]) {
+		return _mm512_castsi512_ps(_mm512_set_epi8((int8_t)vals[63], (int8_t)vals[62], (int8_t)vals[61], (int8_t)vals[60],
+		                                           (int8_t)vals[59], (int8_t)vals[58], (int8_t)vals[57], (int8_t)vals[56],
+		                                           (int8_t)vals[55], (int8_t)vals[54], (int8_t)vals[53], (int8_t)vals[52],
+		                                           (int8_t)vals[51], (int8_t)vals[50], (int8_t)vals[49], (int8_t)vals[48],
+		                                           (int8_t)vals[47], (int8_t)vals[46], (int8_t)vals[45], (int8_t)vals[44],
+		                                           (int8_t)vals[43], (int8_t)vals[42], (int8_t)vals[41], (int8_t)vals[40],
+		                                           (int8_t)vals[39], (int8_t)vals[38], (int8_t)vals[37], (int8_t)vals[36],
+		                                           (int8_t)vals[35], (int8_t)vals[34], (int8_t)vals[33], (int8_t)vals[32],
+		                                           (int8_t)vals[31], (int8_t)vals[30], (int8_t)vals[29], (int8_t)vals[28],
+		                                           (int8_t)vals[27], (int8_t)vals[26], (int8_t)vals[25], (int8_t)vals[24],
+		                                           (int8_t)vals[23], (int8_t)vals[22], (int8_t)vals[21], (int8_t)vals[20],
+		                                           (int8_t)vals[19], (int8_t)vals[18], (int8_t)vals[17], (int8_t)vals[16],
+		                                           (int8_t)vals[15], (int8_t)vals[14], (int8_t)vals[13], (int8_t)vals[12],
+		                                           (int8_t)vals[11], (int8_t)vals[10], (int8_t)vals[ 9], (int8_t)vals[ 8],
+		                                           (int8_t)vals[ 7], (int8_t)vals[ 6], (int8_t)vals[ 5], (int8_t)vals[ 4],
+		                                           (int8_t)vals[ 3], (int8_t)vals[ 2], (int8_t)vals[ 1], (int8_t)vals[ 0]));
+	}
+#endif
+
+#elif defined(__MIC__) || defined(__KNCNI__)
+	template <>
+	inline reg set<double>(const double vals[nElReg<double>()]) {
+		double init[8] __attribute__((aligned(64))) = {vals[0], vals[1], vals[2], vals[3],
+		                                               vals[4], vals[5], vals[6], vals[7]};
+		return load<double>(init);
+	}
+
+	template <>
+	inline reg set<float>(const float vals[nElReg<float>()]) {
+		float init[16] __attribute__((aligned(64))) = {vals[ 0], vals[ 1], vals[ 2], vals[ 3],
+		                                               vals[ 4], vals[ 5], vals[ 6], vals[ 7],
+		                                               vals[ 8], vals[ 9], vals[10], vals[11],
+		                                               vals[12], vals[13], vals[14], vals[15]};
+		return load<float>(init);
+	}
+
+	template <>
+	inline reg set<int64_t>(const int64_t vals[nElReg<int64_t>()]) {
+		int64_t init[8] __attribute__((aligned(64))) = {vals[0], vals[1], vals[2], vals[3],
+		                                                vals[4], vals[5], vals[6], vals[7]};
+		return load<int64_t>(init);
+	}
+
+	template <>
+	inline reg set<int32_t>(const int32_t vals[nElReg<int32_t>()]) {
+		int32_t init[16] __attribute__((aligned(64))) = {vals[ 0], vals[ 1], vals[ 2], vals[ 3],
+		                                                 vals[ 4], vals[ 5], vals[ 6], vals[ 7],
+		                                                 vals[ 8], vals[ 9], vals[10], vals[11],
+		                                                 vals[12], vals[13], vals[14], vals[15]};
+		return load<int32_t>(init);
+	}
+#endif
+
+	// ----------------------------------------------------------------------------------------------------- set (mask)
+#ifdef __AVX512F__
+	template <>
+	inline msk set<8>(const bool vals[8]) {
+		uint64_t v[8] = {vals[0] ? (uint64_t)0xFFFFFFFFFFFFFFFF : (uint64_t)0,
+		                 vals[1] ? (uint64_t)0xFFFFFFFFFFFFFFFF : (uint64_t)0,
+		                 vals[2] ? (uint64_t)0xFFFFFFFFFFFFFFFF : (uint64_t)0,
+		                 vals[3] ? (uint64_t)0xFFFFFFFFFFFFFFFF : (uint64_t)0,
+		                 vals[4] ? (uint64_t)0xFFFFFFFFFFFFFFFF : (uint64_t)0,
+		                 vals[5] ? (uint64_t)0xFFFFFFFFFFFFFFFF : (uint64_t)0,
+		                 vals[6] ? (uint64_t)0xFFFFFFFFFFFFFFFF : (uint64_t)0,
+		                 vals[7] ? (uint64_t)0xFFFFFFFFFFFFFFFF : (uint64_t)0};
+		auto r1 = set <int64_t>((int64_t*)v);
+		auto r2 = set1<int64_t>((uint64_t)0xFFFFFFFFFFFFFFFF);
+
+//		return (msk)_mm512_test_epi64_mask(_mm512_castps_si512(r1), _mm512_castps_si512(r2));
+		return (msk) cmpeq<int64_t>(r1, r2);
+	}
+#endif
+
+	template <>
+	inline msk set<16>(const bool vals[16]) {
+		uint32_t v[16] = {vals[ 0] ? 0xFFFFFFFF : 0, vals[ 1] ? 0xFFFFFFFF : 0,
+		                  vals[ 2] ? 0xFFFFFFFF : 0, vals[ 3] ? 0xFFFFFFFF : 0,
+		                  vals[ 4] ? 0xFFFFFFFF : 0, vals[ 5] ? 0xFFFFFFFF : 0,
+		                  vals[ 6] ? 0xFFFFFFFF : 0, vals[ 7] ? 0xFFFFFFFF : 0,
+		                  vals[ 8] ? 0xFFFFFFFF : 0, vals[ 9] ? 0xFFFFFFFF : 0,
+		                  vals[10] ? 0xFFFFFFFF : 0, vals[11] ? 0xFFFFFFFF : 0,
+		                  vals[12] ? 0xFFFFFFFF : 0, vals[13] ? 0xFFFFFFFF : 0,
+		                  vals[14] ? 0xFFFFFFFF : 0, vals[15] ? 0xFFFFFFFF : 0};
+		auto r1 = set <int32_t>((int32_t*)v);
+		auto r2 = set1<int32_t>(0xFFFFFFFF);
+
+//		return (msk)_mm512_test_epi32_mask(_mm512_castps_si512(r1), _mm512_castps_si512(r2));
+		return (msk) cmpeq<int32_t>(r1, r2);
+	}
+
+#ifdef __AVX512BW__
+	template <>
+	inline msk set<32>(const bool vals[32]) {
+		uint16_t v[32] = {vals[ 0] ? (uint16_t)0xFFFF : (uint16_t)0, vals[ 1] ? (uint16_t)0xFFFF : (uint16_t)0,
+		                  vals[ 2] ? (uint16_t)0xFFFF : (uint16_t)0, vals[ 3] ? (uint16_t)0xFFFF : (uint16_t)0,
+		                  vals[ 4] ? (uint16_t)0xFFFF : (uint16_t)0, vals[ 5] ? (uint16_t)0xFFFF : (uint16_t)0,
+		                  vals[ 6] ? (uint16_t)0xFFFF : (uint16_t)0, vals[ 7] ? (uint16_t)0xFFFF : (uint16_t)0,
+		                  vals[ 8] ? (uint16_t)0xFFFF : (uint16_t)0, vals[ 9] ? (uint16_t)0xFFFF : (uint16_t)0,
+		                  vals[10] ? (uint16_t)0xFFFF : (uint16_t)0, vals[11] ? (uint16_t)0xFFFF : (uint16_t)0,
+		                  vals[12] ? (uint16_t)0xFFFF : (uint16_t)0, vals[13] ? (uint16_t)0xFFFF : (uint16_t)0,
+		                  vals[14] ? (uint16_t)0xFFFF : (uint16_t)0, vals[15] ? (uint16_t)0xFFFF : (uint16_t)0,
+		                  vals[16] ? (uint16_t)0xFFFF : (uint16_t)0, vals[17] ? (uint16_t)0xFFFF : (uint16_t)0,
+		                  vals[18] ? (uint16_t)0xFFFF : (uint16_t)0, vals[19] ? (uint16_t)0xFFFF : (uint16_t)0,
+		                  vals[20] ? (uint16_t)0xFFFF : (uint16_t)0, vals[21] ? (uint16_t)0xFFFF : (uint16_t)0,
+		                  vals[22] ? (uint16_t)0xFFFF : (uint16_t)0, vals[23] ? (uint16_t)0xFFFF : (uint16_t)0,
+		                  vals[24] ? (uint16_t)0xFFFF : (uint16_t)0, vals[25] ? (uint16_t)0xFFFF : (uint16_t)0,
+		                  vals[26] ? (uint16_t)0xFFFF : (uint16_t)0, vals[27] ? (uint16_t)0xFFFF : (uint16_t)0,
+		                  vals[28] ? (uint16_t)0xFFFF : (uint16_t)0, vals[29] ? (uint16_t)0xFFFF : (uint16_t)0,
+		                  vals[30] ? (uint16_t)0xFFFF : (uint16_t)0, vals[31] ? (uint16_t)0xFFFF : (uint16_t)0};
+		auto r1 = set <int16_t>((int16_t*)v);
+		auto r2 = set1<int16_t>(0xFFFF);
+
+//		return (msk)_mm512_test_epi16_mask(_mm512_castps_si512(r1), _mm512_castps_si512(r2));
+		return (msk) cmpeq<int16_t>(r1, r2);
+	}
+
+	template <>
+	inline msk set<64>(const bool vals[64]) {
+		uint8_t v[64] = {vals[ 0] ? (uint8_t)0xFF : (uint8_t)0, vals[ 1] ? (uint8_t)0xFF : (uint8_t)0, vals[ 2] ? (uint8_t)0xFF : (uint8_t)0, vals[ 3] ? (uint8_t)0xFF : (uint8_t)0,
+		                 vals[ 4] ? (uint8_t)0xFF : (uint8_t)0, vals[ 5] ? (uint8_t)0xFF : (uint8_t)0, vals[ 6] ? (uint8_t)0xFF : (uint8_t)0, vals[ 7] ? (uint8_t)0xFF : (uint8_t)0,
+		                 vals[ 8] ? (uint8_t)0xFF : (uint8_t)0, vals[ 9] ? (uint8_t)0xFF : (uint8_t)0, vals[10] ? (uint8_t)0xFF : (uint8_t)0, vals[11] ? (uint8_t)0xFF : (uint8_t)0,
+		                 vals[12] ? (uint8_t)0xFF : (uint8_t)0, vals[13] ? (uint8_t)0xFF : (uint8_t)0, vals[14] ? (uint8_t)0xFF : (uint8_t)0, vals[15] ? (uint8_t)0xFF : (uint8_t)0,
+		                 vals[16] ? (uint8_t)0xFF : (uint8_t)0, vals[17] ? (uint8_t)0xFF : (uint8_t)0, vals[18] ? (uint8_t)0xFF : (uint8_t)0, vals[19] ? (uint8_t)0xFF : (uint8_t)0,
+		                 vals[20] ? (uint8_t)0xFF : (uint8_t)0, vals[21] ? (uint8_t)0xFF : (uint8_t)0, vals[22] ? (uint8_t)0xFF : (uint8_t)0, vals[23] ? (uint8_t)0xFF : (uint8_t)0,
+		                 vals[24] ? (uint8_t)0xFF : (uint8_t)0, vals[25] ? (uint8_t)0xFF : (uint8_t)0, vals[26] ? (uint8_t)0xFF : (uint8_t)0, vals[27] ? (uint8_t)0xFF : (uint8_t)0,
+		                 vals[28] ? (uint8_t)0xFF : (uint8_t)0, vals[29] ? (uint8_t)0xFF : (uint8_t)0, vals[30] ? (uint8_t)0xFF : (uint8_t)0, vals[31] ? (uint8_t)0xFF : (uint8_t)0,
+		                 vals[32] ? (uint8_t)0xFF : (uint8_t)0, vals[33] ? (uint8_t)0xFF : (uint8_t)0, vals[34] ? (uint8_t)0xFF : (uint8_t)0, vals[35] ? (uint8_t)0xFF : (uint8_t)0,
+		                 vals[36] ? (uint8_t)0xFF : (uint8_t)0, vals[37] ? (uint8_t)0xFF : (uint8_t)0, vals[38] ? (uint8_t)0xFF : (uint8_t)0, vals[39] ? (uint8_t)0xFF : (uint8_t)0,
+		                 vals[40] ? (uint8_t)0xFF : (uint8_t)0, vals[41] ? (uint8_t)0xFF : (uint8_t)0, vals[42] ? (uint8_t)0xFF : (uint8_t)0, vals[43] ? (uint8_t)0xFF : (uint8_t)0,
+		                 vals[44] ? (uint8_t)0xFF : (uint8_t)0, vals[45] ? (uint8_t)0xFF : (uint8_t)0, vals[46] ? (uint8_t)0xFF : (uint8_t)0, vals[47] ? (uint8_t)0xFF : (uint8_t)0,
+		                 vals[48] ? (uint8_t)0xFF : (uint8_t)0, vals[49] ? (uint8_t)0xFF : (uint8_t)0, vals[50] ? (uint8_t)0xFF : (uint8_t)0, vals[51] ? (uint8_t)0xFF : (uint8_t)0,
+		                 vals[52] ? (uint8_t)0xFF : (uint8_t)0, vals[53] ? (uint8_t)0xFF : (uint8_t)0, vals[54] ? (uint8_t)0xFF : (uint8_t)0, vals[55] ? (uint8_t)0xFF : (uint8_t)0,
+		                 vals[56] ? (uint8_t)0xFF : (uint8_t)0, vals[57] ? (uint8_t)0xFF : (uint8_t)0, vals[58] ? (uint8_t)0xFF : (uint8_t)0, vals[59] ? (uint8_t)0xFF : (uint8_t)0,
+		                 vals[60] ? (uint8_t)0xFF : (uint8_t)0, vals[61] ? (uint8_t)0xFF : (uint8_t)0, vals[62] ? (uint8_t)0xFF : (uint8_t)0, vals[63] ? (uint8_t)0xFF : (uint8_t)0};
+		auto r1 = set <int8_t>((int8_t*)v);
+		auto r2 = set1<int8_t>(0xFF);
+
+//		return (msk)_mm512_test_epi8_mask(_mm512_castps_si512(r1), _mm512_castps_si512(r2));
+		return (msk) cmpeq<int8_t>(r1, r2);
+	}
+#endif
+
+	// ---------------------------------------------------------------------------------------------------------- toreg
+	template <>
+	inline reg toreg<8>(const msk m) {
+		auto one  = set1<int64_t>((uint64_t)0xFFFFFFFFFFFFFFFF);
+		auto zero = set1<int64_t>(0);
+
+		return blend<int64_t>(one, zero, m);
+	}
+
+	template <>
+	inline reg toreg<16>(const msk m) {
+		auto one  = set1<int32_t>(0xFFFFFFFF);
+		auto zero = set1<int32_t>(0);
+
+		return blend<int32_t>(one, zero, m);
+	}
+
+#ifdef __AVX512BW__
+	template <>
+	inline reg toreg<32>(const msk m) {
+		auto one  = set1<int16_t>(0xFFFF);
+		auto zero = set1<int16_t>(0);
+
+		return blend<int16_t>(one, zero, m);
+	}
+
+	template <>
+	inline reg toreg<64>(const msk m) {
+		auto one  = set1<int8_t>(0xFF);
+		auto zero = set1<int8_t>(0);
+
+		return blend<int8_t>(one, zero, m);
+	}
+#endif
+
+
+	// ------------------------------------------------------------------------------------------------------------ low
+#if defined(__AVX512F__)
+	template <>
+	inline reg_2 low<double>(const reg v) {
+		return _mm256_castpd_ps(_mm512_extractf64x4_pd(_mm512_castps_pd(v), 0));
+	}
+
+	template <>
+	inline reg_2 low<float>(const reg v) {
+		return _mm256_castpd_ps(_mm512_extractf64x4_pd(_mm512_castps_pd(v), 0));
+	}
+
+	template <>
+	inline reg_2 low<int64_t>(const reg v) {
+		return _mm256_castpd_ps(_mm512_extractf64x4_pd(_mm512_castps_pd(v), 0));
+	}
+
+	template <>
+	inline reg_2 low<int32_t>(const reg v) {
+		return _mm256_castpd_ps(_mm512_extractf64x4_pd(_mm512_castps_pd(v), 0));
+	}
+
+	template <>
+	inline reg_2 low<int16_t>(const reg v) {
+		return _mm256_castpd_ps(_mm512_extractf64x4_pd(_mm512_castps_pd(v), 0));
+	}
+
+	template <>
+	inline reg_2 low<int8_t>(const reg v) {
+		return _mm256_castpd_ps(_mm512_extractf64x4_pd(_mm512_castps_pd(v), 0));
+	}
+#endif
+
+	// ----------------------------------------------------------------------------------------------------------- high
+#if defined(__AVX512F__)
+	template <>
+	inline reg_2 high<double>(const reg v) {
+		return _mm256_castpd_ps(_mm512_extractf64x4_pd(_mm512_castps_pd(v), 1));
+	}
+
+	template <>
+	inline reg_2 high<float>(const reg v) {
+		return _mm256_castpd_ps(_mm512_extractf64x4_pd(_mm512_castps_pd(v), 1));
+	}
+
+	template <>
+	inline reg_2 high<int64_t>(const reg v) {
+		return _mm256_castpd_ps(_mm512_extractf64x4_pd(_mm512_castps_pd(v), 1));
+	}
+
+	template <>
+	inline reg_2 high<int32_t>(const reg v) {
+		return _mm256_castpd_ps(_mm512_extractf64x4_pd(_mm512_castps_pd(v), 1));
+	}
+
+	template <>
+	inline reg_2 high<int16_t>(const reg v) {
+		return _mm256_castpd_ps(_mm512_extractf64x4_pd(_mm512_castps_pd(v), 1));
+	}
+
+	template <>
+	inline reg_2 high<int8_t>(const reg v) {
+		return _mm256_castpd_ps(_mm512_extractf64x4_pd(_mm512_castps_pd(v), 1));
+	}
+#endif
+
+	// ---------------------------------------------------------------------------------------------------------- cmask
+#if defined(__AVX512F__)
+	template <>
+	inline reg cmask<double>(const uint32_t vals[nElReg<double>()]) {
+		return _mm512_castsi512_ps(_mm512_set_epi32((int32_t)vals[7]*2 +1, (int32_t)vals[7]*2 +0, (int32_t)vals[6]*2 +1, (int32_t)vals[6]*2 +0,
+		                                            (int32_t)vals[5]*2 +1, (int32_t)vals[5]*2 +0, (int32_t)vals[4]*2 +1, (int32_t)vals[4]*2 +0,
+		                                            (int32_t)vals[3]*2 +1, (int32_t)vals[3]*2 +0, (int32_t)vals[2]*2 +1, (int32_t)vals[2]*2 +0,
+		                                            (int32_t)vals[1]*2 +1, (int32_t)vals[1]*2 +0, (int32_t)vals[0]*2 +1, (int32_t)vals[0]*2 +0));
+	}
+
+	template <>
+	inline reg cmask<float>(const uint32_t vals[nElReg<float>()]) {
+		return _mm512_castsi512_ps(_mm512_set_epi32((int32_t)vals[15], (int32_t)vals[14], (int32_t)vals[13], (int32_t)vals[12],
+		                                            (int32_t)vals[11], (int32_t)vals[10], (int32_t)vals[ 9], (int32_t)vals[ 8],
+		                                            (int32_t)vals[ 7], (int32_t)vals[ 6], (int32_t)vals[ 5], (int32_t)vals[ 4],
+		                                            (int32_t)vals[ 3], (int32_t)vals[ 2], (int32_t)vals[ 1], (int32_t)vals[ 0]));
+	}
+
+	template <>
+	inline reg cmask<int64_t>(const uint32_t vals[nElReg<int64_t>()]) {
+		return _mm512_castsi512_ps(_mm512_set_epi32((int32_t)vals[7]*2 +1, (int32_t)vals[7]*2 +0, (int32_t)vals[6]*2 +1, (int32_t)vals[6]*2 +0,
+		                                            (int32_t)vals[5]*2 +1, (int32_t)vals[5]*2 +0, (int32_t)vals[4]*2 +1, (int32_t)vals[4]*2 +0,
+		                                            (int32_t)vals[3]*2 +1, (int32_t)vals[3]*2 +0, (int32_t)vals[2]*2 +1, (int32_t)vals[2]*2 +0,
+		                                            (int32_t)vals[1]*2 +1, (int32_t)vals[1]*2 +0, (int32_t)vals[0]*2 +1, (int32_t)vals[0]*2 +0));
+	}
+
+	template <>
+	inline reg cmask<int32_t>(const uint32_t vals[nElReg<int32_t>()]) {
+		return _mm512_castsi512_ps(_mm512_set_epi32((int32_t)vals[15], (int32_t)vals[14], (int32_t)vals[13], (int32_t)vals[12],
+		                                            (int32_t)vals[11], (int32_t)vals[10], (int32_t)vals[ 9], (int32_t)vals[ 8],
+		                                            (int32_t)vals[ 7], (int32_t)vals[ 6], (int32_t)vals[ 5], (int32_t)vals[ 4],
+		                                            (int32_t)vals[ 3], (int32_t)vals[ 2], (int32_t)vals[ 1], (int32_t)vals[ 0]));
+	}
+#endif
+
+#if defined(__AVX512BW__)
+	template <>
+	inline reg cmask<int16_t>(const uint32_t val[nElReg<int16_t>()]) {
+		return _mm512_castsi512_ps(_mm512_set_epi16((int16_t)val[31], (int16_t)val[30], (int16_t)val[29], (int16_t)val[28],
+		                                            (int16_t)val[27], (int16_t)val[26], (int16_t)val[25], (int16_t)val[24],
+		                                            (int16_t)val[23], (int16_t)val[22], (int16_t)val[21], (int16_t)val[20],
+		                                            (int16_t)val[19], (int16_t)val[18], (int16_t)val[17], (int16_t)val[16],
+		                                            (int16_t)val[15], (int16_t)val[14], (int16_t)val[13], (int16_t)val[12],
+		                                            (int16_t)val[11], (int16_t)val[10], (int16_t)val[ 9], (int16_t)val[ 8],
+		                                            (int16_t)val[ 7], (int16_t)val[ 6], (int16_t)val[ 5], (int16_t)val[ 4],
+		                                            (int16_t)val[ 3], (int16_t)val[ 2], (int16_t)val[ 1], (int16_t)val[ 0]));
+	}
+#endif
+
+#if defined(__AVX512VBMI__)
+	template <>
+	inline reg cmask<int8_t>(const uint32_t val[nElReg<int8_t>()]) {
+		return _mm512_castsi512_ps(_mm512_setr_epi8((int8_t)val[ 0], (int8_t)val[ 1], (int8_t)val[ 2], (int8_t)val[ 3],
+		                                            (int8_t)val[ 4], (int8_t)val[ 5], (int8_t)val[ 6], (int8_t)val[ 7],
+		                                            (int8_t)val[ 8], (int8_t)val[ 9], (int8_t)val[10], (int8_t)val[11],
+		                                            (int8_t)val[12], (int8_t)val[13], (int8_t)val[14], (int8_t)val[15],
+		                                            (int8_t)val[16], (int8_t)val[17], (int8_t)val[18], (int8_t)val[19],
+		                                            (int8_t)val[20], (int8_t)val[21], (int8_t)val[22], (int8_t)val[23],
+		                                            (int8_t)val[24], (int8_t)val[25], (int8_t)val[26], (int8_t)val[27],
+		                                            (int8_t)val[28], (int8_t)val[29], (int8_t)val[30], (int8_t)val[31],
+		                                            (int8_t)val[32], (int8_t)val[33], (int8_t)val[34], (int8_t)val[35],
+		                                            (int8_t)val[36], (int8_t)val[37], (int8_t)val[38], (int8_t)val[39],
+		                                            (int8_t)val[40], (int8_t)val[41], (int8_t)val[42], (int8_t)val[43],
+		                                            (int8_t)val[44], (int8_t)val[45], (int8_t)val[46], (int8_t)val[47],
+		                                            (int8_t)val[48], (int8_t)val[49], (int8_t)val[50], (int8_t)val[51],
+		                                            (int8_t)val[52], (int8_t)val[53], (int8_t)val[54], (int8_t)val[55],
+		                                            (int8_t)val[56], (int8_t)val[57], (int8_t)val[58], (int8_t)val[59],
+		                                            (int8_t)val[60], (int8_t)val[61], (int8_t)val[62], (int8_t)val[63]));
+
+	}
+#endif
+
+	// --------------------------------------------------------------------------------------------------------- cmask2
+#if defined(__AVX512F__)
+	template <>
+	inline reg cmask2<double>(const uint32_t vals[nElReg<double>()/2]) {
+		return _mm512_castsi512_ps(_mm512_set_epi32((int32_t)vals[3]*2 +1+8, (int32_t)vals[3]*2 +0+8, (int32_t)vals[2]*2 +1+8, (int32_t)vals[2]*2 +0+8,
+		                                            (int32_t)vals[1]*2 +1+8, (int32_t)vals[1]*2 +0+8, (int32_t)vals[0]*2 +1+8, (int32_t)vals[0]*2 +0+8,
+		                                            (int32_t)vals[3]*2 +1+0, (int32_t)vals[3]*2 +0+0, (int32_t)vals[2]*2 +1+0, (int32_t)vals[2]*2 +0+0,
+		                                            (int32_t)vals[1]*2 +1+0, (int32_t)vals[1]*2 +0+0, (int32_t)vals[0]*2 +1+0, (int32_t)vals[0]*2 +0+0));
+	}
+
+	template <>
+	inline reg cmask2<float>(const uint32_t vals[nElReg<float>()/2]) {
+		return _mm512_castsi512_ps(_mm512_set_epi32((int32_t)vals[ 7]+8, (int32_t)vals[ 6]+8, (int32_t)vals[ 5]+8, (int32_t)vals[ 4]+8,
+		                                            (int32_t)vals[ 3]+8, (int32_t)vals[ 2]+8, (int32_t)vals[ 1]+8, (int32_t)vals[ 0]+8,
+		                                            (int32_t)vals[ 7]+0, (int32_t)vals[ 6]+0, (int32_t)vals[ 5]+0, (int32_t)vals[ 4]+0,
+		                                            (int32_t)vals[ 3]+0, (int32_t)vals[ 2]+0, (int32_t)vals[ 1]+0, (int32_t)vals[ 0]+0));
+	}
+
+	template <>
+	inline reg cmask2<int64_t>(const uint32_t vals[nElReg<int64_t>()/2]) {
+		return _mm512_castsi512_ps(_mm512_set_epi32((int32_t)vals[3]*2 +1+8, (int32_t)vals[3]*2 +0+8, (int32_t)vals[2]*2 +1+8, (int32_t)vals[2]*2 +0+8,
+		                                            (int32_t)vals[1]*2 +1+8, (int32_t)vals[1]*2 +0+8, (int32_t)vals[0]*2 +1+8, (int32_t)vals[0]*2 +0+8,
+		                                            (int32_t)vals[3]*2 +1+0, (int32_t)vals[3]*2 +0+0, (int32_t)vals[2]*2 +1+0, (int32_t)vals[2]*2 +0+0,
+		                                            (int32_t)vals[1]*2 +1+0, (int32_t)vals[1]*2 +0+0, (int32_t)vals[0]*2 +1+0, (int32_t)vals[0]*2 +0+0));
+	}
+
+	template <>
+	inline reg cmask2<int32_t>(const uint32_t vals[nElReg<int32_t>()/2]) {
+		return _mm512_castsi512_ps(_mm512_set_epi32((int32_t)vals[ 7]+8, (int32_t)vals[ 6]+8, (int32_t)vals[ 5]+8, (int32_t)vals[ 4]+8,
+		                                            (int32_t)vals[ 3]+8, (int32_t)vals[ 2]+8, (int32_t)vals[ 1]+8, (int32_t)vals[ 0]+8,
+		                                            (int32_t)vals[ 7]+0, (int32_t)vals[ 6]+0, (int32_t)vals[ 5]+0, (int32_t)vals[ 4]+0,
+		                                            (int32_t)vals[ 3]+0, (int32_t)vals[ 2]+0, (int32_t)vals[ 1]+0, (int32_t)vals[ 0]+0));
+	}
+#endif
+
+#if defined(__AVX512BW__)
+	template <>
+	inline reg cmask2<int16_t>(const uint32_t vals[nElReg<int16_t>()/2]) {
+		return _mm512_castsi512_ps(_mm512_set_epi16((int16_t)vals[15]+16, (int16_t)vals[14]+16, (int16_t)vals[13]+16, (int16_t)vals[12]+16,
+		                                            (int16_t)vals[11]+16, (int16_t)vals[10]+16, (int16_t)vals[ 9]+16, (int16_t)vals[ 8]+16,
+		                                            (int16_t)vals[ 7]+16, (int16_t)vals[ 6]+16, (int16_t)vals[ 5]+16, (int16_t)vals[ 4]+16,
+		                                            (int16_t)vals[ 3]+16, (int16_t)vals[ 2]+16, (int16_t)vals[ 1]+16, (int16_t)vals[ 0]+16,
+		                                            (int16_t)vals[15]+ 0, (int16_t)vals[14]+ 0, (int16_t)vals[13]+ 0, (int16_t)vals[12]+ 0,
+		                                            (int16_t)vals[11]+ 0, (int16_t)vals[10]+ 0, (int16_t)vals[ 9]+ 0, (int16_t)vals[ 8]+ 0,
+		                                            (int16_t)vals[ 7]+ 0, (int16_t)vals[ 6]+ 0, (int16_t)vals[ 5]+ 0, (int16_t)vals[ 4]+ 0,
+		                                            (int16_t)vals[ 3]+ 0, (int16_t)vals[ 2]+ 0, (int16_t)vals[ 1]+ 0, (int16_t)vals[ 0]+ 0));
+	}
+#endif
+
+#if defined(__AVX512VBMI__)
+	template <>
+	inline reg cmask2<int8_t>(const uint32_t val[nElReg<int8_t>()/2]) {
+		return _mm512_castsi512_ps(_mm512_setr_epi8((int8_t)(val[ 0] + 0), (int8_t)(val[ 1] + 0), (int8_t)(val[ 2] + 0), (int8_t)(val[ 3] + 0),
+		                                            (int8_t)(val[ 4] + 0), (int8_t)(val[ 5] + 0), (int8_t)(val[ 6] + 0), (int8_t)(val[ 7] + 0),
+		                                            (int8_t)(val[ 8] + 0), (int8_t)(val[ 9] + 0), (int8_t)(val[10] + 0), (int8_t)(val[11] + 0),
+		                                            (int8_t)(val[12] + 0), (int8_t)(val[13] + 0), (int8_t)(val[14] + 0), (int8_t)(val[15] + 0),
+		                                            (int8_t)(val[16] + 0), (int8_t)(val[17] + 0), (int8_t)(val[18] + 0), (int8_t)(val[19] + 0),
+		                                            (int8_t)(val[20] + 0), (int8_t)(val[21] + 0), (int8_t)(val[22] + 0), (int8_t)(val[23] + 0),
+		                                            (int8_t)(val[24] + 0), (int8_t)(val[25] + 0), (int8_t)(val[26] + 0), (int8_t)(val[27] + 0),
+		                                            (int8_t)(val[28] + 0), (int8_t)(val[29] + 0), (int8_t)(val[30] + 0), (int8_t)(val[31] + 0),
+		                                            (int8_t)(val[ 0] +32), (int8_t)(val[ 1] +32), (int8_t)(val[ 2] +32), (int8_t)(val[ 3] +32),
+		                                            (int8_t)(val[ 4] +32), (int8_t)(val[ 5] +32), (int8_t)(val[ 6] +32), (int8_t)(val[ 7] +32),
+		                                            (int8_t)(val[ 8] +32), (int8_t)(val[ 9] +32), (int8_t)(val[10] +32), (int8_t)(val[11] +32),
+		                                            (int8_t)(val[12] +32), (int8_t)(val[13] +32), (int8_t)(val[14] +32), (int8_t)(val[15] +32),
+		                                            (int8_t)(val[16] +32), (int8_t)(val[17] +32), (int8_t)(val[18] +32), (int8_t)(val[19] +32),
+		                                            (int8_t)(val[20] +32), (int8_t)(val[21] +32), (int8_t)(val[22] +32), (int8_t)(val[23] +32),
+		                                            (int8_t)(val[24] +32), (int8_t)(val[25] +32), (int8_t)(val[26] +32), (int8_t)(val[27] +32),
+		                                            (int8_t)(val[28] +32), (int8_t)(val[29] +32), (int8_t)(val[30] +32), (int8_t)(val[31] +32)));
+	}
+#endif
+
+	// --------------------------------------------------------------------------------------------------------- cmask4
+#if defined(__AVX512F__)
+	template <>
+	inline reg cmask4<double>(const uint32_t vals[nElReg<double>()/4]) {
+		return _mm512_castsi512_ps(_mm512_set_epi32((int32_t)vals[1]*2 +1+12, (int32_t)vals[1]*2 +0+12, (int32_t)vals[0]*2 +1+12, (int32_t)vals[0]*2 +0+12,
+		                                            (int32_t)vals[1]*2 +1+ 8, (int32_t)vals[1]*2 +0+ 8, (int32_t)vals[0]*2 +1+ 8, (int32_t)vals[0]*2 +0+ 8,
+		                                            (int32_t)vals[1]*2 +1+ 4, (int32_t)vals[1]*2 +0+ 4, (int32_t)vals[0]*2 +1+ 4, (int32_t)vals[0]*2 +0+ 4,
+		                                            (int32_t)vals[1]*2 +1+ 0, (int32_t)vals[1]*2 +0+ 0, (int32_t)vals[0]*2 +1+ 0, (int32_t)vals[0]*2 +0+ 0));
+	}
+
+	template <>
+	inline reg cmask4<float>(const uint32_t vals[nElReg<float>()/4]) {
+		return _mm512_castsi512_ps(_mm512_set_epi32((int32_t)vals[ 3]+12, (int32_t)vals[ 2]+12, (int32_t)vals[ 1]+12, (int32_t)vals[ 0]+12,
+		                                            (int32_t)vals[ 3]+ 8, (int32_t)vals[ 2]+ 8, (int32_t)vals[ 1]+ 8, (int32_t)vals[ 0]+ 8,
+		                                            (int32_t)vals[ 3]+ 4, (int32_t)vals[ 2]+ 4, (int32_t)vals[ 1]+ 4, (int32_t)vals[ 0]+ 4,
+		                                            (int32_t)vals[ 3]+ 0, (int32_t)vals[ 2]+ 0, (int32_t)vals[ 1]+ 0, (int32_t)vals[ 0]+ 0));
+	}
+
+	template <>
+	inline reg cmask4<int64_t>(const uint32_t vals[nElReg<int64_t>()/4]) {
+		return _mm512_castsi512_ps(_mm512_set_epi32((int32_t)vals[1]*2 +1+12, (int32_t)vals[1]*2 +0+12, (int32_t)vals[0]*2 +1+12, (int32_t)vals[0]*2 +0+12,
+		                                            (int32_t)vals[1]*2 +1+ 8, (int32_t)vals[1]*2 +0+ 8, (int32_t)vals[0]*2 +1+ 8, (int32_t)vals[0]*2 +0+ 8,
+		                                            (int32_t)vals[1]*2 +1+ 4, (int32_t)vals[1]*2 +0+ 4, (int32_t)vals[0]*2 +1+ 4, (int32_t)vals[0]*2 +0+ 4,
+		                                            (int32_t)vals[1]*2 +1+ 0, (int32_t)vals[1]*2 +0+ 0, (int32_t)vals[0]*2 +1+ 0, (int32_t)vals[0]*2 +0+ 0));
+	}
+
+	template <>
+	inline reg cmask4<int32_t>(const uint32_t vals[nElReg<int32_t>()/4]) {
+		return _mm512_castsi512_ps(_mm512_set_epi32((int32_t)vals[ 3]+12, (int32_t)vals[ 2]+12, (int32_t)vals[ 1]+12, (int32_t)vals[ 0]+12,
+		                                            (int32_t)vals[ 3]+ 8, (int32_t)vals[ 2]+ 8, (int32_t)vals[ 1]+ 8, (int32_t)vals[ 0]+ 8,
+		                                            (int32_t)vals[ 3]+ 4, (int32_t)vals[ 2]+ 4, (int32_t)vals[ 1]+ 4, (int32_t)vals[ 0]+ 4,
+		                                            (int32_t)vals[ 3]+ 0, (int32_t)vals[ 2]+ 0, (int32_t)vals[ 1]+ 0, (int32_t)vals[ 0]+ 0));
+	}
+#endif
+
+#if defined(__AVX512BW__)
+	template <>
+	inline reg cmask4<int16_t>(const uint32_t vals[nElReg<int16_t>()/4]) {
+		return _mm512_castsi512_ps(_mm512_set_epi16((int32_t)vals[7]+24, (int32_t)vals[6]+24, (int32_t)vals[5]+24, (int32_t)vals[4]+24,
+		                                            (int32_t)vals[3]+24, (int32_t)vals[2]+24, (int32_t)vals[1]+24, (int32_t)vals[0]+24,
+		                                            (int32_t)vals[7]+16, (int32_t)vals[6]+16, (int32_t)vals[5]+16, (int32_t)vals[4]+16,
+		                                            (int32_t)vals[3]+16, (int32_t)vals[2]+16, (int32_t)vals[1]+16, (int32_t)vals[0]+16,
+		                                            (int32_t)vals[7]+ 8, (int32_t)vals[6]+ 8, (int32_t)vals[5]+ 8, (int32_t)vals[4]+ 8,
+		                                            (int32_t)vals[3]+ 8, (int32_t)vals[2]+ 8, (int32_t)vals[1]+ 8, (int32_t)vals[0]+ 8,
+		                                            (int32_t)vals[7]+ 0, (int32_t)vals[6]+ 0, (int32_t)vals[5]+ 0, (int32_t)vals[4]+ 0,
+		                                            (int32_t)vals[3]+ 0, (int32_t)vals[2]+ 0, (int32_t)vals[1]+ 0, (int32_t)vals[0]+ 0));
+	}
+
+	template <>
+	inline reg cmask4<int8_t>(const uint32_t val[nElReg<int8_t>()/4]) {
+		return _mm512_castsi512_ps(_mm512_setr_epi8((int8_t)(val[ 0] + 0), (int8_t)(val[ 1] + 0), (int8_t)(val[ 2] + 0), (int8_t)(val[ 3] + 0),
+		                                            (int8_t)(val[ 4] + 0), (int8_t)(val[ 5] + 0), (int8_t)(val[ 6] + 0), (int8_t)(val[ 7] + 0),
+		                                            (int8_t)(val[ 8] + 0), (int8_t)(val[ 9] + 0), (int8_t)(val[10] + 0), (int8_t)(val[11] + 0),
+		                                            (int8_t)(val[12] + 0), (int8_t)(val[13] + 0), (int8_t)(val[14] + 0), (int8_t)(val[15] + 0),
+		                                            (int8_t)(val[ 0] +16), (int8_t)(val[ 1] +16), (int8_t)(val[ 2] +16), (int8_t)(val[ 3] +16),
+		                                            (int8_t)(val[ 4] +16), (int8_t)(val[ 5] +16), (int8_t)(val[ 6] +16), (int8_t)(val[ 7] +16),
+		                                            (int8_t)(val[ 8] +16), (int8_t)(val[ 9] +16), (int8_t)(val[10] +16), (int8_t)(val[11] +16),
+		                                            (int8_t)(val[12] +16), (int8_t)(val[13] +16), (int8_t)(val[14] +16), (int8_t)(val[15] +16),
+		                                            (int8_t)(val[ 0] +32), (int8_t)(val[ 1] +32), (int8_t)(val[ 2] +32), (int8_t)(val[ 3] +32),
+		                                            (int8_t)(val[ 4] +32), (int8_t)(val[ 5] +32), (int8_t)(val[ 6] +32), (int8_t)(val[ 7] +32),
+		                                            (int8_t)(val[ 8] +32), (int8_t)(val[ 9] +32), (int8_t)(val[10] +32), (int8_t)(val[11] +32),
+		                                            (int8_t)(val[12] +32), (int8_t)(val[13] +32), (int8_t)(val[14] +32), (int8_t)(val[15] +32),
+		                                            (int8_t)(val[ 0] +48), (int8_t)(val[ 1] +48), (int8_t)(val[ 2] +48), (int8_t)(val[ 3] +48),
+		                                            (int8_t)(val[ 4] +48), (int8_t)(val[ 5] +48), (int8_t)(val[ 6] +48), (int8_t)(val[ 7] +48),
+		                                            (int8_t)(val[ 8] +48), (int8_t)(val[ 9] +48), (int8_t)(val[10] +48), (int8_t)(val[11] +48),
+		                                            (int8_t)(val[12] +48), (int8_t)(val[13] +48), (int8_t)(val[14] +48), (int8_t)(val[15] +48)));
+	}
+#endif
+
+	// ---------------------------------------------------------------------------------------------------------- shuff
+#if defined(__AVX512F__)
+	template <>
+	inline reg shuff<double>(const reg v, const reg cm) {
+		return _mm512_permutexvar_ps(_mm512_castps_si512(cm), v);
+	}
+
+	template <>
+	inline reg shuff<float>(const reg v, const reg cm) {
+		return _mm512_permutexvar_ps(_mm512_castps_si512(cm), v);
+	}
+
+	template <>
+	inline reg shuff<int64_t>(const reg v, const reg cm) {
+		return _mm512_permutexvar_ps(_mm512_castps_si512(cm), v);
+	}
+
+	template <>
+	inline reg shuff<int32_t>(const reg v, const reg cm) {
+		return _mm512_permutexvar_ps(_mm512_castps_si512(cm), v);
+	}
+#endif
+
+#if defined(__AVX512BW__)
+	template <>
+	inline reg shuff<int16_t>(const reg v, const reg cm) {
+		return _mm512_castsi512_ps(_mm512_permutexvar_epi16(_mm512_castps_si512(v), _mm512_castps_si512(cm)));
+	}
+#endif
+
+#if defined(__AVX512VBMI__)
+	template <>
+	inline reg shuff<int8_t>(const reg v, const reg cm) {
+		return _mm512_castsi512_ps(_mm512_permutexvar_epi8(_mm512_castps_si512(v), _mm512_castps_si512(cm)));
+	}
+#endif
+
+	// --------------------------------------------------------------------------------------------------------- shuff2
+#if defined(__AVX512F__)
+	template <>
+	inline reg shuff2<double>(const reg v, const reg cm) {
+		return mipp::shuff<double>(v, cm);
+	}
+
+	template <>
+	inline reg shuff2<float>(const reg v, const reg cm) {
+		return mipp::shuff<float>(v, cm);
+	}
+
+	template <>
+	inline reg shuff2<int64_t>(const reg v, const reg cm) {
+		return mipp::shuff<int64_t>(v, cm);
+	}
+
+	template <>
+	inline reg shuff2<int32_t>(const reg v, const reg cm) {
+		return mipp::shuff<int32_t>(v, cm);
+	}
+#endif
+
+#if defined(__AVX512BW__)
+	template <>
+	inline reg shuff2<int16_t>(const reg v, const reg cm) {
+		return mipp::shuff<int16_t>(v, cm);
+	}
+#endif
+
+#if defined(__AVX512VBMI__)
+	template <>
+	inline reg shuff2<int8_t>(const reg v, const reg cm) {
+		return mipp::shuff<int8_t>(v, cm);
+	}
+#endif
+
+	// --------------------------------------------------------------------------------------------------------- shuff4
+#if defined(__AVX512F__)
+	template <>
+	inline reg shuff4<double>(const reg v, const reg cm) {
+		return mipp::shuff<double>(v, cm);
+	}
+
+	template <>
+	inline reg shuff4<float>(const reg v, const reg cm) {
+		return mipp::shuff<float>(v, cm);
+	}
+
+	template <>
+	inline reg shuff4<int64_t>(const reg v, const reg cm) {
+		return mipp::shuff<int64_t>(v, cm);
+	}
+
+	template <>
+	inline reg shuff4<int32_t>(const reg v, const reg cm) {
+		return mipp::shuff<int32_t>(v, cm);
+	}
+#endif
+
+#if defined(__AVX512BW__)
+	template <>
+	inline reg shuff4<int16_t>(const reg v, const reg cm) {
+		return mipp::shuff<int16_t>(v, cm);
+	}
+
+	template <>
+	inline reg shuff4<int8_t>(const reg v, const reg cm) {
+		return (reg)_mm512_shuffle_epi8(_mm512_castps_si512(v), _mm512_castps_si512(cm));
+	}
+#endif
+
+	// -------------------------------------------------------------------------------------------------- interleavelo4
+#if defined(__AVX512F__)
+	template <>
+	inline reg interleavelo4<double>(const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_unpacklo_epi64(_mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+
+	template <>
+	inline reg interleavelo4<float>(const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_unpacklo_epi32(_mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+
+	template <>
+	inline reg interleavelo4<int64_t>(const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_unpacklo_epi64(_mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+
+	template <>
+	inline reg interleavelo4<int32_t>(const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_unpacklo_epi32(_mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+#endif
+
+#if defined(__AVX512BW__)
+	template <>
+	inline reg interleavelo4<int16_t>(const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_unpacklo_epi16(_mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+
+	template <>
+	inline reg interleavelo4<int8_t>(const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_unpacklo_epi8(_mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+#endif
+
+	// -------------------------------------------------------------------------------------------------- interleavehi4
+#if defined(__AVX512F__)
+	template <>
+	inline reg interleavehi4<double>(const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_unpackhi_epi64(_mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+
+	template <>
+	inline reg interleavehi4<float>(const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_unpackhi_epi32(_mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+
+	template <>
+	inline reg interleavehi4<int64_t>(const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_unpackhi_epi64(_mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+
+	template <>
+	inline reg interleavehi4<int32_t>(const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_unpackhi_epi32(_mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+#endif
+
+#if defined(__AVX512BW__)
+	template <>
+	inline reg interleavehi4<int16_t>(const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_unpackhi_epi16(_mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+
+	template <>
+	inline reg interleavehi4<int8_t>(const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_unpackhi_epi8(_mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+#endif
+
+	// -------------------------------------------------------------------------------------------------- interleavelo2
+#if defined(__AVX512F__)
+	template <>
+	inline reg interleavelo2<double>(const reg v1, const reg v2) {
+		auto lo4 = mipp::interleavelo4<double>(v1, v2);
+		auto hi4 = mipp::interleavehi4<double>(v1, v2);
+		auto idx = _mm512_set_epi64(8|5,8|4,
+		                              5,  4,
+		                            8|1,8|0,
+		                              1,  0);
+
+		return _mm512_castpd_ps(_mm512_permutex2var_pd(_mm512_castps_pd(lo4), idx, _mm512_castps_pd(hi4)));
+	}
+
+	template <>
+	inline reg interleavelo2<float>(const reg v1, const reg v2) {
+		auto lo4 = mipp::interleavelo4<float>(v1, v2);
+		auto hi4 = mipp::interleavehi4<float>(v1, v2);
+		auto idx = _mm512_set_epi32(16|11,16|10,16|9,16|8,
+		                               11,   10,   9,   8,
+		                            16| 3,16| 2,16|1,16|0,
+		                                3,    2,   1,   0);
+
+		return _mm512_permutex2var_ps(lo4, idx, hi4);
+	}
+
+	template <>
+	inline reg interleavelo2<int64_t>(const reg v1, const reg v2) {
+		auto lo4 = mipp::interleavelo4<int64_t>(v1, v2);
+		auto hi4 = mipp::interleavehi4<int64_t>(v1, v2);
+		auto idx = _mm512_set_epi64(8|5,8|4,
+		                              5,  4,
+		                            8|1,8|0,
+		                              1,  0);
+
+		return _mm512_castsi512_ps(_mm512_permutex2var_epi64(_mm512_castps_si512(lo4), idx, _mm512_castps_si512(hi4)));
+	}
+
+	template <>
+	inline reg interleavelo2<int32_t>(const reg v1, const reg v2) {
+		auto lo4 = mipp::interleavelo4<int32_t>(v1, v2);
+		auto hi4 = mipp::interleavehi4<int32_t>(v1, v2);
+		auto idx = _mm512_set_epi64(8|5,8|4,
+		                              5,  4,
+		                            8|1,8|0,
+		                              1,  0);
+
+		return _mm512_castsi512_ps(_mm512_permutex2var_epi64(_mm512_castps_si512(lo4), idx, _mm512_castps_si512(hi4)));
+	}
+#endif
+
+#if defined(__AVX512BW__)
+	template <>
+	inline reg interleavelo2<int16_t>(const reg v1, const reg v2) {
+		auto lo4 = mipp::interleavelo4<int16_t>(v1, v2);
+		auto hi4 = mipp::interleavehi4<int16_t>(v1, v2);
+		auto idx = _mm512_set_epi64(8|5,8|4,
+		                              5,  4,
+		                            8|1,8|0,
+		                              1,  0);
+
+		return _mm512_castsi512_ps(_mm512_permutex2var_epi64(_mm512_castps_si512(lo4), idx, _mm512_castps_si512(hi4)));
+	}
+
+	template <>
+	inline reg interleavelo2<int8_t>(const reg v1, const reg v2) {
+		auto lo4 = mipp::interleavelo4<int8_t>(v1, v2);
+		auto hi4 = mipp::interleavehi4<int8_t>(v1, v2);
+		auto idx = _mm512_set_epi64(8|5,8|4,
+		                              5,  4,
+		                            8|1,8|0,
+		                              1,  0);
+
+		return _mm512_castsi512_ps(_mm512_permutex2var_epi64(_mm512_castps_si512(lo4), idx, _mm512_castps_si512(hi4)));
+	}
+#endif
+
+	// -------------------------------------------------------------------------------------------------- interleavehi2
+#if defined(__AVX512F__)
+	template <>
+	inline reg interleavehi2<double>(const reg v1, const reg v2) {
+		auto lo4 = mipp::interleavelo4<double>(v1, v2);
+		auto hi4 = mipp::interleavehi4<double>(v1, v2);
+		auto idx = _mm512_set_epi64(8|7,8|6,
+		                              7,  6,
+		                            8|3,8|2,
+		                              3,  2);
+
+		return _mm512_castpd_ps(_mm512_permutex2var_pd(_mm512_castps_pd(lo4), idx, _mm512_castps_pd(hi4)));
+	}
+
+	template <>
+	inline reg interleavehi2<float>(const reg v1, const reg v2) {
+		auto lo4 = mipp::interleavelo4<float>(v1, v2);
+		auto hi4 = mipp::interleavehi4<float>(v1, v2);
+		auto idx = _mm512_set_epi64(8|7,8|6,
+		                              7,  6,
+		                            8|3,8|2,
+		                              3,  2);
+
+		return _mm512_castpd_ps(_mm512_permutex2var_pd(_mm512_castps_pd(lo4), idx, _mm512_castps_pd(hi4)));
+	}
+
+	template <>
+	inline reg interleavehi2<int64_t>(const reg v1, const reg v2) {
+		auto lo4 = mipp::interleavelo4<int64_t>(v1, v2);
+		auto hi4 = mipp::interleavehi4<int64_t>(v1, v2);
+		auto idx = _mm512_set_epi64(8|7,8|6,
+		                              7,  6,
+		                            8|3,8|2,
+		                              3,  2);
+
+		return _mm512_castpd_ps(_mm512_permutex2var_pd(_mm512_castps_pd(lo4), idx, _mm512_castps_pd(hi4)));
+	}
+
+	template <>
+	inline reg interleavehi2<int32_t>(const reg v1, const reg v2) {
+		auto lo4 = mipp::interleavelo4<int32_t>(v1, v2);
+		auto hi4 = mipp::interleavehi4<int32_t>(v1, v2);
+		auto idx = _mm512_set_epi64(8|7,8|6,
+		                              7,  6,
+		                            8|3,8|2,
+		                              3,  2);
+
+		return _mm512_castpd_ps(_mm512_permutex2var_pd(_mm512_castps_pd(lo4), idx, _mm512_castps_pd(hi4)));
+	}
+#endif
+
+#if defined(__AVX512BW__)
+	template <>
+	inline reg interleavehi2<int16_t>(const reg v1, const reg v2) {
+		auto lo4 = mipp::interleavelo4<int16_t>(v1, v2);
+		auto hi4 = mipp::interleavehi4<int16_t>(v1, v2);
+		auto idx = _mm512_set_epi64(8|7,8|6,
+		                              7,  6,
+		                            8|3,8|2,
+		                              3,  2);
+
+		return _mm512_castpd_ps(_mm512_permutex2var_pd(_mm512_castps_pd(lo4), idx, _mm512_castps_pd(hi4)));
+	}
+
+	template <>
+	inline reg interleavehi2<int8_t>(const reg v1, const reg v2) {
+		auto lo4 = mipp::interleavelo4<int8_t>(v1, v2);
+		auto hi4 = mipp::interleavehi4<int8_t>(v1, v2);
+		auto idx = _mm512_set_epi64(8|7,8|6,
+		                              7,  6,
+		                            8|3,8|2,
+		                              3,  2);
+
+		return _mm512_castpd_ps(_mm512_permutex2var_pd(_mm512_castps_pd(lo4), idx, _mm512_castps_pd(hi4)));
+	}
+#endif
+
+	// ----------------------------------------------------------------------------------------------------- interleave
+#if defined(__AVX512F__)
+	template <>
+	inline regx2 interleave<double>(const reg v1, const reg v2) {
+		auto lo4 = mipp::interleavelo4<double>(v1, v2);
+		auto hi4 = mipp::interleavehi4<double>(v1, v2);
+		auto idxlo = _mm512_set_epi64(8|3,8|2,
+		                                3,  2,
+		                              8|1,8|0,
+		                                1,  0);
+		auto idxhi = _mm512_set_epi64(8|7,8|6,
+		                                7,  6,
+		                              8|5,8|4,
+		                                5,  4);
+		return {{_mm512_castpd_ps(_mm512_permutex2var_pd(_mm512_castps_pd(lo4), idxlo, _mm512_castps_pd(hi4))),
+		         _mm512_castpd_ps(_mm512_permutex2var_pd(_mm512_castps_pd(lo4), idxhi, _mm512_castps_pd(hi4)))}};
+	}
+
+	template <>
+	inline regx2 interleave<float>(const reg v1, const reg v2) {
+		auto lo4 = mipp::interleavelo4<float>(v1, v2);
+		auto hi4 = mipp::interleavehi4<float>(v1, v2);
+		auto idxlo = _mm512_set_epi64(8|3,8|2,
+		                                3,  2,
+		                              8|1,8|0,
+		                                1,  0);
+		auto idxhi = _mm512_set_epi64(8|7,8|6,
+		                                7,  6,
+		                              8|5,8|4,
+		                                5,  4);
+		return {{_mm512_castpd_ps(_mm512_permutex2var_pd(_mm512_castps_pd(lo4), idxlo, _mm512_castps_pd(hi4))),
+		         _mm512_castpd_ps(_mm512_permutex2var_pd(_mm512_castps_pd(lo4), idxhi, _mm512_castps_pd(hi4)))}};
+	}
+
+	template <>
+	inline regx2 interleave<int64_t>(const reg v1, const reg v2) {
+		auto lo4 = mipp::interleavelo4<int64_t>(v1, v2);
+		auto hi4 = mipp::interleavehi4<int64_t>(v1, v2);
+		auto idxlo = _mm512_set_epi64(8|3,8|2,
+		                                3,  2,
+		                              8|1,8|0,
+		                                1,  0);
+		auto idxhi = _mm512_set_epi64(8|7,8|6,
+		                                7,  6,
+		                              8|5,8|4,
+		                                5,  4);
+		return {{_mm512_castpd_ps(_mm512_permutex2var_pd(_mm512_castps_pd(lo4), idxlo, _mm512_castps_pd(hi4))),
+		         _mm512_castpd_ps(_mm512_permutex2var_pd(_mm512_castps_pd(lo4), idxhi, _mm512_castps_pd(hi4)))}};
+	}
+
+	template <>
+	inline regx2 interleave<int32_t>(const reg v1, const reg v2) {
+		auto lo4 = mipp::interleavelo4<int32_t>(v1, v2);
+		auto hi4 = mipp::interleavehi4<int32_t>(v1, v2);
+		auto idxlo = _mm512_set_epi64(8|3,8|2,
+		                                3,  2,
+		                              8|1,8|0,
+		                                1,  0);
+		auto idxhi = _mm512_set_epi64(8|7,8|6,
+		                                7,  6,
+		                              8|5,8|4,
+		                                5,  4);
+		return {{_mm512_castpd_ps(_mm512_permutex2var_pd(_mm512_castps_pd(lo4), idxlo, _mm512_castps_pd(hi4))),
+		         _mm512_castpd_ps(_mm512_permutex2var_pd(_mm512_castps_pd(lo4), idxhi, _mm512_castps_pd(hi4)))}};
+	}
+#endif
+
+#if defined(__AVX512BW__)
+	template <>
+	inline regx2 interleave<int16_t>(const reg v1, const reg v2) {
+		auto lo4 = mipp::interleavelo4<int16_t>(v1, v2);
+		auto hi4 = mipp::interleavehi4<int16_t>(v1, v2);
+		auto idxlo = _mm512_set_epi64(8|3,8|2,
+		                                3,  2,
+		                              8|1,8|0,
+		                                1,  0);
+		auto idxhi = _mm512_set_epi64(8|7,8|6,
+		                                7,  6,
+		                              8|5,8|4,
+		                                5,  4);
+		return {{_mm512_castpd_ps(_mm512_permutex2var_pd(_mm512_castps_pd(lo4), idxlo, _mm512_castps_pd(hi4))),
+		         _mm512_castpd_ps(_mm512_permutex2var_pd(_mm512_castps_pd(lo4), idxhi, _mm512_castps_pd(hi4)))}};
+	}
+
+	template <>
+	inline regx2 interleave<int8_t>(const reg v1, const reg v2) {
+		auto lo4 = mipp::interleavelo4<int8_t>(v1, v2);
+		auto hi4 = mipp::interleavehi4<int8_t>(v1, v2);
+		auto idxlo = _mm512_set_epi64(8|3,8|2,
+		                                3,  2,
+		                              8|1,8|0,
+		                                1,  0);
+		auto idxhi = _mm512_set_epi64(8|7,8|6,
+		                                7,  6,
+		                              8|5,8|4,
+		                                5,  4);
+		return {{_mm512_castpd_ps(_mm512_permutex2var_pd(_mm512_castps_pd(lo4), idxlo, _mm512_castps_pd(hi4))),
+		         _mm512_castpd_ps(_mm512_permutex2var_pd(_mm512_castps_pd(lo4), idxhi, _mm512_castps_pd(hi4)))}};
+	}
+#endif
+
+	// ----------------------------------------------------------------------------------------------------- interleave
+
+	// --------------------------------------------------------------------------------------------------- interleavelo
+#if defined(__AVX512F__)
+	template <>
+	inline reg interleavelo<double>(const reg v1, const reg v2) {
+		auto lo4 = mipp::interleavelo4<double>(v1, v2);
+		auto hi4 = mipp::interleavehi4<double>(v1, v2);
+		auto idxlo = _mm512_set_epi64(8|3,8|2,
+		                                3,  2,
+		                              8|1,8|0,
+		                                1,  0);
+		return _mm512_castpd_ps(_mm512_permutex2var_pd(_mm512_castps_pd(lo4), idxlo, _mm512_castps_pd(hi4)));
+	}
+
+	template <>
+	inline reg interleavelo<float>(const reg v1, const reg v2) {
+		auto lo4 = mipp::interleavelo4<float>(v1, v2);
+		auto hi4 = mipp::interleavehi4<float>(v1, v2);
+		auto idxlo = _mm512_set_epi64(8|3,8|2,
+		                                3,  2,
+		                              8|1,8|0,
+		                                1,  0);
+		return _mm512_castpd_ps(_mm512_permutex2var_pd(_mm512_castps_pd(lo4), idxlo, _mm512_castps_pd(hi4)));
+	}
+
+	template <>
+	inline reg interleavelo<int64_t>(const reg v1, const reg v2) {
+		auto lo4 = mipp::interleavelo4<int64_t>(v1, v2);
+		auto hi4 = mipp::interleavehi4<int64_t>(v1, v2);
+		auto idxlo = _mm512_set_epi64(8|3,8|2,
+		                                3,  2,
+		                              8|1,8|0,
+		                                1,  0);
+		return _mm512_castpd_ps(_mm512_permutex2var_pd(_mm512_castps_pd(lo4), idxlo, _mm512_castps_pd(hi4)));
+	}
+
+	template <>
+	inline reg interleavelo<int32_t>(const reg v1, const reg v2) {
+		auto lo4 = mipp::interleavelo4<int32_t>(v1, v2);
+		auto hi4 = mipp::interleavehi4<int32_t>(v1, v2);
+		auto idxlo = _mm512_set_epi64(8|3,8|2,
+		                                3,  2,
+		                              8|1,8|0,
+		                                1,  0);
+		return _mm512_castpd_ps(_mm512_permutex2var_pd(_mm512_castps_pd(lo4), idxlo, _mm512_castps_pd(hi4)));
+	}
+#endif
+
+#if defined(__AVX512BW__)
+	template <>
+	inline reg interleavelo<int16_t>(const reg v1, const reg v2) {
+		auto lo4 = mipp::interleavelo4<int16_t>(v1, v2);
+		auto hi4 = mipp::interleavehi4<int16_t>(v1, v2);
+		auto idxlo = _mm512_set_epi64(8|3,8|2,
+		                                3,  2,
+		                              8|1,8|0,
+		                                1,  0);
+		return _mm512_castpd_ps(_mm512_permutex2var_pd(_mm512_castps_pd(lo4), idxlo, _mm512_castps_pd(hi4)));
+	}
+
+	template <>
+	inline reg interleavelo<int8_t>(const reg v1, const reg v2) {
+		auto lo4 = mipp::interleavelo4<int8_t>(v1, v2);
+		auto hi4 = mipp::interleavehi4<int8_t>(v1, v2);
+		auto idxlo = _mm512_set_epi64(8|3,8|2,
+		                                3,  2,
+		                              8|1,8|0,
+		                                1,  0);
+		return _mm512_castpd_ps(_mm512_permutex2var_pd(_mm512_castps_pd(lo4), idxlo, _mm512_castps_pd(hi4)));
+	}
+#endif
+
+	// --------------------------------------------------------------------------------------------------- interleavehi
+#if defined(__AVX512F__)
+	template <>
+	inline reg interleavehi<double>(const reg v1, const reg v2) {
+		auto lo4 = mipp::interleavelo4<double>(v1, v2);
+		auto hi4 = mipp::interleavehi4<double>(v1, v2);
+		auto idxhi = _mm512_set_epi64(8|7,8|6,
+		                                7,  6,
+		                              8|5,8|4,
+		                                5,  4);
+		return _mm512_castpd_ps(_mm512_permutex2var_pd(_mm512_castps_pd(lo4), idxhi, _mm512_castps_pd(hi4)));
+	}
+
+	template <>
+	inline reg interleavehi<float>(const reg v1, const reg v2) {
+		auto lo4 = mipp::interleavelo4<float>(v1, v2);
+		auto hi4 = mipp::interleavehi4<float>(v1, v2);
+		auto idxhi = _mm512_set_epi64(8|7,8|6,
+		                                7,  6,
+		                              8|5,8|4,
+		                                5,  4);
+		return _mm512_castpd_ps(_mm512_permutex2var_pd(_mm512_castps_pd(lo4), idxhi, _mm512_castps_pd(hi4)));
+	}
+
+	template <>
+	inline reg interleavehi<int64_t>(const reg v1, const reg v2) {
+		auto lo4 = mipp::interleavelo4<int64_t>(v1, v2);
+		auto hi4 = mipp::interleavehi4<int64_t>(v1, v2);
+		auto idxhi = _mm512_set_epi64(8|7,8|6,
+		                                7,  6,
+		                              8|5,8|4,
+		                                5,  4);
+		return _mm512_castpd_ps(_mm512_permutex2var_pd(_mm512_castps_pd(lo4), idxhi, _mm512_castps_pd(hi4)));
+	}
+
+	template <>
+	inline reg interleavehi<int32_t>(const reg v1, const reg v2) {
+		auto lo4 = mipp::interleavelo4<int32_t>(v1, v2);
+		auto hi4 = mipp::interleavehi4<int32_t>(v1, v2);
+		auto idxhi = _mm512_set_epi64(8|7,8|6,
+		                                7,  6,
+		                              8|5,8|4,
+		                                5,  4);
+		return _mm512_castpd_ps(_mm512_permutex2var_pd(_mm512_castps_pd(lo4), idxhi, _mm512_castps_pd(hi4)));
+	}
+#endif
+
+#if defined(__AVX512BW__)
+	template <>
+	inline reg interleavehi<int16_t>(const reg v1, const reg v2) {
+		auto lo4 = mipp::interleavelo4<int16_t>(v1, v2);
+		auto hi4 = mipp::interleavehi4<int16_t>(v1, v2);
+		auto idxhi = _mm512_set_epi64(8|7,8|6,
+		                                7,  6,
+		                              8|5,8|4,
+		                                5,  4);
+		return _mm512_castpd_ps(_mm512_permutex2var_pd(_mm512_castps_pd(lo4), idxhi, _mm512_castps_pd(hi4)));
+	}
+
+	template <>
+	inline reg interleavehi<int8_t>(const reg v1, const reg v2) {
+		auto lo4 = mipp::interleavelo4<int8_t>(v1, v2);
+		auto hi4 = mipp::interleavehi4<int8_t>(v1, v2);
+		auto idxhi = _mm512_set_epi64(8|7,8|6,
+		                                7,  6,
+		                              8|5,8|4,
+		                                5,  4);
+		return _mm512_castpd_ps(_mm512_permutex2var_pd(_mm512_castps_pd(lo4), idxhi, _mm512_castps_pd(hi4)));
+	}
+#endif
+
+	// ---------------------------------------------------------------------------------------------------- interleave2
+#if defined(__AVX512F__)
+	template <>
+	inline regx2 interleave2<double>(const reg v1, const reg v2) {
+		auto lo4 = mipp::interleavelo4<double>(v1, v2);
+		auto hi4 = mipp::interleavehi4<double>(v1, v2);
+		auto idxlo = _mm512_set_epi64(8|5,8|4,
+		                                5,  4,
+		                              8|1,8|0,
+		                                1,  0);
+		auto idxhi = _mm512_set_epi64(8|7,8|6,
+		                                7,  6,
+		                              8|3,8|2,
+		                                3,  2);
+		return {{_mm512_castpd_ps(_mm512_permutex2var_pd(_mm512_castps_pd(lo4), idxlo, _mm512_castps_pd(hi4))),
+		         _mm512_castpd_ps(_mm512_permutex2var_pd(_mm512_castps_pd(lo4), idxhi, _mm512_castps_pd(hi4)))}};
+	}
+
+	template <>
+	inline regx2 interleave2<float>(const reg v1, const reg v2) {
+		auto lo4 = mipp::interleavelo4<float>(v1, v2);
+		auto hi4 = mipp::interleavehi4<float>(v1, v2);
+		auto idxlo = _mm512_set_epi64(8|5,8|4,
+		                                5,  4,
+		                              8|1,8|0,
+		                                1,  0);
+		auto idxhi = _mm512_set_epi64(8|7,8|6,
+		                                7,  6,
+		                              8|3,8|2,
+		                                3,  2);
+		return {{_mm512_castpd_ps(_mm512_permutex2var_pd(_mm512_castps_pd(lo4), idxlo, _mm512_castps_pd(hi4))),
+		         _mm512_castpd_ps(_mm512_permutex2var_pd(_mm512_castps_pd(lo4), idxhi, _mm512_castps_pd(hi4)))}};
+	}
+
+	template <>
+	inline regx2 interleave2<int64_t>(const reg v1, const reg v2) {
+		auto lo4 = mipp::interleavelo4<int64_t>(v1, v2);
+		auto hi4 = mipp::interleavehi4<int64_t>(v1, v2);
+		auto idxlo = _mm512_set_epi64(8|5,8|4,
+		                                5,  4,
+		                              8|1,8|0,
+		                                1,  0);
+		auto idxhi = _mm512_set_epi64(8|7,8|6,
+		                                7,  6,
+		                              8|3,8|2,
+		                                3,  2);
+		return {{_mm512_castpd_ps(_mm512_permutex2var_pd(_mm512_castps_pd(lo4), idxlo, _mm512_castps_pd(hi4))),
+		         _mm512_castpd_ps(_mm512_permutex2var_pd(_mm512_castps_pd(lo4), idxhi, _mm512_castps_pd(hi4)))}};
+	}
+
+	template <>
+	inline regx2 interleave2<int32_t>(const reg v1, const reg v2) {
+		auto lo4 = mipp::interleavelo4<int32_t>(v1, v2);
+		auto hi4 = mipp::interleavehi4<int32_t>(v1, v2);
+		auto idxlo = _mm512_set_epi64(8|5,8|4,
+		                                5,  4,
+		                              8|1,8|0,
+		                                1,  0);
+		auto idxhi = _mm512_set_epi64(8|7,8|6,
+		                                7,  6,
+		                              8|3,8|2,
+		                                3,  2);
+		return {{_mm512_castpd_ps(_mm512_permutex2var_pd(_mm512_castps_pd(lo4), idxlo, _mm512_castps_pd(hi4))),
+		         _mm512_castpd_ps(_mm512_permutex2var_pd(_mm512_castps_pd(lo4), idxhi, _mm512_castps_pd(hi4)))}};
+	}
+#endif
+
+#if defined(__AVX512BW__)
+	template <>
+	inline regx2 interleave2<int16_t>(const reg v1, const reg v2) {
+		auto lo4 = mipp::interleavelo4<int16_t>(v1, v2);
+		auto hi4 = mipp::interleavehi4<int16_t>(v1, v2);
+		auto idxlo = _mm512_set_epi64(8|5,8|4,
+		                                5,  4,
+		                              8|1,8|0,
+		                                1,  0);
+		auto idxhi = _mm512_set_epi64(8|7,8|6,
+		                                7,  6,
+		                              8|3,8|2,
+		                                3,  2);
+		return {{_mm512_castpd_ps(_mm512_permutex2var_pd(_mm512_castps_pd(lo4), idxlo, _mm512_castps_pd(hi4))),
+		         _mm512_castpd_ps(_mm512_permutex2var_pd(_mm512_castps_pd(lo4), idxhi, _mm512_castps_pd(hi4)))}};
+	}
+
+	template <>
+	inline regx2 interleave2<int8_t>(const reg v1, const reg v2) {
+		auto lo4 = mipp::interleavelo4<int8_t>(v1, v2);
+		auto hi4 = mipp::interleavehi4<int8_t>(v1, v2);
+		auto idxlo = _mm512_set_epi64(8|5,8|4,
+		                                5,  4,
+		                              8|1,8|0,
+		                                1,  0);
+		auto idxhi = _mm512_set_epi64(8|7,8|6,
+		                                7,  6,
+		                              8|3,8|2,
+		                                3,  2);
+		return {{_mm512_castpd_ps(_mm512_permutex2var_pd(_mm512_castps_pd(lo4), idxlo, _mm512_castps_pd(hi4))),
+		         _mm512_castpd_ps(_mm512_permutex2var_pd(_mm512_castps_pd(lo4), idxhi, _mm512_castps_pd(hi4)))}};
+	}
+#endif
+
+	// ---------------------------------------------------------------------------------------------------- interleave4
+#if defined(__AVX512F__)
+	template <>
+	inline regx2 interleave4<double>(const reg v1, const reg v2) {
+		return {{mipp::interleavelo4<double>(v1, v2),
+		         mipp::interleavehi4<double>(v1, v2)}};
+	}
+
+	template <>
+	inline regx2 interleave4<float>(const reg v1, const reg v2) {
+		return {{mipp::interleavelo4<float>(v1, v2),
+		         mipp::interleavehi4<float>(v1, v2)}};
+	}
+
+	template <>
+	inline regx2 interleave4<int64_t>(const reg v1, const reg v2) {
+		return {{mipp::interleavelo4<int64_t>(v1, v2),
+		         mipp::interleavehi4<int64_t>(v1, v2)}};
+	}
+
+	template <>
+	inline regx2 interleave4<int32_t>(const reg v1, const reg v2) {
+		return {{mipp::interleavelo4<int32_t>(v1, v2),
+		         mipp::interleavehi4<int32_t>(v1, v2)}};
+	}
+#endif
+
+#if defined(__AVX512BW__)
+	template <>
+	inline regx2 interleave4<int16_t>(const reg v1, const reg v2) {
+		return {{mipp::interleavelo4<int16_t>(v1, v2),
+		         mipp::interleavehi4<int16_t>(v1, v2)}};
+	}
+
+	template <>
+	inline regx2 interleave4<int8_t>(const reg v1, const reg v2) {
+		return {{mipp::interleavelo4<int8_t>(v1, v2),
+		         mipp::interleavehi4<int8_t>(v1, v2)}};
+	}
+#endif
+
+	// --------------------------------------------------------------------------------------------------- interleavex2
+
+	// --------------------------------------------------------------------------------------------------- interleavex4
+
+	// -------------------------------------------------------------------------------------------------- interleavex16
+
+	// ------------------------------------------------------------------------------------------------------ transpose
+
+	// ----------------------------------------------------------------------------------------------------- transpose2
+
+	// -------------------------------------------------------------------------------------------------- transpose28x8
+
+	// ----------------------------------------------------------------------------------------------------------- andb
+	template <>
+	inline reg andb<double>(const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_and_si512(_mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+
+	template <>
+	inline reg andb<float>(const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_and_si512(_mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+
+	template <>
+	inline reg andb<int64_t>(const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_and_si512(_mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+
+	template <>
+	inline reg andb<int32_t>(const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_and_si512(_mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+
+	template <>
+	inline reg andb<int16_t>(const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_and_si512(_mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+
+	template <>
+	inline reg andb<int8_t>(const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_and_si512(_mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+
+	// ---------------------------------------------------------------------------------------------------- andb (mask)
+	template <>
+	inline msk andb<8>(const msk v1, const msk v2) {
+		return _mm512_kand(v1, v2);
+	}
+
+	template <>
+	inline msk andb<16>(const msk v1, const msk v2) {
+		return _mm512_kand(v1, v2);
+	}
+
+#if defined(__AVX512BW__)
+	template <>
+	inline msk andb<32>(const msk v1, const msk v2) {
+		// return _mm512_kand(v1, v2);
+		return v1 & v2;
+	}
+
+	template <>
+	inline msk andb<64>(const msk v1, const msk v2) {
+		// return _mm512_kand(v1, v2);
+		return v1 & v2;
+	}
+#endif
+
+	// ---------------------------------------------------------------------------------------------------------- andnb
+	template <>
+	inline reg andnb<float>(const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_andnot_si512(_mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+
+	template <>
+	inline reg andnb<double>(const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_andnot_si512(_mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+
+	template <>
+	inline reg andnb<int64_t>(const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_andnot_si512(_mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+
+	template <>
+	inline reg andnb<int32_t>(const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_andnot_si512(_mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+
+	template <>
+	inline reg andnb<int16_t>(const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_andnot_si512(_mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+
+	template <>
+	inline reg andnb<int8_t>(const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_andnot_si512(_mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+
+	// --------------------------------------------------------------------------------------------------- andnb (mask)
+	template <>
+	inline msk andnb<8>(const msk v1, const msk v2) {
+		return _mm512_kandn(v1, v2);
+	}
+
+	template <>
+	inline msk andnb<16>(const msk v1, const msk v2) {
+		return _mm512_kandn(v1, v2);
+	}
+
+#if defined(__AVX512BW__)
+	template <>
+	inline msk andnb<32>(const msk v1, const msk v2) {
+		// return _mm512_kandn(v1, v2);
+		return (~v1) & v2;
+	}
+
+	template <>
+	inline msk andnb<64>(const msk v1, const msk v2) {
+		// return _mm512_kandn(v1, v2);
+		return (~v1) & v2;
+	}
+#endif
+
+	// ----------------------------------------------------------------------------------------------------------- notb
+	template <>
+	inline reg notb<double>(const reg v) {
+		return andnb<double>(v, set1<int64_t>(0xFFFFFFFFFFFFFFFF));
+	}
+
+	template <>
+	inline reg notb<float>(const reg v) {
+		return andnb<float>(v, set1<int32_t>(0xFFFFFFFF));
+	}
+
+	template <>
+	inline reg notb<int64_t>(const reg v) {
+		return andnb<int64_t>(v, set1<int64_t>(0xFFFFFFFFFFFFFFFF));
+	}
+
+	template <>
+	inline reg notb<int32_t>(const reg v) {
+		return andnb<int32_t>(v, set1<int32_t>(0xFFFFFFFF));
+	}
+
+	template <>
+	inline reg notb<int16_t>(const reg v) {
+#ifdef _MSC_VER
+#pragma warning( disable : 4309 )
+#endif
+		return andnb<int16_t>(v, set1<int16_t>(0xFFFF));
+#ifdef _MSC_VER
+#pragma warning( default : 4309 )
+#endif
+	}
+
+	template <>
+	inline reg notb<int8_t>(const reg v) {
+#ifdef _MSC_VER
+#pragma warning( disable : 4309 )
+#endif
+		return andnb<int8_t>(v, set1<int8_t>(0xFF));
+#ifdef _MSC_VER
+#pragma warning( default : 4309 )
+#endif
+	}
+
+	// ---------------------------------------------------------------------------------------------------- notb (mask)
+	template <>
+	inline msk notb<8>(const msk v) {
+		return _mm512_knot(v);
+	}
+
+	template <>
+	inline msk notb<16>(const msk v) {
+		return _mm512_knot(v);
+	}
+
+#if defined(__AVX512BW__)
+	template <>
+	inline msk notb<32>(const msk v) {
+		// return _mm512_knot(v);
+		return ~v;
+	}
+
+	template <>
+	inline msk notb<64>(const msk v) {
+		// return _mm512_knot(v);
+		return ~v;
+	}
+#endif
+
+	// ------------------------------------------------------------------------------------------------------------ orb
+	template <>
+	inline reg orb<float>(const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_or_si512(_mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+
+	template <>
+	inline reg orb<double>(const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_or_si512(_mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+
+	template <>
+	inline reg orb<int64_t>(const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_or_si512(_mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+
+	template <>
+	inline reg orb<int32_t>(const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_or_si512(_mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+
+	template <>
+	inline reg orb<int16_t>(const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_or_si512(_mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+
+	template <>
+	inline reg orb<int8_t>(const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_or_si512(_mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+
+	// ----------------------------------------------------------------------------------------------------- orb (mask)
+	template <>
+	inline msk orb<8>(const msk v1, const msk v2) {
+		return _mm512_kor(v1, v2);
+	}
+
+	template <>
+	inline msk orb<16>(const msk v1, const msk v2) {
+		return _mm512_kor(v1, v2);
+	}
+
+#if defined(__AVX512BW__)
+	template <>
+	inline msk orb<32>(const msk v1, const msk v2) {
+		// return _mm512_kor(v1, v2);
+		return v1 | v2;
+	}
+
+	template <>
+	inline msk orb<64>(const msk v1, const msk v2) {
+		// return _mm512_kor(v1, v2);
+		return v1 | v2;
+	}
+#endif
+
+	// ----------------------------------------------------------------------------------------------------------- xorb
+	template <>
+	inline reg xorb<float>(const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_xor_si512(_mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+
+	template <>
+	inline reg xorb<double>(const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_xor_si512(_mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+
+	template <>
+	inline reg xorb<int64_t>(const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_xor_si512(_mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+
+	template <>
+	inline reg xorb<int32_t>(const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_xor_si512(_mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+
+	template <>
+	inline reg xorb<int16_t>(const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_xor_si512(_mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+
+	template <>
+	inline reg xorb<int8_t>(const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_xor_si512(_mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+
+	// ---------------------------------------------------------------------------------------------------- xorb (mask)
+	template <>
+	inline msk xorb<8>(const msk v1, const msk v2) {
+		return _mm512_kxor(v1, v2);
+	}
+
+	template <>
+	inline msk xorb<16>(const msk v1, const msk v2) {
+		return _mm512_kxor(v1, v2);
+	}
+
+#if defined(__AVX512BW__)
+	template <>
+	inline msk xorb<32>(const msk v1, const msk v2) {
+		// return _mm512_kxor(v1, v2);
+		return v1 ^ v2;
+	}
+
+	template <>
+	inline msk xorb<64>(const msk v1, const msk v2) {
+		// return _mm512_kxor(v1, v2);
+		return v1 ^ v2;
+	}
+#endif
+
+	// --------------------------------------------------------------------------------------------------------- lshift
+#if defined(__AVX512F__)
+	template <>
+	inline reg lshift<double>(const reg v1, const uint32_t n) {
+		return _mm512_castsi512_ps(_mm512_slli_epi64(_mm512_castps_si512(v1), n));
+	}
+#endif
+
+	template <>
+	inline reg lshift<float>(const reg v1, const uint32_t n) {
+		return _mm512_castsi512_ps(_mm512_slli_epi32(_mm512_castps_si512(v1), n));
+	}
+
+#if defined(__AVX512F__)
+	template <>
+	inline reg lshift<int64_t>(const reg v1, const uint32_t n) {
+		return _mm512_castsi512_ps(_mm512_slli_epi64(_mm512_castps_si512(v1), n));
+	}
+#endif
+
+	template <>
+	inline reg lshift<int32_t>(const reg v1, const uint32_t n) {
+		return _mm512_castsi512_ps(_mm512_slli_epi32(_mm512_castps_si512(v1), n));
+	}
+
+#if defined(__AVX512BW__)
+	template <>
+	inline reg lshift<int16_t>(const reg v1, const uint32_t n) {
+		return _mm512_castsi512_ps(_mm512_slli_epi16(_mm512_castps_si512(v1), n));
+	}
+
+	template <>
+	inline reg lshift<int8_t>(const reg v1, const uint32_t n) {
+		auto msk = set1<int8_t>((1 << n) -1);
+		reg lsh = lshift<int16_t>(v1, n);
+		lsh = andnb<int16_t>(msk, lsh);
+		return lsh;
+	}
+#endif
+
+	// -------------------------------------------------------------------------------------------------- lshift (mask)
+	template <>
+	inline msk lshift<8>(const msk v1, const uint32_t n) {
+		return v1 << n;
+	}
+
+	template <>
+	inline msk lshift<16>(const msk v1, const uint32_t n) {
+		return v1 << n;
+	}
+
+#if defined(__AVX512BW__) // TODO: /!\ the shift on 16-bit and 8-bit masks fails on ICPC
+	template <>
+	inline msk lshift<32>(const msk v1, const uint32_t n) {
+		return v1 << n;
+	}
+
+	template <>
+	inline msk lshift<64>(const msk v1, const uint32_t n) {
+		return v1 << n;
+	}
+#endif
+
+	// --------------------------------------------------------------------------------------------------------- rshift
+#if defined(__AVX512F__)
+	template <>
+	inline reg rshift<double>(const reg v1, const uint32_t n) {
+		return _mm512_castsi512_ps(_mm512_srli_epi64(_mm512_castps_si512(v1), n));
+	}
+#endif
+
+	template <>
+	inline reg rshift<float>(const reg v1, const uint32_t n) {
+		return _mm512_castsi512_ps(_mm512_srli_epi32(_mm512_castps_si512(v1), n));
+	}
+
+#if defined(__AVX512F__)
+	template <>
+	inline reg rshift<int64_t>(const reg v1, const uint32_t n) {
+		return _mm512_castsi512_ps(_mm512_srli_epi64(_mm512_castps_si512(v1), n));
+	}
+#endif
+
+	template <>
+	inline reg rshift<int32_t>(const reg v1, const uint32_t n) {
+		return _mm512_castsi512_ps(_mm512_srli_epi32(_mm512_castps_si512(v1), n));
+	}
+
+#if defined(__AVX512BW__)
+	template <>
+	inline reg rshift<int16_t>(const reg v1, const uint32_t n) {
+		return _mm512_castsi512_ps(_mm512_srli_epi16(_mm512_castps_si512(v1), n));
+	}
+
+	template <>
+	inline reg rshift<int8_t>(const reg v1, const uint32_t n) {
+		auto msk = set1<int8_t>((1 << (8 -n)) -1);
+		reg rsh = rshift<int16_t>(v1, n);
+		rsh = andb<int16_t>(msk, rsh);
+		return rsh;
+	}
+#endif
+
+	// -------------------------------------------------------------------------------------------------- rshift (mask)
+	template <>
+	inline msk rshift<8>(const msk v1, const uint32_t n) {
+		return v1 >> n;
+	}
+
+	template <>
+	inline msk rshift<16>(const msk v1, const uint32_t n) {
+		return v1 >> n;
+	}
+
+#if defined(__AVX512BW__) // TODO: /!\ the shift on 16-bit and 8-bit masks fails on ICPC
+	template <>
+	inline msk rshift<32>(const msk v1, const uint32_t n) {
+		return v1 >> n;
+	}
+
+	template <>
+	inline msk rshift<64>(const msk v1, const uint32_t n) {
+		return v1 >> n;
+	}
+#endif
+
+	// --------------------------------------------------------------------------------------------------------- cmpneq
+	template <>
+	inline msk cmpneq<double>(const reg v1, const reg v2) {
+		return (msk) _mm512_cmp_pd_mask(_mm512_castps_pd(v1), _mm512_castps_pd(v2), _CMP_NEQ_OQ);
+	}
+
+	template <>
+	inline msk cmpneq<float>(const reg v1, const reg v2) {
+		return (msk) _mm512_cmp_ps_mask(v1, v2, _CMP_NEQ_OQ);
+	}
+
+#if defined(__AVX512F__)
+	template <>
+	inline msk cmpneq<int64_t>(const reg v1, const reg v2) {
+		return (msk) _mm512_cmpneq_epi64_mask(_mm512_castps_si512(v1), _mm512_castps_si512(v2));
+	}
+#endif
+
+	template <>
+	inline msk cmpneq<int32_t>(const reg v1, const reg v2) {
+		return (msk) _mm512_cmpneq_epi32_mask(_mm512_castps_si512(v1), _mm512_castps_si512(v2));
+	}
+
+#if defined(__AVX512BW__)
+	template <>
+	inline msk cmpneq<int16_t>(const reg v1, const reg v2) {
+		return (msk) _mm512_cmpneq_epi16_mask(_mm512_castps_si512(v1), _mm512_castps_si512(v2));
+	}
+
+	template <>
+	inline msk cmpneq<int8_t>(const reg v1, const reg v2) {
+		return (msk) _mm512_cmpneq_epi8_mask(_mm512_castps_si512(v1), _mm512_castps_si512(v2));
+	}
+#endif
+
+	// ---------------------------------------------------------------------------------------------------------- cmplt
+	template <>
+	inline msk cmplt<double>(const reg v1, const reg v2) {
+		return (msk) _mm512_cmp_pd_mask(_mm512_castps_pd(v1), _mm512_castps_pd(v2), _CMP_LT_OS);
+	}
+
+	template <>
+	inline msk cmplt<float>(const reg v1, const reg v2) {
+		return (msk) _mm512_cmp_ps_mask(v1, v2, _CMP_LT_OS);
+	}
+
+#if defined(__AVX512F__)
+	template <>
+	inline msk cmplt<int64_t>(const reg v1, const reg v2) {
+		return (msk) _mm512_cmplt_epi64_mask(_mm512_castps_si512(v1), _mm512_castps_si512(v2));
+	}
+#endif
+
+	template <>
+	inline msk cmplt<int32_t>(const reg v1, const reg v2) {
+		return (msk) _mm512_cmplt_epi32_mask(_mm512_castps_si512(v1), _mm512_castps_si512(v2));
+	}
+
+#if defined(__AVX512BW__)
+	template <>
+	inline msk cmplt<int16_t>(const reg v1, const reg v2) {
+		return (msk) _mm512_cmplt_epi16_mask(_mm512_castps_si512(v1), _mm512_castps_si512(v2));
+	}
+
+	template <>
+	inline msk cmplt<int8_t>(const reg v1, const reg v2) {
+		return (msk) _mm512_cmplt_epi8_mask(_mm512_castps_si512(v1), _mm512_castps_si512(v2));
+	}
+#endif
+
+	// ---------------------------------------------------------------------------------------------------------- cmple
+	template <>
+	inline msk cmple<double>(const reg v1, const reg v2) {
+		return (msk) _mm512_cmp_pd_mask(_mm512_castps_pd(v1), _mm512_castps_pd(v2), _CMP_LE_OS);
+	}
+
+	template <>
+	inline msk cmple<float>(const reg v1, const reg v2) {
+		return (msk) _mm512_cmp_ps_mask(v1, v2, _CMP_LE_OS);
+	}
+
+#if defined(__AVX512F__)
+	template <>
+	inline msk cmple<int64_t>(const reg v1, const reg v2) {
+		return (msk) _mm512_cmple_epi64_mask(_mm512_castps_si512(v1), _mm512_castps_si512(v2));
+	}
+#endif
+
+	template <>
+	inline msk cmple<int32_t>(const reg v1, const reg v2) {
+		return (msk) _mm512_cmple_epi32_mask(_mm512_castps_si512(v1), _mm512_castps_si512(v2));
+	}
+
+#if defined(__AVX512BW__)
+	template <>
+	inline msk cmple<int16_t>(const reg v1, const reg v2) {
+		return (msk) _mm512_cmple_epi16_mask(_mm512_castps_si512(v1), _mm512_castps_si512(v2));
+	}
+
+	template <>
+	inline msk cmple<int8_t>(const reg v1, const reg v2) {
+		return (msk) _mm512_cmple_epi8_mask(_mm512_castps_si512(v1), _mm512_castps_si512(v2));
+	}
+#endif
+
+	// ---------------------------------------------------------------------------------------------------------- cmpgt
+	template <>
+	inline msk cmpgt<double>(const reg v1, const reg v2) {
+		return (msk) _mm512_cmp_pd_mask(_mm512_castps_pd(v1), _mm512_castps_pd(v2), _CMP_GT_OS);
+	}
+
+	template <>
+	inline msk cmpgt<float>(const reg v1, const reg v2) {
+		return (msk) _mm512_cmp_ps_mask(v1, v2, _CMP_GT_OS);
+	}
+
+#if defined(__AVX512F__)
+	template <>
+	inline msk cmpgt<int64_t>(const reg v1, const reg v2) {
+		return (msk) _mm512_cmpgt_epi64_mask(_mm512_castps_si512(v1), _mm512_castps_si512(v2));
+	}
+#endif
+
+	template <>
+	inline msk cmpgt<int32_t>(const reg v1, const reg v2) {
+		return (msk) _mm512_cmpgt_epi32_mask(_mm512_castps_si512(v1), _mm512_castps_si512(v2));
+	}
+
+#if defined(__AVX512BW__)
+	template <>
+	inline msk cmpgt<int16_t>(const reg v1, const reg v2) {
+		return (msk) _mm512_cmpgt_epi16_mask(_mm512_castps_si512(v1), _mm512_castps_si512(v2));
+	}
+
+	template <>
+	inline msk cmpgt<int8_t>(const reg v1, const reg v2) {
+		return (msk) _mm512_cmpgt_epi8_mask(_mm512_castps_si512(v1), _mm512_castps_si512(v2));
+	}
+#endif
+
+	// ---------------------------------------------------------------------------------------------------------- cmpge
+	template <>
+	inline msk cmpge<double>(const reg v1, const reg v2) {
+		return (msk) _mm512_cmp_pd_mask(_mm512_castps_pd(v1), _mm512_castps_pd(v2), _CMP_GE_OS);
+	}
+
+	template <>
+	inline msk cmpge<float>(const reg v1, const reg v2) {
+		return (msk) _mm512_cmp_ps_mask(v1, v2, _CMP_GE_OS);
+	}
+
+#if defined(__AVX512F__)
+	template <>
+	inline msk cmpge<int64_t>(const reg v1, const reg v2) {
+		return (msk) _mm512_cmpge_epi64_mask(_mm512_castps_si512(v1), _mm512_castps_si512(v2));
+	}
+#endif
+
+	template <>
+	inline msk cmpge<int32_t>(const reg v1, const reg v2) {
+		return (msk) _mm512_cmpge_epi32_mask(_mm512_castps_si512(v1), _mm512_castps_si512(v2));
+	}
+
+#if defined(__AVX512BW__)
+	template <>
+	inline msk cmpge<int16_t>(const reg v1, const reg v2) {
+		return (msk) _mm512_cmpge_epi16_mask(_mm512_castps_si512(v1), _mm512_castps_si512(v2));
+	}
+
+	template <>
+	inline msk cmpge<int8_t>(const reg v1, const reg v2) {
+		return (msk) _mm512_cmpge_epi8_mask(_mm512_castps_si512(v1), _mm512_castps_si512(v2));
+	}
+#endif
+
+	// ------------------------------------------------------------------------------------------------------------ add
+	// ------------------ double
+	template <>
+	inline reg add<double>(const reg v1, const reg v2) {
+		return _mm512_castpd_ps(_mm512_add_pd(_mm512_castps_pd(v1), _mm512_castps_pd(v2)));
+	}
+
+	template <>
+	inline reg mask<double,add<double>>(const msk m, const reg src, const reg v1, const reg v2) {
+		return _mm512_castpd_ps(_mm512_mask_add_pd(_mm512_castps_pd(src), (__mmask8)m, _mm512_castps_pd(v1), _mm512_castps_pd(v2)));
+	}
+
+	template <>
+	inline Reg<double> mask<double,add<double>>(const Msk<8> m, const Reg<double> src, const Reg<double> v1, const Reg<double> v2) {
+		return mask<double,add<double>>(m.m, src.r, v1.r, v2.r);
+	}
+
+#if defined(__AVX512F__)
+	template <>
+	inline reg maskz<double,add<double>>(const msk m, const reg v1, const reg v2) {
+		return _mm512_castpd_ps(_mm512_maskz_add_pd((__mmask8)m, _mm512_castps_pd(v1), _mm512_castps_pd(v2)));
+	}
+
+	template <>
+	inline Reg<double> maskz<double,add<double>>(const Msk<8> m, const Reg<double> v1, const Reg<double> v2) {
+		return maskz<double,add<double>>(m.m, v1.r, v2.r);
+	}
+#endif
+
+	// ------------------ float
+	template <>
+	inline reg add<float>(const reg v1, const reg v2) {
+		return _mm512_add_ps(v1, v2);
+	}
+
+	template <>
+	inline reg mask<float,add<float>>(const msk m, const reg src, const reg v1, const reg v2) {
+		return _mm512_mask_add_ps(src, (__mmask16)m, v1, v2);
+	}
+
+	template <>
+	inline Reg<float> mask<float,add<float>>(const Msk<16> m, const Reg<float> src, const Reg<float> v1, const Reg<float> v2) {
+		return mask<float,add<float>>(m.m, src.r, v1.r, v2.r);
+	}
+
+#if defined(__AVX512F__)
+	template <>
+	inline reg maskz<float,add<float>>(const msk m, const reg v1, const reg v2) {
+		return _mm512_maskz_add_ps((__mmask16)m, v1, v2);
+	}
+
+	template <>
+	inline Reg<float> maskz<float,add<float>>(const Msk<16> m, const Reg<float> v1, const Reg<float> v2) {
+		return maskz<float,add<float>>(m.m, v1.r, v2.r);
+	}
+#endif
+
+	// ------------------ int64
+#if defined(__AVX512F__)
+	template <>
+	inline reg add<int64_t>(const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_add_epi64(_mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+
+	template <>
+	inline reg mask<int64_t,add<int64_t>>(const msk m, const reg src, const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_mask_add_epi64(_mm512_castps_si512(src), (__mmask8)m, _mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+
+	template <>
+	inline Reg<int64_t> mask<int64_t,add<int64_t>>(const Msk<8> m, const Reg<int64_t> src, const Reg<int64_t> v1, const Reg<int64_t> v2) {
+		return mask<int64_t,add<int64_t>>(m.m, src.r, v1.r, v2.r);
+	}
+
+	template <>
+	inline reg maskz<int64_t,add<int64_t>>(const msk m, const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_maskz_add_epi64((__mmask8)m, _mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+
+	template <>
+	inline Reg<int64_t> maskz<int64_t,add<int64_t>>(const Msk<8> m, const Reg<int64_t> v1, const Reg<int64_t> v2) {
+		return maskz<int64_t,add<int64_t>>(m.m, v1.r, v2.r);
+	}
+#endif
+
+	// ------------------ int32
+	template <>
+	inline reg add<int32_t>(const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_add_epi32(_mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+
+	template <>
+	inline reg mask<int32_t,add<int32_t>>(const msk m, const reg src, const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_mask_add_epi32(_mm512_castps_si512(src), (__mmask16)m, _mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+
+	template <>
+	inline Reg<int32_t> mask<int32_t,add<int32_t>>(const Msk<16> m, const Reg<int32_t> src, const Reg<int32_t> v1, const Reg<int32_t> v2) {
+		return mask<int32_t,add<int32_t>>(m.m, src.r, v1.r, v2.r);
+	}
+
+#if defined(__AVX512F__)
+	template <>
+	inline reg maskz<int32_t,add<int32_t>>(const msk m, const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_maskz_add_epi32((__mmask16)m, _mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+
+	template <>
+	inline Reg<int32_t> maskz<int32_t,add<int32_t>>(const Msk<16> m, const Reg<int32_t> v1, const Reg<int32_t> v2) {
+		return maskz<int32_t,add<int32_t>>(m.m, v1.r, v2.r);
+	}
+#endif
+
+#if defined(__AVX512BW__)
+	// ------------------ int16
+	template <>
+	inline reg add<int16_t>(const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_adds_epi16(_mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+
+	template <>
+	inline reg mask<int16_t,add<int16_t>>(const msk m, const reg src, const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_mask_adds_epi16(_mm512_castps_si512(src), (__mmask32)m, _mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+
+	template <>
+	inline Reg<int16_t> mask<int16_t,add<int16_t>>(const Msk<32> m, const Reg<int16_t> src, const Reg<int16_t> v1, const Reg<int16_t> v2) {
+		return mask<int16_t,add<int16_t>>(m.m, src.r, v1.r, v2.r);
+	}
+
+	template <>
+	inline reg maskz<int16_t,add<int16_t>>(const msk m, const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_maskz_adds_epi16((__mmask32)m, _mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+
+	template <>
+	inline Reg<int16_t> maskz<int16_t,add<int16_t>>(const Msk<32> m, const Reg<int16_t> v1, const Reg<int16_t> v2) {
+		return maskz<int16_t,add<int16_t>>(m.m, v1.r, v2.r);
+	}
+
+	// ------------------ int8
+	template <>
+	inline reg add<int8_t>(const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_adds_epi8(_mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+
+	template <>
+	inline reg mask<int8_t,add<int8_t>>(const msk m, const reg src, const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_mask_adds_epi8(_mm512_castps_si512(src), (__mmask64)m, _mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+
+	template <>
+	inline Reg<int8_t> mask<int8_t,add<int8_t>>(const Msk<64> m, const Reg<int8_t> src, const Reg<int8_t> v1, const Reg<int8_t> v2) {
+		return mask<int8_t,add<int8_t>>(m.m, src.r, v1.r, v2.r);
+	}
+
+	template <>
+	inline reg maskz<int8_t,add<int8_t>>(const msk m, const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_maskz_adds_epi8((__mmask64)m, _mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+
+	template <>
+	inline Reg<int8_t> maskz<int8_t,add<int8_t>>(const Msk<64> m, const Reg<int8_t> v1, const Reg<int8_t> v2) {
+		return maskz<int8_t,add<int8_t>>(m.m, v1.r, v2.r);
+	}
+#endif
+
+	// ------------------------------------------------------------------------------------------------------------ sub
+	template <>
+	inline reg sub<double>(const reg v1, const reg v2) {
+		return _mm512_castpd_ps(_mm512_sub_pd(_mm512_castps_pd(v1), _mm512_castps_pd(v2)));
+	}
+
+	template <>
+	inline reg sub<float>(const reg v1, const reg v2) {
+		return _mm512_sub_ps(v1, v2);
+	}
+
+#if defined(__AVX512F__)
+	template <>
+	inline reg sub<int64_t>(const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_sub_epi64(_mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+#endif
+
+	template <>
+	inline reg sub<int32_t>(const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_sub_epi32(_mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+
+#if defined(__AVX512BW__)
+	template <>
+	inline reg sub<int16_t>(const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_subs_epi16(_mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+
+	template <>
+	inline reg sub<int8_t>(const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_subs_epi8(_mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+#endif
+
+	// ------------------------------------------------------------------------------------------------------------ mul
+	template <>
+	inline reg mul<double>(const reg v1, const reg v2) {
+		return _mm512_castpd_ps(_mm512_mul_pd(_mm512_castps_pd(v1), _mm512_castps_pd(v2)));
+	}
+
+	template <>
+	inline reg mul<float>(const reg v1, const reg v2) {
+		return _mm512_mul_ps(v1, v2);
+	}
+
+	template <>
+	inline reg mul<int32_t>(const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_mullo_epi32(_mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+
+#if defined(__AVX512BW__)
+	template <>
+	inline reg mul<int16_t>(const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_mullo_epi16(_mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+#endif
+
+	// ------------------------------------------------------------------------------------------------------------ div
+#if defined(__AVX512F__)
+	template <>
+	inline reg div<double>(const reg v1, const reg v2) {
+		return _mm512_castpd_ps(_mm512_div_pd(_mm512_castps_pd(v1), _mm512_castps_pd(v2)));
+	}
+
+	template <>
+	inline reg div<float>(const reg v1, const reg v2) {
+		return _mm512_div_ps(v1, v2);
+	}
+#endif
+
+	// ------------------------------------------------------------------------------------------------------------ min
+#if defined(__AVX512F__)
+	template <>
+	inline reg min<double>(const reg v1, const reg v2) {
+		return _mm512_castpd_ps(_mm512_min_pd(_mm512_castps_pd(v1), _mm512_castps_pd(v2)));
+	}
+
+	template <>
+	inline reg min<float>(const reg v1, const reg v2) {
+		return _mm512_min_ps(v1, v2);
+	}
+
+	template <>
+	inline reg min<int64_t>(const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_min_epi64(_mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+
+	template <>
+	inline reg min<int32_t>(const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_min_epi32(_mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+
+#if defined(__AVX512BW__)
+	template <>
+	inline reg min<int16_t>(const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_min_epi16(_mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+
+	template <>
+	inline reg min<int8_t>(const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_min_epi8(_mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+#endif
+
+#elif defined(__MIC__) || defined(__KNCNI__)
+	template <>
+	inline reg min<double>(const reg v1, const reg v2) {
+		return _mm512_castpd_ps(_mm512_gmin_pd(_mm512_castps_pd(v1), _mm512_castps_pd(v2)));
+	}
+
+	template <>
+	inline reg min<float>(const reg v1, const reg v2) {
+		return _mm512_gmin_ps(v1, v2);
+	}
+#endif
+
+	// ------------------------------------------------------------------------------------------------------------ max
+#if defined(__AVX512F__)
+	template <>
+	inline reg max<double>(const reg v1, const reg v2) {
+		return _mm512_castpd_ps(_mm512_max_pd(_mm512_castps_pd(v1), _mm512_castps_pd(v2)));
+	}
+
+	template <>
+	inline reg max<float>(const reg v1, const reg v2) {
+		return _mm512_max_ps(v1, v2);
+	}
+
+	template <>
+	inline reg max<int64_t>(const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_max_epi64(_mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+
+	template <>
+	inline reg max<int32_t>(const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_max_epi32(_mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+
+#if defined(__AVX512BW__)
+	template <>
+	inline reg max<int16_t>(const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_max_epi16(_mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+
+	template <>
+	inline reg max<int8_t>(const reg v1, const reg v2) {
+		return _mm512_castsi512_ps(_mm512_max_epi8(_mm512_castps_si512(v1), _mm512_castps_si512(v2)));
+	}
+#endif
+
+#elif defined(__MIC__) || defined(__KNCNI__)
+	template <>
+	inline reg max<double>(const reg v1, const reg v2) {
+		return _mm512_castpd_ps(_mm512_gmax_pd(_mm512_castps_pd(v1), _mm512_castps_pd(v2)));
+	}
+
+	template <>
+	inline reg min<float>(const reg v1, const reg v2) {
+		return _mm512_gmax_ps(v1, v2);
+	}
+#endif
+
+	// ------------------------------------------------------------------------------------------------------------ msb
+	template <>
+	inline reg msb<double>(const reg v1) {
+		// msb_mask = 1000000000000000000000000000000000000000000000000000000000000000 // 64 bits
+		const reg msb_mask = set1<int64_t>(0x8000000000000000);
+
+		// indices = 63 62 61 60 59 58 57 56 55 54 53 52 51 50 49 48 47 46 45 44 43 42 41 40 39 38 37 36 35 34 33 32...
+		// mask    =  1  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0...
+		// v1      =  ù  €  è  é  à  &  z  y  x  w  v  u  t  s  r  q  p  o  n  m  l  k  j  i  h  g  f  e  d  c  b  a...
+		// res     =  ù  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0...
+		return andb<double>(v1, msb_mask);
+	}
+
+	template <>
+	inline reg msb<double>(const reg v1, const reg v2) {
+		reg msb_v1_v2 = xorb<double>(v1, v2);
+		    msb_v1_v2 = msb<double>(msb_v1_v2);
+		return msb_v1_v2;
+	}
+
+	template <>
+	inline reg msb<float>(const reg v1) {
+		// msb_mask = 10000000000000000000000000000000 // 32 bits
+		const reg msb_mask = set1<int32_t>(0x80000000);
+
+		// indices = 31 30 29 28 27 26 25 24 23 22 21 20 19 18 17 16 15 14 13 12 11 10  9  8  7  6  5  4  3  2  1  0
+		// mask    =  1  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0
+		// v1      =  ù  €  è  é  à  &  z  y  x  w  v  u  t  s  r  q  p  o  n  m  l  k  j  i  h  g  f  e  d  c  b  a
+		// res     =  ù  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0
+		return andb<float>(v1, msb_mask);
+	}
+
+	template <>
+	inline reg msb<float>(const reg v1, const reg v2) {
+		reg msb_v1_v2 = xorb<float>(v1, v2);
+		    msb_v1_v2 = msb<float>(msb_v1_v2);
+		return msb_v1_v2;
+	}
+
+	template <>
+	inline reg msb<int16_t>(const reg v1) {
+#ifdef _MSC_VER
+#pragma warning( disable : 4309 )
+#endif
+		const reg msb_mask = set1<int16_t>(0x8000);
+		return andb<int16_t>(v1, msb_mask);
+#ifdef _MSC_VER
+#pragma warning( default : 4309 )
+#endif
+	}
+
+	template <>
+	inline reg msb<int8_t>(const reg v1) {
+#ifdef _MSC_VER
+#pragma warning( disable : 4309 )
+#endif
+		// msb_mask = 10000000 // 8 bits
+		const reg msb_mask = set1<int8_t>(0x80);
+#ifdef _MSC_VER
+#pragma warning( default : 4309 )
+#endif
+		// indices = 7  6  5  4  3  2  1  0
+		// mask    = 1  0  0  0  0  0  0  0
+		// v1      = h  g  f  e  d  c  b  a
+		// res     = h  0  0  0  0  0  0  0
+		return andb<int8_t>(v1, msb_mask);
+	}
+
+	template <>
+	inline reg msb<int16_t>(const reg v1, const reg v2) {
+		reg msb_v1_v2 = xorb<int16_t>(v1, v2);
+		    msb_v1_v2 = msb<int16_t>(msb_v1_v2);
+		return msb_v1_v2;
+	}
+
+	template <>
+	inline reg msb<int8_t>(const reg v1, const reg v2) {
+		reg msb_v1_v2 = xorb<int8_t>(v1, v2);
+		    msb_v1_v2 = msb<int8_t>(msb_v1_v2);
+		return msb_v1_v2;
+	}
+
+	// ----------------------------------------------------------------------------------------------------------- sign
+	template <>
+	inline msk sign<double>(const reg v1) {
+		return cmplt<double>(v1, set0<double>());
+	}
+
+	template <>
+	inline msk sign<float>(const reg v1) {
+		return cmplt<float>(v1, set0<float>());
+	}
+
+	template <>
+	inline msk sign<int64_t>(const reg v1) {
+		return cmpgt<int64_t>(set0<int64_t>(), v1);
+	}
+
+	template <>
+	inline msk sign<int32_t>(const reg v1) {
+		return cmpgt<int32_t>(set0<int32_t>(), v1);
+	}
+
+	template <>
+	inline msk sign<int16_t>(const reg v1) {
+		return cmpgt<int16_t>(set0<int16_t>(), v1);
+	}
+
+	template <>
+	inline msk sign<int8_t>(const reg v1) {
+		return cmpgt<int8_t>(set0<int8_t>(), v1);
+	}
+
+	// ------------------------------------------------------------------------------------------------------------ neg
+	template <>
+	inline reg neg<double>(const reg v1, const reg v2) {
+		return xorb<double>(v1, msb<double>(v2));
+	}
+
+	template <>
+	inline reg neg<double>(const reg v1, const msk v2) {
+		return neg<double>(v1, toreg<8>(v2));
+	}
+
+	template <>
+	inline reg neg<float>(const reg v1, const reg v2) {
+		return xorb<float>(v1, msb<float>(v2));
+	}
+
+	template <>
+	inline reg neg<float>(const reg v1, const msk v2) {
+		return neg<float>(v1, toreg<16>(v2));
+	}
+
+	template <>
+	inline reg neg<int64_t>(const reg v1, const reg v2) {
+		reg neg_v1 = mipp::sub<int64_t>(mipp::set0<int64_t>(), v1);
+		reg v2_2   = mipp::orb<int64_t>(v2, set1<int64_t>(1)); // hack to avoid -0 case
+		return mipp::blend<int64_t>(neg_v1, v1, mipp::cmplt<int64_t>(v2_2, set0<int64_t>()));
+	}
+
+	template <>
+	inline reg neg<int64_t>(const reg v1, const msk v2) {
+		return neg<int64_t>(v1, toreg<8>(v2));
+	}
+
+	template <>
+	inline reg neg<int32_t>(const reg v1, const reg v2) {
+		reg neg_v1 = mipp::sub<int32_t>(mipp::set0<int32_t>(), v1);
+		reg v2_2   = mipp::orb<int32_t>(v2, set1<int32_t>(1)); // hack to avoid -0 case
+		return mipp::blend<int32_t>(neg_v1, v1, mipp::cmplt<int32_t>(v2_2, set0<int32_t>()));
+	}
+
+	template <>
+	inline reg neg<int32_t>(const reg v1, const msk v2) {
+		return neg<int32_t>(v1, toreg<16>(v2));
+	}
+
+#if defined(__AVX512BW__)
+	template <>
+	inline reg neg<int16_t>(const reg v1, const reg v2) {
+		reg neg_v1 = mipp::sub<int16_t>(mipp::set0<int16_t>(), v1);
+		reg v2_2   = mipp::orb<int16_t>(v2, set1<int16_t>(1)); // hack to avoid -0 case
+		return mipp::blend<int16_t>(neg_v1, v1, mipp::cmplt<int16_t>(v2_2, set0<int16_t>()));
+	}
+
+	template <>
+	inline reg neg<int16_t>(const reg v1, const msk v2) {
+		return neg<int16_t>(v1, toreg<32>(v2));
+	}
+
+	template <>
+	inline reg neg<int8_t>(const reg v1, const reg v2) {
+		reg neg_v1 = mipp::sub<int8_t>(mipp::set0<int8_t>(), v1);
+		reg v2_2   = mipp::orb<int8_t>(v2, set1<int8_t>(1)); // hack to avoid -0 case
+		return mipp::blend<int8_t>(neg_v1, v1, mipp::cmplt<int8_t>(v2_2, set0<int8_t>()));
+	}
+
+	template <>
+	inline reg neg<int8_t>(const reg v1, const msk v2) {
+		return neg<int8_t>(v1, toreg<64>(v2));
+	}
+#endif
+
+	// ------------------------------------------------------------------------------------------------------------ abs
+	/* there is a bug in the GNU compiler, _mm512_abs_pd and _mm512_abs_ps are not defined...
+	template <>
+	inline reg abs<double>(const reg v1) {
+		return _mm512_castpd_ps(_mm512_abs_pd(_mm512_castps_pd(v1)));
+	}
+
+	template <>
+	inline reg abs<float>(const reg v1) {
+		return _mm512_abs_ps(v1);
+	}
+	*/
+
+	template <>
+	inline reg abs<double>(const reg v1) {
+		// abs_mask = 0111111111111111111111111111111111111111111111111111111111111111 // 64 bits
+		const reg abs_mask = set1<int64_t>(0x7FFFFFFFFFFFFFFF);
+
+		// indices = 63 62 61 60 59 58 57 56 55 54 53 52 51 50 49 48 47 46 45 44 43 42 41 40 39 38 37 36 35 34 33 32...
+		// mask    =  0  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1...
+		// v1      =  ù  €  è  é  à  &  z  y  x  w  v  u  t  s  r  q  p  o  n  m  l  k  j  i  h  g  f  e  d  c  b  a...
+		// v1      =  0  €  è  é  à  &  z  y  x  w  v  u  t  s  r  q  p  o  n  m  l  k  j  i  h  g  f  e  d  c  b  a...
+		// res is the sign because the first bit is the sign bit (0 = positive, 1 = negative)
+		return andb<double>(v1, abs_mask);
+	}
+
+	template <>
+	inline reg abs<float>(const reg v1) {
+		// abs_mask = 01111111111111111111111111111111 // 32 bits
+		const reg abs_mask = set1<int32_t>(0x7FFFFFFF);
+
+		// indices = 31 30 29 28 27 26 25 24 23 22 21 20 19 18 17 16 15 14 13 12 11 10  9  8  7  6  5  4  3  2  1  0
+		// mask    =  0  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1
+		// v1      =  ù  €  è  é  à  &  z  y  x  w  v  u  t  s  r  q  p  o  n  m  l  k  j  i  h  g  f  e  d  c  b  a
+		// v1      =  0  €  è  é  à  &  z  y  x  w  v  u  t  s  r  q  p  o  n  m  l  k  j  i  h  g  f  e  d  c  b  a
+		// res is the sign because the first bit is the sign bit (0 = positive, 1 = negative)
+		return andb<float>(v1, abs_mask);
+	}
+
+#if defined(__AVX512F__)
+	template <>
+	inline reg abs<int64_t>(const reg v1) {
+		return _mm512_castsi512_ps(_mm512_abs_epi64(_mm512_castps_si512(v1)));
+	}
+
+	template <>
+	inline reg abs<int32_t>(const reg v1) {
+		return _mm512_castsi512_ps(_mm512_abs_epi32(_mm512_castps_si512(v1)));
+	}
+#endif
+
+#if defined(__AVX512BW__)
+	template <>
+	inline reg abs<int16_t>(const reg v1) {
+		return _mm512_castsi512_ps(_mm512_abs_epi16(_mm512_castps_si512(v1)));
+	}
+
+	template <>
+	inline reg abs<int8_t>(const reg v1) {
+		return _mm512_castsi512_ps(_mm512_abs_epi8(_mm512_castps_si512(v1)));
+	}
+#endif
+
+	// ----------------------------------------------------------------------------------------------------------- sqrt
+#if defined(__AVX512F__)
+	template <>
+	inline reg sqrt<double>(const reg v1) {
+		return _mm512_castpd_ps(_mm512_sqrt_pd(_mm512_castps_pd(v1)));
+	}
+
+	template <>
+	inline reg sqrt<float>(const reg v1) {
+		return _mm512_sqrt_ps(v1);
+	}
+#endif
+
+	// ---------------------------------------------------------------------------------------------------------- rsqrt
+#if defined(__AVX512ER__)
+	template <>
+	inline reg rsqrt<double>(const reg v1) {
+		return _mm512_castpd_ps(_mm512_rsqrt28_pd(_mm512_castps_pd(v1)));
+	}
+
+	template <>
+	inline reg rsqrt<float>(const reg v1) {
+		return _mm512_rsqrt28_ps(v1);
+	}
+
+#elif defined(__AVX512F__)
+	template <>
+	inline reg rsqrt<double>(const reg v1) {
+		return _mm512_castpd_ps(_mm512_rsqrt14_pd(_mm512_castps_pd(v1)));
+	}
+
+	template <>
+	inline reg rsqrt<float>(const reg v1) {
+		return _mm512_rsqrt14_ps(v1);
+	}
+
+#elif defined(__MIC__) || defined(__KNCNI__)
+	template <>
+	inline reg rsqrt<float>(const reg v1) {
+		return _mm512_rsqrt23_ps(v1);
+	}
+#endif
+
+	// ------------------------------------------------------------------------------------------------------------ log
+#if defined(__AVX512F__)
+#if defined(__INTEL_COMPILER) || defined(__ICL) || defined(__ICC)
+	template <>
+	inline reg log<double>(const reg v) {
+		return _mm512_castpd_ps(_mm512_log_pd(_mm512_castps_pd(v)));
+	}
+
+	template <>
+	inline reg log<float>(const reg v) {
+		return _mm512_log_ps(v);
+	}
+#else
+	template <>
+	inline reg log<float>(const reg v) {
+		auto v_bis = v;
+		return log512_ps(v_bis);
+	}
+#endif
+#endif
+
+	// ------------------------------------------------------------------------------------------------------------ exp
+#if defined(__AVX512F__)
+#if defined(__INTEL_COMPILER) || defined(__ICL) || defined(__ICC)
+	template <>
+	inline reg exp<double>(const reg v) {
+		return _mm512_castpd_ps(_mm512_exp_pd(_mm512_castps_pd(v)));
+	}
+
+	template <>
+	inline reg exp<float>(const reg v) {
+		return _mm512_exp_ps(v);
+	}
+#else
+	template <>
+	inline reg exp<float>(const reg v) {
+		auto v_bis = v;
+		return exp512_ps(v_bis);
+	}
+#endif
+#endif
+
+	// ------------------------------------------------------------------------------------------------------------ sin
+#if defined(__AVX512F__)
+#if defined(__INTEL_COMPILER) || defined(__ICL) || defined(__ICC)
+	template <>
+	inline reg sin<double>(const reg v) {
+		return _mm512_castpd_ps(_mm512_sin_pd(_mm512_castps_pd(v)));
+	}
+
+	template <>
+	inline reg sin<float>(const reg v) {
+		return _mm512_sin_ps(v);
+	}
+#else
+	template <>
+	inline reg sin<float>(const reg v) {
+		auto v_bis = v;
+		return sin512_ps(v_bis);
+	}
+#endif
+#endif
+
+	// ------------------------------------------------------------------------------------------------------------ cos
+#if defined(__AVX512F__)
+#if defined(__INTEL_COMPILER) || defined(__ICL) || defined(__ICC)
+	template <>
+	inline reg cos<double>(const reg v) {
+		return _mm512_castpd_ps(_mm512_cos_pd(_mm512_castps_pd(v)));
+	}
+
+	template <>
+	inline reg cos<float>(const reg v) {
+		return _mm512_cos_ps(v);
+	}
+#else
+	template <>
+	inline reg cos<float>(const reg v) {
+		auto v_bis = v;
+		return cos512_ps(v_bis);
+	}
+#endif
+#endif
+
+	// --------------------------------------------------------------------------------------------------------- sincos
+#if defined(__AVX512F__)
+#if defined(__INTEL_COMPILER) || defined(__ICL) || defined(__ICC)
+	template <>
+	inline void sincos<double>(const reg x, reg &s, reg &c) {
+		s = (reg)_mm512_sincos_pd((__m512d*) &c, (__m512d)x);
+	}
+
+	template <>
+	inline void sincos<float>(const reg x, reg &s, reg &c) {
+		s = _mm512_sincos_ps(&c, x);
+	}
+#else
+	template <>
+	inline void sincos<float>(const reg x, reg &s, reg &c) {
+		sincos512_ps(x, &s, &c);
+	}
+#endif
+#endif
+
+	// ---------------------------------------------------------------------------------------------------------- fmadd
+	template <>
+	inline reg fmadd<double>(const reg v1, const reg v2, const reg v3) {
+		return _mm512_castpd_ps(_mm512_fmadd_pd(_mm512_castps_pd(v1), _mm512_castps_pd(v2), _mm512_castps_pd(v3)));
+	}
+
+	template <>
+	inline reg fmadd<float>(const reg v1, const reg v2, const reg v3) {
+		return _mm512_fmadd_ps(v1, v2, v3);
+	}
+
+#if defined(__MIC__) || defined(__KNCNI__)
+	template <>
+	inline reg fmadd<int32_t>(const reg v1, const reg v2, const reg v3) {
+		return _mm512_castsi512_ps(_mm512_fmadd_epi32(_mm512_castps_si512(v1), _mm512_castps_si512(v2), _mm512_castps_si512(v3)));
+	}
+#endif
+
+	// --------------------------------------------------------------------------------------------------------- fnmadd
+	template <>
+	inline reg fnmadd<double>(const reg v1, const reg v2, const reg v3) {
+		return _mm512_castpd_ps(_mm512_fnmadd_pd(_mm512_castps_pd(v1), _mm512_castps_pd(v2), _mm512_castps_pd(v3)));
+	}
+
+	template <>
+	inline reg fnmadd<float>(const reg v1, const reg v2, const reg v3) {
+		return _mm512_fnmadd_ps(v1, v2, v3);
+	}
+
+	// ---------------------------------------------------------------------------------------------------------- fmsub
+	template <>
+	inline reg fmsub<double>(const reg v1, const reg v2, const reg v3) {
+		return _mm512_castpd_ps(_mm512_fmsub_pd(_mm512_castps_pd(v1), _mm512_castps_pd(v2), _mm512_castps_pd(v3)));
+	}
+
+	template <>
+	inline reg fmsub<float>(const reg v1, const reg v2, const reg v3) {
+		return _mm512_fmsub_ps(v1, v2, v3);
+	}
+
+	// --------------------------------------------------------------------------------------------------------- fnmsub
+	template <>
+	inline reg fnmsub<double>(const reg v1, const reg v2, const reg v3) {
+		return _mm512_castpd_ps(_mm512_fnmsub_pd(_mm512_castps_pd(v1), _mm512_castps_pd(v2), _mm512_castps_pd(v3)));
+	}
+
+	template <>
+	inline reg fnmsub<float>(const reg v1, const reg v2, const reg v3) {
+		return _mm512_fnmsub_ps(v1, v2, v3);
+	}
+
+	// ----------------------------------------------------------------------------------------------------------- lrot
+#ifdef __AVX512F__
+	template <>
+	inline reg lrot<double>(const reg v1) {
+		return _mm512_castpd_ps(_mm512_permutexvar_pd(_mm512_setr_epi64(1, 2, 3, 4, 5, 6, 7, 0), _mm512_castps_pd(v1)));
+	}
+
+	template <>
+	inline reg lrot<float>(const reg v1) {
+		return _mm512_permutexvar_ps(_mm512_setr_epi32(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0), v1);
+	}
+
+	template <>
+	inline reg lrot<int64_t>(const reg v1) {
+		return _mm512_castsi512_ps(_mm512_permutexvar_epi64(_mm512_setr_epi64(1, 2, 3, 4, 5, 6, 7, 0), _mm512_castps_si512(v1)));
+	}
+
+	template <>
+	inline reg lrot<int32_t>(const reg v1) {
+		return _mm512_castsi512_ps(_mm512_permutexvar_epi32(_mm512_setr_epi32(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0), _mm512_castps_si512(v1)));
+	}
+#endif
+
+#ifdef __AVX512BW__
+	template <>
+	inline reg lrot<int16_t>(const reg v1) {
+		return _mm512_castsi512_ps(_mm512_permutexvar_epi16(_mm512_setr_epi16( 1,  2,  3,  4,  5,  6,  7,  8,
+		                                                                       9, 10, 11, 12, 13, 14, 15, 16,
+		                                                                      17, 18, 19, 20, 21, 22, 23, 24,
+		                                                                      25, 26, 27, 28, 29, 30, 31,  0), _mm512_castps_si512(v1)));
+	}
+#endif
+
+#ifdef __AVX512VBMI__
+	template <>
+	inline reg lrot<int8_t>(const reg v1) {
+		return _mm512_castsi512_ps(_mm512_permutexvar_epi8(_mm512_setr_epi8( 1,  2,  3,  4,  5,  6,  7,  8,
+		                                                                     9, 10, 11, 12, 13, 14, 15, 16,
+		                                                                    17, 18, 19, 20, 21, 22, 23, 24,
+		                                                                    25, 26, 27, 28, 29, 30, 31, 32,
+		                                                                    33, 34, 35, 36, 37, 38, 39, 40,
+		                                                                    41, 42, 43, 44, 45, 46, 47, 48,
+		                                                                    49, 50, 51, 52, 53, 54, 55, 56,
+		                                                                    57, 58, 59, 60, 61, 62, 63,  0), _mm512_castps_si512(v1)));
+	}
+#endif
+
+	// ----------------------------------------------------------------------------------------------------------- rrot
+#ifdef __AVX512F__
+	template <>
+	inline reg rrot<double>(const reg v1) {
+		return _mm512_castpd_ps(_mm512_permutexvar_pd(_mm512_setr_epi64(7, 0, 1, 2, 3, 4, 5, 6), _mm512_castps_pd(v1)));
+	}
+
+	template <>
+	inline reg rrot<float>(const reg v1) {
+		return _mm512_permutexvar_ps(_mm512_setr_epi32(15, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14), v1);
+	}
+
+	template <>
+	inline reg rrot<int64_t>(const reg v1) {
+		return _mm512_castsi512_ps(_mm512_permutexvar_epi64(_mm512_setr_epi64(7, 0, 1, 2, 3, 4, 5, 6), _mm512_castps_si512(v1)));
+	}
+
+	template <>
+	inline reg rrot<int32_t>(const reg v1) {
+		return _mm512_castsi512_ps(_mm512_permutexvar_epi32(_mm512_setr_epi32(15, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14), _mm512_castps_si512(v1)));
+	}
+#endif
+
+#ifdef __AVX512BW__
+	template <>
+	inline reg rrot<int16_t>(const reg v1) {
+		return _mm512_castsi512_ps(_mm512_permutexvar_epi16(_mm512_setr_epi16(31,  0,  1,  2,  3,  4,  5,  6,
+		                                                                       7,  8,  9, 10, 11, 12, 13, 14,
+		                                                                      15, 16, 17, 18, 19, 20, 21, 22,
+		                                                                      23, 24, 25, 26, 27, 28, 29, 30), _mm512_castps_si512(v1)));
+	}
+#endif
+
+#ifdef __AVX512VBMI__
+	template <>
+	inline reg rrot<int8_t>(const reg v1) {
+		return _mm512_castsi512_ps(_mm512_permutexvar_epi8(_mm512_setr_epi8(63,  0,  1,  2,  3,  4,  5,  6,
+		                                                                     7,  8,  9, 10, 11, 12, 13, 14,
+		                                                                    15, 16, 17, 18, 19, 20, 21, 22,
+		                                                                    23, 24, 25, 26, 27, 28, 29, 30,
+		                                                                    31, 32, 33, 34, 35, 36, 37, 38,
+		                                                                    39, 40, 41, 42, 43, 44, 45, 46,
+		                                                                    47, 48, 49, 50, 51, 52, 53, 54,
+		                                                                    55, 56, 57, 58, 59, 60, 61, 62), _mm512_castps_si512(v1)));
+	}
+#endif
+
+	// ----------------------------------------------------------------------------------------------------------- div2
+	template <>
+	inline reg div2<float>(const reg v1) {
+		return mul<float>(v1, set1<float>(0.5f));
+	}
+
+	template <>
+	inline reg div2<double>(const reg v1) {
+		return mul<double>(v1, set1<double>(0.5));
+	}
+
+	template <>
+	inline reg div2<int64_t>(const reg v1) {
+//		return _mm512_castsi512_ps(_mm512_srai_epi32(_mm512_castps_si512(v1), 1)); // seems to do not work
+		reg abs_v1 = abs<int64_t>(v1);
+		reg sh = rshift<int64_t>(abs_v1, 1);
+		sh = neg<int64_t>(sh, v1);
+		return sh;
+	}
+
+	template <>
+	inline reg div2<int32_t>(const reg v1) {
+//		return _mm512_castsi512_ps(_mm512_srai_epi32(_mm512_castps_si512(v1), 1)); // seems to do not work
+		reg abs_v1 = abs<int32_t>(v1);
+		reg sh = rshift<int32_t>(abs_v1, 1);
+		sh = neg<int32_t>(sh, v1);
+		return sh;
+	}
+
+#if defined(__AVX512BW__)
+	template <>
+	inline reg div2<int16_t>(const reg v1) {
+//		return _mm512_castsi512_ps(_mm512_srai_epi16(_mm512_castps_si512(v1), 1)); // seems to do not work
+		reg abs_v1 = abs<int16_t>(v1);
+		reg sh = rshift<int16_t>(abs_v1, 1);
+		sh = neg<int16_t>(sh, v1);
+		return sh;
+	}
+
+	template <>
+	inline reg div2<int8_t>(const reg v1) {
+		reg abs_v1 = abs<int8_t>(v1);
+		reg sh16 = rshift<int16_t>(abs_v1, 1);
+		sh16 = andnb<int8_t>(set1<int8_t>(0x80), sh16);
+		reg sh8 = neg<int8_t>(sh16, v1);
+		return sh8;
+	}
+#endif
+
+	// ----------------------------------------------------------------------------------------------------------- div4
+	template <>
+	inline reg div4<float>(const reg v1) {
+		return mul<float>(v1, set1<float>(0.25f));
+	}
+
+	template <>
+	inline reg div4<double>(const reg v1) {
+		return mul<double>(v1, set1<double>(0.25));
+	}
+
+	template <>
+	inline reg div4<int64_t>(const reg v1) {
+		// return _mm512_castsi512_ps(_mm512_srai_epi64(_mm512_castps_si512(v1), 2)); // seems to do not work
+		reg abs_v1 = abs<int64_t>(v1);
+		reg sh = rshift<int64_t>(abs_v1, 2);
+		sh = neg<int64_t>(sh, v1);
+		return sh;
+	}
+
+	template <>
+	inline reg div4<int32_t>(const reg v1) {
+		// return _mm512_castsi512_ps(_mm512_srai_epi32(_mm512_castps_si512(v1), 2)); // seems to do not work
+		reg abs_v1 = abs<int32_t>(v1);
+		reg sh = rshift<int32_t>(abs_v1, 2);
+		sh = neg<int32_t>(sh, v1);
+		return sh;
+	}
+
+#if defined(__AVX512BW__)
+	template <>
+	inline reg div4<int16_t>(const reg v1) {
+		// return _mm512_castsi512_ps(_mm512_srai_epi16(_mm512_castps_si512(v1), 2)); // seems to do not work
+		reg abs_v1 = abs<int16_t>(v1);
+		reg sh = rshift<int16_t>(abs_v1, 2);
+		sh = neg<int16_t>(sh, v1);
+		return sh;
+	}
+
+	template <>
+	inline reg div4<int8_t>(const reg v1) {
+		reg abs_v1 = abs<int8_t>(v1);
+		reg sh16 = rshift<int16_t>(abs_v1, 2);
+		sh16 = andnb<int8_t>(set1<int8_t>(0xc0), sh16);
+		reg sh8 = neg<int8_t>(sh16, v1);
+		return sh8;
+	}
+#endif
+
+	// ------------------------------------------------------------------------------------------------------------ sat
+	template <>
+	inline reg sat<float>(const reg v1, float min, float max) {
+		return mipp::min<float>(mipp::max<float>(v1, set1<float>(min)), set1<float>(max));
+	}
+
+	template <>
+	inline reg sat<double>(const reg v1, double min, double max) {
+		return mipp::min<double>(mipp::max<double>(v1, set1<double>(min)), set1<double>(max));
+	}
+
+	template <>
+	inline reg sat<int64_t>(const reg v1, int64_t min, int64_t max) {
+		return mipp::min<int64_t>(mipp::max<int64_t>(v1, set1<int64_t>(min)), set1<int64_t>(max));
+	}
+
+	template <>
+	inline reg sat<int32_t>(const reg v1, int32_t min, int32_t max) {
+		return mipp::min<int32_t>(mipp::max<int32_t>(v1, set1<int32_t>(min)), set1<int32_t>(max));
+	}
+
+	template <>
+	inline reg sat<int16_t>(const reg v1, int16_t min, int16_t max) {
+		return mipp::min<int16_t>(mipp::max<int16_t>(v1, set1<int16_t>(min)), set1<int16_t>(max));
+	}
+
+	template <>
+	inline reg sat<int8_t>(const reg v1, int8_t min, int8_t max) {
+		return mipp::min<int8_t>(mipp::max<int8_t>(v1, set1<int8_t>(min)), set1<int8_t>(max));
+	}
+
+	// ---------------------------------------------------------------------------------------------------------- round
+#ifdef __AVX512F__
+	template <>
+	inline reg round<double>(const reg v) {
+		// TODO: not sure if it works
+		return _mm512_castpd_ps(_mm512_roundscale_round_pd(_mm512_castps_pd(v), 0, _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC));
+	}
+
+	template <>
+	inline reg round<float>(const reg v) {
+		// TODO: not sure if it works
+		return _mm512_roundscale_round_ps(v, 0, _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC);
+	}
+
+#elif defined(__MIC__) || defined(__KNCNI__)
+	template <>
+	inline reg round<float>(const reg v) {
+		return _mm512_round_ps(v, _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC, _MM_EXPADJ_NONE);
+	}
+#endif
+
+	// ------------------------------------------------------------------------------------------------------------ cvt
+#ifdef __AVX512DQ__
+	template <>
+	inline reg cvt<double,int64_t>(const reg v) {
+		return _mm512_castsi512_ps(_mm512_cvtpd_epi64(_mm512_castps_pd(v)));
+	}
+
+	template <>
+	inline reg cvt<int64_t,double>(const reg v) {
+		return _mm512_castpd_ps(_mm512_cvtepi64_pd(_mm512_castps_si512(v)));
+	}
+#endif
+
+#ifdef __AVX512F__
+	template <>
+	inline reg cvt<float,int32_t>(const reg v) {
+		return _mm512_castsi512_ps(_mm512_cvtps_epi32(v));
+	}
+
+	template <>
+	inline reg cvt<int32_t,float>(const reg v) {
+		return _mm512_cvtepi32_ps(_mm512_castps_si512(v));
+	}
+
+	template <>
+	inline reg cvt<int16_t,int32_t>(const reg_2 v) {
+		return _mm512_castsi512_ps(_mm512_cvtepi16_epi32(_mm256_castps_si256(v)));
+	}
+
+	template <>
+	inline reg cvt<int32_t,int64_t>(const reg_2 v) {
+		return _mm512_castsi512_ps(_mm512_cvtepi32_epi64(_mm256_castps_si256(v)));
+	}
+#endif
+
+#ifdef __AVX512BW__
+	template <>
+	inline reg cvt<int8_t,int16_t>(const reg_2 v) {
+		return _mm512_castsi512_ps(_mm512_cvtepi8_epi16(_mm256_castps_si256(v)));
+	}
+#endif
+
+	// ----------------------------------------------------------------------------------------------------------- pack
+#ifdef __AVX512BW__
+	template <>
+	inline reg pack<int32_t,int16_t>(const reg v1, const reg v2) {
+		auto mask =_mm512_set_epi64(7,5,3,1,6,4,2,0);
+		return _mm512_castsi512_ps(_mm512_permutexvar_epi64(mask, _mm512_packs_epi32(_mm512_castps_si512(v1),
+		                                                                             _mm512_castps_si512(v2))));
+	}
+
+	template <>
+	inline reg pack<int16_t,int8_t>(const reg v1, const reg v2) {
+		auto mask =_mm512_set_epi64(7,5,3,1,6,4,2,0);
+		return _mm512_castsi512_ps(_mm512_permutexvar_epi64(mask, _mm512_packs_epi16(_mm512_castps_si512(v1),
+		                                                                             _mm512_castps_si512(v2))));
+	}
+#endif
+
+	// ---------------------------------------------------------------------------------------------------------- testz
+#if defined(__AVX512F__) || defined(__MIC__) || defined(__KNCNI__)
+	template <>
+	inline bool testz<int64_t>(const reg v1, const reg v2) {
+		auto msk = mipp::cmpneq<int64_t>(mipp::andb<int64_t>(v1, v2), mipp::set0<int64_t>());
+		return _mm512_kortestz(msk, mipp::set0<8>());
+	}
+
+	template <>
+	inline bool testz<int32_t>(const reg v1, const reg v2) {
+		auto msk = mipp::cmpneq<int32_t>(mipp::andb<int32_t>(v1, v2), mipp::set0<int32_t>());
+		return _mm512_kortestz(msk, mipp::set0<16>());
+	}
+
+	template <>
+	inline bool testz<int64_t>(const reg v1) {
+		auto msk = mipp::cmpneq<int64_t>(v1, mipp::set0<int64_t>());
+		return _mm512_kortestz(msk, mipp::set0<8>());
+	}
+
+	template <>
+	inline bool testz<int32_t>(const reg v1) {
+		auto msk = mipp::cmpneq<int32_t>(v1, mipp::set0<int32_t>());
+		return _mm512_kortestz(msk, mipp::set0<16>());
+	}
+#endif
+
+#if defined(__AVX512BW__)
+	template <>
+	inline bool testz<int16_t>(const reg v1, const reg v2) {
+		auto msk = mipp::cmpneq<int16_t>(mipp::andb<int16_t>(v1, v2), mipp::set0<int16_t>());
+		// return _mm512_kortestz(msk, mipp::set0<32>());
+		return (uint64_t)msk == 0;
+	}
+
+	template <>
+	inline bool testz<int8_t>(const reg v1, const reg v2) {
+		auto msk = mipp::cmpneq<int8_t>(mipp::andb<int8_t>(v1, v2), mipp::set0<int8_t>());
+		// return _mm512_kortestz(msk, mipp::set0<64>());
+		return (uint64_t)msk == 0;
+	}
+
+	template <>
+	inline bool testz<int16_t>(const reg v1) {
+		auto msk = mipp::cmpneq<int16_t>(v1, mipp::set0<int16_t>());
+		// return _mm512_kortestz(msk, mipp::set0<32>());
+		return (uint64_t)msk == 0;
+	}
+
+	template <>
+	inline bool testz<int8_t>(const reg v1) {
+		auto msk = mipp::cmpneq<int8_t>(v1, mipp::set0<int8_t>());
+		// return _mm512_kortestz(msk, mipp::set0<64>());
+		return (uint64_t)msk == 0;
+	}
+#endif
+
+	// --------------------------------------------------------------------------------------------------- testz (mask)
+#if defined(__AVX512F__) || defined(__MIC__) || defined(__KNCNI__)
+	template <>
+	inline bool testz<8>(const msk v1, const msk v2) {
+		return _mm512_kortestz(mipp::andb<8>(v1, v2), mipp::set0<8>());
+	}
+
+	template <>
+	inline bool testz<16>(const msk v1, const msk v2) {
+		return _mm512_kortestz(mipp::andb<16>(v1, v2), mipp::set0<16>());
+	}
+
+	template <>
+	inline bool testz<8>(const msk v1) {
+		return _mm512_kortestz(v1, mipp::set0<8>());
+	}
+
+	template <>
+	inline bool testz<16>(const msk v1) {
+		return _mm512_kortestz(v1, mipp::set0<16>());
+	}
+#endif
+
+#if defined(__AVX512BW__)
+	template <>
+	inline bool testz<32>(const msk v1, const msk v2) {
+		// return _mm512_kortestz(mipp::andb<32>(v1, v2), mipp::set0<32>());
+		return ((uint64_t)v1 & (uint64_t)v2) == 0;
+	}
+
+	template <>
+	inline bool testz<64>(const msk v1, const msk v2) {
+		// return _mm512_kortestz(mipp::andb<64>(v1, v2), mipp::set0<64>());
+		return ((uint64_t)v1 & (uint64_t)v2) == 0;
+	}
+
+	template <>
+	inline bool testz<32>(const msk v1) {
+		// return _mm512_kortestz(v1, mipp::set0<32>());
+		return (uint64_t)v1 == 0;
+	}
+
+	template <>
+	inline bool testz<64>(const msk v1) {
+		// return _mm512_kortestz(v1, mipp::set0<64>());
+		return (uint64_t)v1 == 0;
+	}
+#endif
+
+	// ------------------------------------------------------------------------------------------------------ reduction
+#if defined(__AVX512F__)
+	template <red_op<double> OP>
+	struct _reduction<double,OP>
+	{
+		static reg apply(const reg v1) {
+			auto val = v1;
+			val = OP(val, _mm512_permutexvar_ps(_mm512_set_epi32( 7, 6, 5, 4, 3, 2, 1, 0,15,14,13,12,11,10,9,8), val)); // only AVX512F (for KNCI use _mm512_permute4f128_epi32)
+			val = OP(val, _mm512_permutexvar_ps(_mm512_set_epi32(11,10, 9, 8,15,14,13,12, 3, 2, 1, 0, 7, 6,5,4), val)); // only AVX512F (for KNCI use _mm512_permute4f128_epi32)
+//			val = OP(val, _mm512_permutexvar_ps(_mm512_set_epi32(13,12,15,14, 9, 8,11,10, 5, 4, 7, 6, 1, 0,3,2), val)); // only AVX512F
+			val = OP(val, _mm512_castsi512_ps(_mm512_shuffle_epi32(_mm512_castps_si512(val), _MM_PERM_ENUM(_MM_SHUFFLE(1,0,3,2))))); // KNCI compatible
+			return val;
+		}
+	};
+
+	template <Red_op<double> OP>
+	struct _Reduction<double,OP>
+	{
+		static const Reg<double> apply(const Reg<double> v1) {
+			auto val = v1;
+			val = OP(val, Reg<double>(_mm512_permutexvar_ps(_mm512_set_epi32( 7, 6, 5, 4, 3, 2, 1, 0,15,14,13,12,11,10,9,8), val.r))); // only AVX512F (for KNCI use _mm512_permute4f128_epi32)
+			val = OP(val, Reg<double>(_mm512_permutexvar_ps(_mm512_set_epi32(11,10, 9, 8,15,14,13,12, 3, 2, 1, 0, 7, 6,5,4), val.r))); // only AVX512F (for KNCI use _mm512_permute4f128_epi32)
+//			val = OP(val, Reg<double>(_mm512_permutexvar_ps(_mm512_set_epi32(13,12,15,14, 9, 8,11,10, 5, 4, 7, 6, 1, 0,3,2), val.r))); // only AVX512F
+			val = OP(val, Reg<double>(_mm512_castsi512_ps(_mm512_shuffle_epi32(_mm512_castps_si512(val.r), _MM_PERM_ENUM(_MM_SHUFFLE(1,0,3,2)))))); // KNCI compatible
+			return val;
+		}
+	};
+
+	template <red_op<float> OP>
+	struct _reduction<float,OP>
+	{
+		static reg apply(const reg v1) {
+			auto val = v1;
+			val = OP(val, _mm512_permutexvar_ps(_mm512_set_epi32( 7, 6, 5, 4, 3, 2, 1, 0,15,14,13,12,11,10,9,8), val)); // only AVX512F (for KNCI use _mm512_permute4f128_epi32)
+			val = OP(val, _mm512_permutexvar_ps(_mm512_set_epi32(11,10, 9, 8,15,14,13,12, 3, 2, 1, 0, 7, 6,5,4), val)); // only AVX512F (for KNCI use _mm512_permute4f128_epi32)
+//			val = OP(val, _mm512_permutexvar_ps(_mm512_set_epi32(13,12,15,14, 9, 8,11,10, 5, 4, 7, 6, 1, 0,3,2), val)); // only AVX512F
+			val = OP(val, _mm512_castsi512_ps(_mm512_shuffle_epi32(_mm512_castps_si512(val), _MM_PERM_ENUM(_MM_SHUFFLE(1,0,3,2))))); // KNCI compatible
+//			val = OP(val, _mm512_permutexvar_ps(_mm512_set_epi32(14,15,12,13,10,11, 8, 9, 6, 7, 4, 5, 2, 3,0,1), val)); // only AVX512F
+			val = OP(val, _mm512_castsi512_ps(_mm512_shuffle_epi32(_mm512_castps_si512(val), _MM_PERM_ENUM(_MM_SHUFFLE(2,3,0,1))))); // KNCI compatible
+			return val;
+		}
+	};
+
+	template <Red_op<float> OP>
+	struct _Reduction<float,OP>
+	{
+		static Reg<float> apply(const Reg<float> v1) {
+			auto val = v1;
+			val = OP(val, Reg<float>(_mm512_permutexvar_ps(_mm512_set_epi32( 7, 6, 5, 4, 3, 2, 1, 0,15,14,13,12,11,10,9,8), val.r))); // only AVX512F (for KNCI use _mm512_permute4f128_epi32)
+			val = OP(val, Reg<float>(_mm512_permutexvar_ps(_mm512_set_epi32(11,10, 9, 8,15,14,13,12, 3, 2, 1, 0, 7, 6,5,4), val.r))); // only AVX512F (for KNCI use _mm512_permute4f128_epi32)
+//			val = OP(val, Reg<float>(_mm512_permutexvar_ps(_mm512_set_epi32(13,12,15,14, 9, 8,11,10, 5, 4, 7, 6, 1, 0,3,2), val.r))); // only AVX512F
+			val = OP(val, Reg<float>(_mm512_castsi512_ps(_mm512_shuffle_epi32(_mm512_castps_si512(val.r), _MM_PERM_ENUM(_MM_SHUFFLE(1,0,3,2)))))); // KNCI compatible
+//			val = OP(val, Reg<float>(_mm512_permutexvar_ps(_mm512_set_epi32(14,15,12,13,10,11, 8, 9, 6, 7, 4, 5, 2, 3,0,1), val.r))); // only AVX512F
+			val = OP(val, Reg<float>(_mm512_castsi512_ps(_mm512_shuffle_epi32(_mm512_castps_si512(val.r), _MM_PERM_ENUM(_MM_SHUFFLE(2,3,0,1)))))); // KNCI compatible
+			return val;
+		}
+	};
+
+	template <red_op<int64_t> OP>
+	struct _reduction<int64_t,OP>
+	{
+		static reg apply(const reg v1) {
+			auto val = v1;
+			val = OP(val, _mm512_permutexvar_ps(_mm512_set_epi32( 7, 6, 5, 4, 3, 2, 1, 0,15,14,13,12,11,10,9,8), val)); // only AVX512F (for KNCI use _mm512_permute4f128_epi32)
+			val = OP(val, _mm512_permutexvar_ps(_mm512_set_epi32(11,10, 9, 8,15,14,13,12, 3, 2, 1, 0, 7, 6,5,4), val)); // only AVX512F (for KNCI use _mm512_permute4f128_epi32)
+//			val = OP(val, _mm512_permutexvar_ps(_mm512_set_epi32(13,12,15,14, 9, 8,11,10, 5, 4, 7, 6, 1, 0,3,2), val)); // only AVX512F
+			val = OP(val, _mm512_castsi512_ps(_mm512_shuffle_epi32(_mm512_castps_si512(val), _MM_PERM_ENUM(_MM_SHUFFLE(1,0,3,2))))); // KNCI compatible
+			return val;
+		}
+	};
+
+	template <Red_op<int64_t> OP>
+	struct _Reduction<int64_t,OP>
+	{
+		static const Reg<int64_t> apply(const Reg<int64_t> v1) {
+			auto val = v1;
+			val = OP(val, Reg<int64_t>(_mm512_permutexvar_ps(_mm512_set_epi32( 7, 6, 5, 4, 3, 2, 1, 0,15,14,13,12,11,10,9,8), val.r))); // only AVX512F (for KNCI use _mm512_permute4f128_epi32)
+			val = OP(val, Reg<int64_t>(_mm512_permutexvar_ps(_mm512_set_epi32(11,10, 9, 8,15,14,13,12, 3, 2, 1, 0, 7, 6,5,4), val.r))); // only AVX512F (for KNCI use _mm512_permute4f128_epi32)
+//			val = OP(val, Reg<int64_t>(_mm512_permutexvar_ps(_mm512_set_epi32(13,12,15,14, 9, 8,11,10, 5, 4, 7, 6, 1, 0,3,2), val.r))); // only AVX512F
+			val = OP(val, Reg<int64_t>(_mm512_castsi512_ps(_mm512_shuffle_epi32(_mm512_castps_si512(val.r), _MM_PERM_ENUM(_MM_SHUFFLE(1,0,3,2)))))); // KNCI compatible
+			return val;
+		}
+	};
+
+	template <red_op<int32_t> OP>
+	struct _reduction<int32_t,OP>
+	{
+		static reg apply(const reg v1) {
+			auto val = v1;
+			val = OP(val, _mm512_permutexvar_ps(_mm512_set_epi32( 7, 6, 5, 4, 3, 2, 1, 0,15,14,13,12,11,10,9,8), val)); // only AVX512F (for KNCI use _mm512_permute4f128_epi32)
+			val = OP(val, _mm512_permutexvar_ps(_mm512_set_epi32(11,10, 9, 8,15,14,13,12, 3, 2, 1, 0, 7, 6,5,4), val)); // only AVX512F (for KNCI use _mm512_permute4f128_epi32)
+//			val = OP(val, _mm512_permutexvar_ps(_mm512_set_epi32(13,12,15,14, 9, 8,11,10, 5, 4, 7, 6, 1, 0,3,2), val)); // only AVX512F
+			val = OP(val, _mm512_castsi512_ps(_mm512_shuffle_epi32(_mm512_castps_si512(val), _MM_PERM_ENUM(_MM_SHUFFLE(1,0,3,2))))); // KNCI compatible
+//			val = OP(val, _mm512_permutexvar_ps(_mm512_set_epi32(14,15,12,13,10,11, 8, 9, 6, 7, 4, 5, 2, 3,0,1), val)); // only AVX512F
+			val = OP(val, _mm512_castsi512_ps(_mm512_shuffle_epi32(_mm512_castps_si512(val), _MM_PERM_ENUM(_MM_SHUFFLE(2,3,0,1))))); // KNCI compatible
+			return val;
+		}
+	};
+
+	template <Red_op<int32_t> OP>
+	struct _Reduction<int32_t,OP>
+	{
+		static Reg<int32_t> apply(const Reg<int32_t> v1) {
+			auto val = v1;
+			val = OP(val, Reg<int32_t>(_mm512_permutexvar_ps(_mm512_set_epi32( 7, 6, 5, 4, 3, 2, 1, 0,15,14,13,12,11,10,9,8), val.r))); // only AVX512F (for KNCI use _mm512_permute4f128_epi32)
+			val = OP(val, Reg<int32_t>(_mm512_permutexvar_ps(_mm512_set_epi32(11,10, 9, 8,15,14,13,12, 3, 2, 1, 0, 7, 6,5,4), val.r))); // only AVX512F (for KNCI use _mm512_permute4f128_epi32)
+//			val = OP(val, Reg<int32_t>(_mm512_permutexvar_ps(_mm512_set_epi32(13,12,15,14, 9, 8,11,10, 5, 4, 7, 6, 1, 0,3,2), val.r))); // only AVX512F
+			val = OP(val, Reg<int32_t>(_mm512_castsi512_ps(_mm512_shuffle_epi32(_mm512_castps_si512(val.r), _MM_PERM_ENUM(_MM_SHUFFLE(1,0,3,2)))))); // KNCI compatible
+//			val = OP(val, Reg<int32_t>(_mm512_permutexvar_ps(_mm512_set_epi32(14,15,12,13,10,11, 8, 9, 6, 7, 4, 5, 2, 3,0,1), val.r))); // only AVX512F
+			val = OP(val, Reg<int32_t>(_mm512_castsi512_ps(_mm512_shuffle_epi32(_mm512_castps_si512(val.r), _MM_PERM_ENUM(_MM_SHUFFLE(2,3,0,1)))))); // KNCI compatible
+			return val;
+		}
+	};
+
+#if defined(__AVX512BW__)
+	template <red_op<int16_t> OP>
+	struct _reduction<int16_t,OP>
+	{
+		static reg apply(const reg v1) {
+//			__m512i mask_no = _mm512_set_epi8(63,62,61,60,59,58,57,56,55,54,53,52,51,50,49,48,
+//			                                  47,46,45,44,43,42,41,40,39,38,37,36,35,34,33,32,
+//			                                  31,30,29,28,27,26,25,24,23,22,21,20,19,18,17,16,
+//			                                  15,14,13,12,11,10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0);
+
+			__m512i mask_16 = _mm512_set_epi8(61,60,63,62,57,56,59,58,53,52,55,54,49,48,51,50,
+			                                  45,44,47,46,41,40,43,42,37,36,39,38,33,32,35,34,
+			                                  29,28,31,30,25,24,27,26,21,20,23,22,17,16,19,18,
+			                                  13,12,15,14, 9, 8,11,10, 5, 4, 7, 6, 1, 0, 3, 2);
+
+			auto val = v1;
+			val = OP(val, _mm512_permutexvar_ps(_mm512_set_epi32( 7, 6, 5, 4, 3, 2, 1, 0,15,14,13,12,11,10,9,8), val)); // only AVX512F (for KNCI use _mm512_permute4f128_epi32)
+			val = OP(val, _mm512_permutexvar_ps(_mm512_set_epi32(11,10, 9, 8,15,14,13,12, 3, 2, 1, 0, 7, 6,5,4), val)); // only AVX512F (for KNCI use _mm512_permute4f128_epi32)
+//			val = OP(val, _mm512_permutexvar_ps(_mm512_set_epi32(13,12,15,14, 9, 8,11,10, 5, 4, 7, 6, 1, 0,3,2), val)); // only AVX512F
+			val = OP(val, _mm512_castsi512_ps(_mm512_shuffle_epi32(_mm512_castps_si512(val), _MM_PERM_ENUM(_MM_SHUFFLE(1,0,3,2))))); // KNCI compatible
+//			val = OP(val, _mm512_permutexvar_ps(_mm512_set_epi32(14,15,12,13,10,11, 8, 9, 6, 7, 4, 5, 2, 3,0,1), val)); // only AVX512F
+			val = OP(val, _mm512_castsi512_ps(_mm512_shuffle_epi32(_mm512_castps_si512(val), _MM_PERM_ENUM(_MM_SHUFFLE(2,3,0,1))))); // KNCI compatible
+			val = OP(val, _mm512_castsi512_ps(_mm512_shuffle_epi8(_mm512_castps_si512(val), mask_16))); // only AVX512BW
+			return val;
+		}
+	};
+
+	template <Red_op<int16_t> OP>
+	struct _Reduction<int16_t,OP>
+	{
+		static Reg<int16_t> apply(const Reg<int16_t> v1) {
+			__m512i mask_16 = _mm512_set_epi8(61,60,63,62,57,56,59,58,53,52,55,54,49,48,51,50,
+			                                  45,44,47,46,41,40,43,42,37,36,39,38,33,32,35,34,
+			                                  29,28,31,30,25,24,27,26,21,20,23,22,17,16,19,18,
+			                                  13,12,15,14, 9, 8,11,10, 5, 4, 7, 6, 1, 0, 3, 2);
+
+			auto val = v1;
+			val = OP(val, Reg<int16_t>(_mm512_permutexvar_ps(_mm512_set_epi32( 7, 6, 5, 4, 3, 2, 1, 0,15,14,13,12,11,10,9,8), val.r))); // only AVX512F (for KNCI use _mm512_permute4f128_epi32)
+			val = OP(val, Reg<int16_t>(_mm512_permutexvar_ps(_mm512_set_epi32(11,10, 9, 8,15,14,13,12, 3, 2, 1, 0, 7, 6,5,4), val.r))); // only AVX512F (for KNCI use _mm512_permute4f128_epi32)
+//			val = OP(val, Reg<int16_t>(_mm512_permutexvar_ps(_mm512_set_epi32(13,12,15,14, 9, 8,11,10, 5, 4, 7, 6, 1, 0,3,2), val.r))); // only AVX512F
+			val = OP(val, Reg<int16_t>(_mm512_castsi512_ps(_mm512_shuffle_epi32(_mm512_castps_si512(val.r), _MM_PERM_ENUM(_MM_SHUFFLE(1,0,3,2)))))); // KNCI compatible
+//			val = OP(val, Reg<int16_t>(_mm512_permutexvar_ps(_mm512_set_epi32(14,15,12,13,10,11, 8, 9, 6, 7, 4, 5, 2, 3,0,1), val.r))); // only AVX512F
+			val = OP(val, Reg<int16_t>(_mm512_castsi512_ps(_mm512_shuffle_epi32(_mm512_castps_si512(val.r), _MM_PERM_ENUM(_MM_SHUFFLE(2,3,0,1)))))); // KNCI compatible
+			val = OP(val, Reg<int16_t>(_mm512_castsi512_ps(_mm512_shuffle_epi8(_mm512_castps_si512(val.r), mask_16)))); // only AVX512BW
+			return val;
+		}
+	};
+
+	template <red_op<int8_t> OP>
+	struct _reduction<int8_t,OP>
+	{
+		static reg apply(const reg v1) {
+			__m512i mask_16 = _mm512_set_epi8(61,60,63,62,57,56,59,58,53,52,55,54,49,48,51,50,
+			                                  45,44,47,46,41,40,43,42,37,36,39,38,33,32,35,34,
+			                                  29,28,31,30,25,24,27,26,21,20,23,22,17,16,19,18,
+			                                  13,12,15,14, 9, 8,11,10, 5, 4, 7, 6, 1, 0, 3, 2);
+
+			__m512i mask_8  = _mm512_set_epi8(62,63,60,61,58,59,56,57,54,55,52,53,50,51,48,49,
+			                                  46,47,44,45,42,43,40,41,38,39,36,37,34,35,32,33,
+			                                  30,31,28,29,26,27,24,25,22,23,20,21,18,19,16,17,
+			                                  14,15,12,13,10,11, 8, 9, 6, 7, 4, 5, 2, 3, 0, 1);
+
+			auto val = v1;
+			val = OP(val, _mm512_permutexvar_ps(_mm512_set_epi32( 7, 6, 5, 4, 3, 2, 1, 0,15,14,13,12,11,10,9,8), val)); // only AVX512F (for KNCI use _mm512_permute4f128_epi32)
+			val = OP(val, _mm512_permutexvar_ps(_mm512_set_epi32(11,10, 9, 8,15,14,13,12, 3, 2, 1, 0, 7, 6,5,4), val)); // only AVX512F (for KNCI use _mm512_permute4f128_epi32)
+//			val = OP(val, _mm512_permutexvar_ps(_mm512_set_epi32(13,12,15,14, 9, 8,11,10, 5, 4, 7, 6, 1, 0,3,2), val)); // only AVX512F
+			val = OP(val, _mm512_castsi512_ps(_mm512_shuffle_epi32(_mm512_castps_si512(val), _MM_PERM_ENUM(_MM_SHUFFLE(1,0,3,2))))); // KNCI compatible
+//			val = OP(val, _mm512_permutexvar_ps(_mm512_set_epi32(14,15,12,13,10,11, 8, 9, 6, 7, 4, 5, 2, 3,0,1), val)); // only AVX512F
+			val = OP(val, _mm512_castsi512_ps(_mm512_shuffle_epi32(_mm512_castps_si512(val), _MM_PERM_ENUM(_MM_SHUFFLE(2,3,0,1))))); // KNCI compatible
+			val = OP(val, _mm512_castsi512_ps(_mm512_shuffle_epi8(_mm512_castps_si512(val), mask_16))); // only AVX512BW
+			val = OP(val, _mm512_castsi512_ps(_mm512_shuffle_epi8(_mm512_castps_si512(val), mask_8))); // only AVX512BW
+			return val;
+		}
+	};
+
+	template <Red_op<int8_t> OP>
+	struct _Reduction<int8_t,OP>
+	{
+		static Reg<int8_t> apply(const Reg<int8_t> v1) {
+			__m512i mask_16 = _mm512_set_epi8(61,60,63,62,57,56,59,58,53,52,55,54,49,48,51,50,
+			                                  45,44,47,46,41,40,43,42,37,36,39,38,33,32,35,34,
+			                                  29,28,31,30,25,24,27,26,21,20,23,22,17,16,19,18,
+			                                  13,12,15,14, 9, 8,11,10, 5, 4, 7, 6, 1, 0, 3, 2);
+
+			__m512i mask_8  = _mm512_set_epi8(62,63,60,61,58,59,56,57,54,55,52,53,50,51,48,49,
+			                                  46,47,44,45,42,43,40,41,38,39,36,37,34,35,32,33,
+			                                  30,31,28,29,26,27,24,25,22,23,20,21,18,19,16,17,
+			                                  14,15,12,13,10,11, 8, 9, 6, 7, 4, 5, 2, 3, 0, 1);
+
+			auto val = v1;
+			val = OP(val, Reg<int8_t>(_mm512_permutexvar_ps(_mm512_set_epi32( 7, 6, 5, 4, 3, 2, 1, 0,15,14,13,12,11,10,9,8), val.r))); // only AVX512F (for KNCI use _mm512_permute4f128_epi32)
+			val = OP(val, Reg<int8_t>(_mm512_permutexvar_ps(_mm512_set_epi32(11,10, 9, 8,15,14,13,12, 3, 2, 1, 0, 7, 6,5,4), val.r))); // only AVX512F (for KNCI use _mm512_permute4f128_epi32)
+//			val = OP(val, Reg<int8_t>(_mm512_permutexvar_ps(_mm512_set_epi32(13,12,15,14, 9, 8,11,10, 5, 4, 7, 6, 1, 0,3,2), val.r))); // only AVX512F
+			val = OP(val, Reg<int8_t>(_mm512_castsi512_ps(_mm512_shuffle_epi32(_mm512_castps_si512(val.r), _MM_PERM_ENUM(_MM_SHUFFLE(1,0,3,2)))))); // KNCI compatible
+//			val = OP(val, Reg<int8_t>(_mm512_permutexvar_ps(_mm512_set_epi32(14,15,12,13,10,11, 8, 9, 6, 7, 4, 5, 2, 3,0,1), val.r))); // only AVX512F
+			val = OP(val, Reg<int8_t>(_mm512_castsi512_ps(_mm512_shuffle_epi32(_mm512_castps_si512(val.r), _MM_PERM_ENUM(_MM_SHUFFLE(2,3,0,1)))))); // KNCI compatible
+			val = OP(val, Reg<int8_t>(_mm512_castsi512_ps(_mm512_shuffle_epi8(_mm512_castps_si512(val.r), mask_16)))); // only AVX512BW
+			val = OP(val, Reg<int8_t>(_mm512_castsi512_ps(_mm512_shuffle_epi8(_mm512_castps_si512(val.r), mask_8)))); // only AVX512BW
+			return val;
+		}
+	};
+#endif
+#endif
+
+#endif
+
+// -------------------------------------------------------------------------------------------------------- X86 AVX-256
+// --------------------------------------------------------------------------------------------------------------------
+#elif defined(__AVX__)
+// original file: ../external/MIPP/src/mipp_impl_AVX.hxx
+
+// #include "mipp.h"
+
+// -------------------------------------------------------------------------------------------------------- X86 AVX-256
+// --------------------------------------------------------------------------------------------------------------------
+#if defined(__AVX__)
+
+	// ---------------------------------------------------------------------------------------------------------- loadu
+	template <>
+	inline reg loadu<float>(const float *mem_addr) {
+		return _mm256_loadu_ps(mem_addr);
+	}
+
+	template <>
+	inline reg loadu<double>(const double *mem_addr) {
+		return _mm256_castpd_ps(_mm256_loadu_pd(mem_addr));
+	}
+
+	template <>
+	inline reg loadu<int64_t>(const int64_t *mem_addr) {
+		return _mm256_castpd_ps(_mm256_loadu_pd((const double*) mem_addr));
+	}
+
+	template <>
+	inline reg loadu<int32_t>(const int32_t *mem_addr) {
+		return _mm256_loadu_ps((const float*) mem_addr);
+	}
+
+	template <>
+	inline reg loadu<int16_t>(const int16_t *mem_addr) {
+		return _mm256_loadu_ps((const float*) mem_addr);
+	}
+
+	template <>
+	inline reg loadu<int8_t>(const int8_t *mem_addr) {
+		return _mm256_loadu_ps((const float*) mem_addr);
+	}
+
+	// ----------------------------------------------------------------------------------------------------------- load
+#ifdef MIPP_ALIGNED_LOADS
+	template <>
+	inline reg load<float>(const float *mem_addr) {
+		return _mm256_load_ps(mem_addr);
+	}
+
+	template <>
+	inline reg load<double>(const double *mem_addr) {
+		return _mm256_castpd_ps(_mm256_load_pd(mem_addr));
+	}
+
+	template <>
+	inline reg load<int64_t>(const int64_t *mem_addr) {
+		return _mm256_castpd_ps(_mm256_load_pd((const double*)mem_addr));
+	}
+
+	template <>
+	inline reg load<int32_t>(const int32_t *mem_addr) {
+		return _mm256_load_ps((const float*) mem_addr);
+	}
+
+	template <>
+	inline reg load<int16_t>(const int16_t *mem_addr) {
+		return _mm256_load_ps((const float*) mem_addr);
+	}
+
+	template <>
+	inline reg load<int8_t>(const int8_t *mem_addr) {
+		return _mm256_load_ps((const float*) mem_addr);
+	}
+#else
+	template <>
+	inline reg load<float>(const float *mem_addr) {
+		return mipp::loadu<float>(mem_addr);
+	}
+
+	template <>
+	inline reg load<double>(const double *mem_addr) {
+		return mipp::loadu<double>(mem_addr);
+	}
+
+	template <>
+	inline reg load<int64_t>(const int64_t *mem_addr) {
+		return mipp::loadu<int64_t>(mem_addr);
+	}
+
+	template <>
+	inline reg load<int32_t>(const int32_t *mem_addr) {
+		return mipp::loadu<int32_t>(mem_addr);
+	}
+
+	template <>
+	inline reg load<int16_t>(const int16_t *mem_addr) {
+		return mipp::loadu<int16_t>(mem_addr);
+	}
+
+	template <>
+	inline reg load<int8_t>(const int8_t *mem_addr) {
+		return mipp::loadu<int8_t>(mem_addr);
+	}
+#endif
+
+	// --------------------------------------------------------------------------------------------------------- storeu
+	template <>
+	inline void storeu<float>(float *mem_addr, const reg v) {
+		_mm256_storeu_ps(mem_addr, v);
+	}
+
+	template <>
+	inline void storeu<double>(double *mem_addr, const reg v) {
+		_mm256_storeu_pd(mem_addr, _mm256_castps_pd(v));
+	}
+
+	template <>
+	inline void storeu<int64_t>(int64_t *mem_addr, const reg v) {
+		_mm256_storeu_ps((float *)mem_addr, v);
+	}
+
+	template <>
+	inline void storeu<int32_t>(int32_t *mem_addr, const reg v) {
+		_mm256_storeu_ps((float *)mem_addr, v);
+	}
+
+	template <>
+	inline void storeu<int16_t>(int16_t *mem_addr, const reg v) {
+		_mm256_storeu_ps((float *)mem_addr, v);
+	}
+
+	template <>
+	inline void storeu<int8_t>(int8_t *mem_addr, const reg v) {
+		_mm256_storeu_ps((float *)mem_addr, v);
+	}
+
+	// ---------------------------------------------------------------------------------------------------------- store
+#ifdef MIPP_ALIGNED_LOADS
+	template <>
+	inline void store<float>(float *mem_addr, const reg v) {
+		_mm256_store_ps(mem_addr, v);
+	}
+
+	template <>
+	inline void store<double>(double *mem_addr, const reg v) {
+		_mm256_store_pd(mem_addr, _mm256_castps_pd(v));
+	}
+
+	template <>
+	inline void store<int64_t>(int64_t *mem_addr, const reg v) {
+		_mm256_store_ps((float *)mem_addr, v);
+	}
+
+	template <>
+	inline void store<int32_t>(int32_t *mem_addr, const reg v) {
+		_mm256_store_ps((float *)mem_addr, v);
+	}
+
+	template <>
+	inline void store<int16_t>(int16_t *mem_addr, const reg v) {
+		_mm256_store_ps((float *)mem_addr, v);
+	}
+
+	template <>
+	inline void store<int8_t>(int8_t *mem_addr, const reg v) {
+		_mm256_store_ps((float *)mem_addr, v);
+	}
+#else
+	template <>
+	inline void store<float>(float *mem_addr, const reg v) {
+		mipp::storeu<float>(mem_addr, v);
+	}
+
+	template <>
+	inline void store<double>(double *mem_addr, const reg v) {
+		mipp::storeu<double>(mem_addr, v);
+	}
+
+	template <>
+	inline void store<int64_t>(int64_t *mem_addr, const reg v) {
+		mipp::storeu<int64_t>(mem_addr, v);
+	}
+
+	template <>
+	inline void store<int32_t>(int32_t *mem_addr, const reg v) {
+		mipp::storeu<int32_t>(mem_addr, v);
+	}
+
+	template <>
+	inline void store<int16_t>(int16_t *mem_addr, const reg v) {
+		mipp::storeu<int16_t>(mem_addr, v);
+	}
+
+	template <>
+	inline void store<int8_t>(int8_t *mem_addr, const reg v) {
+		mipp::storeu<int8_t>(mem_addr, v);
+	}
+#endif
+
+	// ------------------------------------------------------------------------------------------------------------ set
+	template <>
+	inline reg set<double>(const double vals[nElReg<double>()]) {
+		return _mm256_castpd_ps(_mm256_set_pd(vals[3], vals[2], vals[1], vals[0]));
+	}
+
+	template <>
+	inline reg set<float>(const float vals[nElReg<float>()]) {
+		return _mm256_set_ps(vals[7], vals[6], vals[5], vals[4], vals[3], vals[2], vals[1], vals[0]);
+	}
+
+	template <>
+	inline reg set<int64_t>(const int64_t vals[nElReg<int64_t>()]) {
+		return _mm256_castsi256_ps(_mm256_set_epi64x(vals[3], vals[2], vals[1], vals[0]));
+	}
+
+	template <>
+	inline reg set<int32_t>(const int32_t vals[nElReg<int32_t>()]) {
+		return _mm256_castsi256_ps(_mm256_set_epi32(vals[7], vals[6], vals[5], vals[4],
+		                                            vals[3], vals[2], vals[1], vals[0]));
+	}
+
+	template <>
+	inline reg set<int16_t>(const int16_t vals[nElReg<int16_t>()]) {
+		return _mm256_castsi256_ps(_mm256_set_epi16(vals[15], vals[14], vals[13], vals[12],
+		                                            vals[11], vals[10], vals[ 9], vals[ 8],
+		                                            vals[ 7], vals[ 6], vals[ 5], vals[ 4],
+		                                            vals[ 3], vals[ 2], vals[ 1], vals[ 0]));
+	}
+
+	template <>
+	inline reg set<int8_t>(const int8_t vals[nElReg<int8_t>()]) {
+		return _mm256_castsi256_ps(_mm256_set_epi8((int8_t)vals[31], (int8_t)vals[30], (int8_t)vals[29], (int8_t)vals[28],
+		                                           (int8_t)vals[27], (int8_t)vals[26], (int8_t)vals[25], (int8_t)vals[24],
+		                                           (int8_t)vals[23], (int8_t)vals[22], (int8_t)vals[21], (int8_t)vals[20],
+		                                           (int8_t)vals[19], (int8_t)vals[18], (int8_t)vals[17], (int8_t)vals[16],
+		                                           (int8_t)vals[15], (int8_t)vals[14], (int8_t)vals[13], (int8_t)vals[12],
+		                                           (int8_t)vals[11], (int8_t)vals[10], (int8_t)vals[ 9], (int8_t)vals[ 8],
+		                                           (int8_t)vals[ 7], (int8_t)vals[ 6], (int8_t)vals[ 5], (int8_t)vals[ 4],
+		                                           (int8_t)vals[ 3], (int8_t)vals[ 2], (int8_t)vals[ 1], (int8_t)vals[ 0]));
+	}
+
+	// ----------------------------------------------------------------------------------------------------- set (mask)
+	template <>
+	inline msk set<4>(const bool vals[4]) {
+		return _mm256_set_epi64x(vals[3] ? (uint64_t)0xFFFFFFFFFFFFFFFF : (uint64_t)0,
+		                         vals[2] ? (uint64_t)0xFFFFFFFFFFFFFFFF : (uint64_t)0,
+		                         vals[1] ? (uint64_t)0xFFFFFFFFFFFFFFFF : (uint64_t)0,
+		                         vals[0] ? (uint64_t)0xFFFFFFFFFFFFFFFF : (uint64_t)0);
+	}
+
+	template <>
+	inline msk set<8>(const bool vals[8]) {
+		return _mm256_set_epi32(vals[7] ? 0xFFFFFFFF : 0, vals[6] ? 0xFFFFFFFF : 0,
+		                        vals[5] ? 0xFFFFFFFF : 0, vals[4] ? 0xFFFFFFFF : 0,
+		                        vals[3] ? 0xFFFFFFFF : 0, vals[2] ? 0xFFFFFFFF : 0,
+		                        vals[1] ? 0xFFFFFFFF : 0, vals[0] ? 0xFFFFFFFF : 0);
+	}
+
+	template <>
+	inline msk set<16>(const bool vals[16]) {
+		return _mm256_set_epi16(vals[15] ? 0xFFFF : 0, vals[14] ? 0xFFFF : 0,
+		                        vals[13] ? 0xFFFF : 0, vals[12] ? 0xFFFF : 0,
+		                        vals[11] ? 0xFFFF : 0, vals[10] ? 0xFFFF : 0,
+		                        vals[ 9] ? 0xFFFF : 0, vals[ 8] ? 0xFFFF : 0,
+		                        vals[ 7] ? 0xFFFF : 0, vals[ 6] ? 0xFFFF : 0,
+		                        vals[ 5] ? 0xFFFF : 0, vals[ 4] ? 0xFFFF : 0,
+		                        vals[ 3] ? 0xFFFF : 0, vals[ 2] ? 0xFFFF : 0,
+		                        vals[ 1] ? 0xFFFF : 0, vals[ 0] ? 0xFFFF : 0);
+	}
+
+	template <>
+	inline msk set<32>(const bool vals[32]) {
+		return _mm256_set_epi8(vals[31] ? 0xFF : 0, vals[30] ? 0xFF : 0, vals[29] ? 0xFF : 0, vals[28] ? 0xFF : 0,
+		                       vals[27] ? 0xFF : 0, vals[26] ? 0xFF : 0, vals[25] ? 0xFF : 0, vals[24] ? 0xFF : 0,
+		                       vals[23] ? 0xFF : 0, vals[22] ? 0xFF : 0, vals[21] ? 0xFF : 0, vals[20] ? 0xFF : 0,
+		                       vals[19] ? 0xFF : 0, vals[18] ? 0xFF : 0, vals[17] ? 0xFF : 0, vals[16] ? 0xFF : 0,
+		                       vals[15] ? 0xFF : 0, vals[14] ? 0xFF : 0, vals[13] ? 0xFF : 0, vals[12] ? 0xFF : 0,
+		                       vals[11] ? 0xFF : 0, vals[10] ? 0xFF : 0, vals[ 9] ? 0xFF : 0, vals[ 8] ? 0xFF : 0,
+		                       vals[ 7] ? 0xFF : 0, vals[ 6] ? 0xFF : 0, vals[ 5] ? 0xFF : 0, vals[ 4] ? 0xFF : 0,
+		                       vals[ 3] ? 0xFF : 0, vals[ 2] ? 0xFF : 0, vals[ 1] ? 0xFF : 0, vals[ 0] ? 0xFF : 0);
+	}
+
+	// ----------------------------------------------------------------------------------------------------------- set1
+	template <>
+	inline reg set1<double>(const double val) {
+		return _mm256_castpd_ps(_mm256_set1_pd(val));
+	}
+
+	template <>
+	inline reg set1<float>(const float val) {
+		return _mm256_set1_ps(val);
+	}
+
+	template <>
+	inline reg set1<int64_t>(const int64_t val) {
+		return _mm256_castsi256_ps(_mm256_set1_epi64x(val));
+	}
+
+	template <>
+	inline reg set1<int32_t>(const int32_t val) {
+		return _mm256_castsi256_ps(_mm256_set1_epi32(val));
+	}
+
+#ifdef __AVX2__
+	template <>
+	inline reg set1<int16_t>(const int16_t val) {
+		return _mm256_castsi256_ps(_mm256_set1_epi16(val));
+	}
+
+	template <>
+	inline reg set1<int8_t>(const int8_t val) {
+		return _mm256_castsi256_ps(_mm256_set1_epi8(val));
+	}
+#endif
+
+	// ---------------------------------------------------------------------------------------------------- set1 (mask)
+	template <>
+	inline msk set1<4>(const bool val) {
+		return _mm256_set1_epi64x(val ? (uint64_t)0xFFFFFFFFFFFFFFFF : (uint64_t)0);
+	}
+
+	template <>
+	inline msk set1<8>(const bool val) {
+		return _mm256_set1_epi32(val ? 0xFFFFFFFF : 0);
+	}
+
+#ifdef __AVX2__
+	template <>
+	inline msk set1<16>(const bool val) {
+		return _mm256_set1_epi16(val ? 0xFFFF : 0);
+	}
+
+	template <>
+	inline msk set1<32>(const bool val) {
+		return _mm256_set1_epi8(val ? 0xFF : 0);
+	}
+#endif
+
+	// ----------------------------------------------------------------------------------------------------------- set0
+	template <>
+	inline reg set0<double>() {
+		return _mm256_castpd_ps(_mm256_setzero_pd());
+	}
+
+	template <>
+	inline reg set0<float>() {
+		return _mm256_setzero_ps();
+	}
+
+	template <>
+	inline reg set0<int64_t>() {
+		return _mm256_castsi256_ps(_mm256_setzero_si256());
+	}
+
+	template <>
+	inline reg set0<int32_t>() {
+		return _mm256_castsi256_ps(_mm256_setzero_si256());
+	}
+
+	template <>
+	inline reg set0<int16_t>() {
+		return _mm256_castsi256_ps(_mm256_setzero_si256());
+	}
+
+	template <>
+	inline reg set0<int8_t>() {
+		return _mm256_castsi256_ps(_mm256_setzero_si256());
+	}
+
+	// ---------------------------------------------------------------------------------------------------- set0 (mask)
+	template <>
+	inline msk set0<4>() {
+		return _mm256_setzero_si256();
+	}
+
+	template <>
+	inline msk set0<8>() {
+		return _mm256_setzero_si256();
+	}
+
+	template <>
+	inline msk set0<16>() {
+		return _mm256_setzero_si256();
+	}
+
+	template <>
+	inline msk set0<32>() {
+		return _mm256_setzero_si256();
+	}
+
+	// ------------------------------------------------------------------------------------------------------------ low
+	template <>
+	inline reg_2 low<double>(const reg v) {
+		return _mm_castsi128_ps(_mm256_extractf128_si256(_mm256_castps_si256(v), 0));
+	}
+
+	template <>
+	inline reg_2 low<float>(const reg v) {
+		return _mm_castsi128_ps(_mm256_extractf128_si256(_mm256_castps_si256(v), 0));
+	}
+
+	template <>
+	inline reg_2 low<int64_t>(const reg v) {
+		return _mm_castsi128_ps(_mm256_extractf128_si256(_mm256_castps_si256(v), 0));
+	}
+
+	template <>
+	inline reg_2 low<int32_t>(const reg v) {
+		return _mm_castsi128_ps(_mm256_extractf128_si256(_mm256_castps_si256(v), 0));
+	}
+
+	template <>
+	inline reg_2 low<int16_t>(const reg v) {
+		return _mm_castsi128_ps(_mm256_extractf128_si256(_mm256_castps_si256(v), 0));
+	}
+
+	template <>
+	inline reg_2 low<int8_t>(const reg v) {
+		return _mm_castsi128_ps(_mm256_extractf128_si256(_mm256_castps_si256(v), 0));
+	}
+
+	// ----------------------------------------------------------------------------------------------------------- high
+	template <>
+	inline reg_2 high<double>(const reg v) {
+		return _mm_castsi128_ps(_mm256_extractf128_si256(_mm256_castps_si256(v), 1));
+	}
+
+	template <>
+	inline reg_2 high<float>(const reg v) {
+		return _mm_castsi128_ps(_mm256_extractf128_si256(_mm256_castps_si256(v), 1));
+	}
+
+	template <>
+	inline reg_2 high<int64_t>(const reg v) {
+		return _mm_castsi128_ps(_mm256_extractf128_si256(_mm256_castps_si256(v), 1));
+	}
+
+	template <>
+	inline reg_2 high<int32_t>(const reg v) {
+		return _mm_castsi128_ps(_mm256_extractf128_si256(_mm256_castps_si256(v), 1));
+	}
+
+	template <>
+	inline reg_2 high<int16_t>(const reg v) {
+		return _mm_castsi128_ps(_mm256_extractf128_si256(_mm256_castps_si256(v), 1));
+	}
+
+	template <>
+	inline reg_2 high<int8_t>(const reg v) {
+		return _mm_castsi128_ps(_mm256_extractf128_si256(_mm256_castps_si256(v), 1));
+	}
+
+	// ---------------------------------------------------------------------------------------------------------- cmask
+	template <>
+	inline reg cmask<double>(const uint32_t val[nElReg<double>()]) {
+		int64_t val_bis[nElReg<int64_t>()] = {(int64_t)val[0], (int64_t)val[1], (int64_t)val[2], (int64_t)val[3]};
+		return mipp::set<int64_t>(val_bis);
+	}
+
+	template <>
+	inline reg cmask<float>(const uint32_t val[nElReg<float>()]) {
+		int32_t val_bis[nElReg<int32_t>()] = {(int32_t)val[0], (int32_t)val[1], (int32_t)val[2], (int32_t)val[3],
+		                                      (int32_t)val[4], (int32_t)val[5], (int32_t)val[6], (int32_t)val[7]};
+		return mipp::set<int32_t>(val_bis);
+	}
+
+	template <>
+	inline reg cmask<int64_t>(const uint32_t val[nElReg<int64_t>()]) {
+		int64_t val_bis[nElReg<int64_t>()] = {(int64_t)val[0], (int64_t)val[1], (int64_t)val[2], (int64_t)val[3]};
+		return mipp::set<int64_t>(val_bis);
+	}
+
+	template <>
+	inline reg cmask<int32_t>(const uint32_t val[nElReg<int32_t>()]) {
+		int32_t val_bis[nElReg<int32_t>()] = {(int32_t)val[0], (int32_t)val[1], (int32_t)val[2], (int32_t)val[3],
+		                                      (int32_t)val[4], (int32_t)val[5], (int32_t)val[6], (int32_t)val[7]};
+		return mipp::set<int32_t>(val_bis);
+	}
+
+	template <>
+	inline reg cmask<int16_t>(const uint32_t val[nElReg<int16_t>()]) {
+		int16_t val_bis[nElReg<int16_t>()] = {(int16_t)val[ 0], (int16_t)val[ 1], (int16_t)val[ 2], (int16_t)val[3],
+		                                      (int16_t)val[ 4], (int16_t)val[ 5], (int16_t)val[ 6], (int16_t)val[7],
+		                                      (int16_t)val[ 8], (int16_t)val[ 9], (int16_t)val[10], (int16_t)val[11],
+		                                      (int16_t)val[12], (int16_t)val[13], (int16_t)val[14], (int16_t)val[15]};
+		return mipp::set<int16_t>(val_bis);
+	}
+
+	template <>
+	inline reg cmask<int8_t>(const uint32_t val[nElReg<int8_t>()]) {
+		int8_t val_bis[nElReg<int8_t>()] = {(int8_t)val[ 0], (int8_t)val[ 1], (int8_t)val[ 2], (int8_t)val[ 3],
+		                                    (int8_t)val[ 4], (int8_t)val[ 5], (int8_t)val[ 6], (int8_t)val[ 7],
+		                                    (int8_t)val[ 8], (int8_t)val[ 9], (int8_t)val[10], (int8_t)val[11],
+		                                    (int8_t)val[12], (int8_t)val[13], (int8_t)val[14], (int8_t)val[15],
+		                                    (int8_t)val[16], (int8_t)val[17], (int8_t)val[18], (int8_t)val[19],
+		                                    (int8_t)val[20], (int8_t)val[21], (int8_t)val[22], (int8_t)val[23],
+		                                    (int8_t)val[24], (int8_t)val[25], (int8_t)val[26], (int8_t)val[27],
+		                                    (int8_t)val[28], (int8_t)val[29], (int8_t)val[30], (int8_t)val[31]};
+		return mipp::set<int8_t>(val_bis);
+	}
+
+	// --------------------------------------------------------------------------------------------------------- cmask2
+	template <>
+	inline reg cmask2<double>(const uint32_t val[nElReg<double>()/2]) {
+		int8_t val_bis[nElReg<int8_t>()] = {(int8_t)(val[0]*8 + 0), (int8_t)(val[0]*8 + 1),
+		                                    (int8_t)(val[0]*8 + 2), (int8_t)(val[0]*8 + 3),
+		                                    (int8_t)(val[0]*8 + 4), (int8_t)(val[0]*8 + 5),
+		                                    (int8_t)(val[0]*8 + 6), (int8_t)(val[0]*8 + 7),
+		                                    (int8_t)(val[1]*8 + 0), (int8_t)(val[1]*8 + 1),
+		                                    (int8_t)(val[1]*8 + 2), (int8_t)(val[1]*8 + 3),
+		                                    (int8_t)(val[1]*8 + 4), (int8_t)(val[1]*8 + 5),
+		                                    (int8_t)(val[1]*8 + 6), (int8_t)(val[1]*8 + 7),
+		                                    (int8_t)(val[0]*8 + 0), (int8_t)(val[0]*8 + 1),
+		                                    (int8_t)(val[0]*8 + 2), (int8_t)(val[0]*8 + 3),
+		                                    (int8_t)(val[0]*8 + 4), (int8_t)(val[0]*8 + 5),
+		                                    (int8_t)(val[0]*8 + 6), (int8_t)(val[0]*8 + 7),
+		                                    (int8_t)(val[1]*8 + 0), (int8_t)(val[1]*8 + 1),
+		                                    (int8_t)(val[1]*8 + 2), (int8_t)(val[1]*8 + 3),
+		                                    (int8_t)(val[1]*8 + 4), (int8_t)(val[1]*8 + 5),
+		                                    (int8_t)(val[1]*8 + 6), (int8_t)(val[1]*8 + 7)};
+		return mipp::set<int8_t>(val_bis);
+	}
+
+	template <>
+	inline reg cmask2<float>(const uint32_t val[nElReg<float>()/2]) {
+		int8_t val_bis[nElReg<int8_t>()] = {(int8_t)(val[0]*4 + 0), (int8_t)(val[0]*4 + 1),
+		                                    (int8_t)(val[0]*4 + 2), (int8_t)(val[0]*4 + 3),
+		                                    (int8_t)(val[1]*4 + 0), (int8_t)(val[1]*4 + 1),
+		                                    (int8_t)(val[1]*4 + 2), (int8_t)(val[1]*4 + 3),
+		                                    (int8_t)(val[2]*4 + 0), (int8_t)(val[2]*4 + 1),
+		                                    (int8_t)(val[2]*4 + 2), (int8_t)(val[2]*4 + 3),
+		                                    (int8_t)(val[3]*4 + 0), (int8_t)(val[3]*4 + 1),
+		                                    (int8_t)(val[3]*4 + 2), (int8_t)(val[3]*4 + 3),
+		                                    (int8_t)(val[0]*4 + 0), (int8_t)(val[0]*4 + 1),
+		                                    (int8_t)(val[0]*4 + 2), (int8_t)(val[0]*4 + 3),
+		                                    (int8_t)(val[1]*4 + 0), (int8_t)(val[1]*4 + 1),
+		                                    (int8_t)(val[1]*4 + 2), (int8_t)(val[1]*4 + 3),
+		                                    (int8_t)(val[2]*4 + 0), (int8_t)(val[2]*4 + 1),
+		                                    (int8_t)(val[2]*4 + 2), (int8_t)(val[2]*4 + 3),
+		                                    (int8_t)(val[3]*4 + 0), (int8_t)(val[3]*4 + 1),
+		                                    (int8_t)(val[3]*4 + 2), (int8_t)(val[3]*4 + 3)};
+		return mipp::set<int8_t>(val_bis);
+	}
+
+	template <>
+	inline reg cmask2<int64_t>(const uint32_t val[nElReg<int64_t>()/2]) {
+		int8_t val_bis[nElReg<int8_t>()] = {(int8_t)(val[0]*8 + 0), (int8_t)(val[0]*8 + 1),
+		                                    (int8_t)(val[0]*8 + 2), (int8_t)(val[0]*8 + 3),
+		                                    (int8_t)(val[0]*8 + 4), (int8_t)(val[0]*8 + 5),
+		                                    (int8_t)(val[0]*8 + 6), (int8_t)(val[0]*8 + 7),
+		                                    (int8_t)(val[1]*8 + 0), (int8_t)(val[1]*8 + 1),
+		                                    (int8_t)(val[1]*8 + 2), (int8_t)(val[1]*8 + 3),
+		                                    (int8_t)(val[1]*8 + 4), (int8_t)(val[1]*8 + 5),
+		                                    (int8_t)(val[1]*8 + 6), (int8_t)(val[1]*8 + 7),
+		                                    (int8_t)(val[0]*8 + 0), (int8_t)(val[0]*8 + 1),
+		                                    (int8_t)(val[0]*8 + 2), (int8_t)(val[0]*8 + 3),
+		                                    (int8_t)(val[0]*8 + 4), (int8_t)(val[0]*8 + 5),
+		                                    (int8_t)(val[0]*8 + 6), (int8_t)(val[0]*8 + 7),
+		                                    (int8_t)(val[1]*8 + 0), (int8_t)(val[1]*8 + 1),
+		                                    (int8_t)(val[1]*8 + 2), (int8_t)(val[1]*8 + 3),
+		                                    (int8_t)(val[1]*8 + 4), (int8_t)(val[1]*8 + 5),
+		                                    (int8_t)(val[1]*8 + 6), (int8_t)(val[1]*8 + 7)};
+		return mipp::set<int8_t>(val_bis);
+	}
+
+	template <>
+	inline reg cmask2<int32_t>(const uint32_t val[nElReg<int32_t>()/2]) {
+		int8_t val_bis[nElReg<int8_t>()] = {(int8_t)(val[0]*4 + 0), (int8_t)(val[0]*4 + 1),
+		                                    (int8_t)(val[0]*4 + 2), (int8_t)(val[0]*4 + 3),
+		                                    (int8_t)(val[1]*4 + 0), (int8_t)(val[1]*4 + 1),
+		                                    (int8_t)(val[1]*4 + 2), (int8_t)(val[1]*4 + 3),
+		                                    (int8_t)(val[2]*4 + 0), (int8_t)(val[2]*4 + 1),
+		                                    (int8_t)(val[2]*4 + 2), (int8_t)(val[2]*4 + 3),
+		                                    (int8_t)(val[3]*4 + 0), (int8_t)(val[3]*4 + 1),
+		                                    (int8_t)(val[3]*4 + 2), (int8_t)(val[3]*4 + 3),
+		                                    (int8_t)(val[0]*4 + 0), (int8_t)(val[0]*4 + 1),
+		                                    (int8_t)(val[0]*4 + 2), (int8_t)(val[0]*4 + 3),
+		                                    (int8_t)(val[1]*4 + 0), (int8_t)(val[1]*4 + 1),
+		                                    (int8_t)(val[1]*4 + 2), (int8_t)(val[1]*4 + 3),
+		                                    (int8_t)(val[2]*4 + 0), (int8_t)(val[2]*4 + 1),
+		                                    (int8_t)(val[2]*4 + 2), (int8_t)(val[2]*4 + 3),
+		                                    (int8_t)(val[3]*4 + 0), (int8_t)(val[3]*4 + 1),
+		                                    (int8_t)(val[3]*4 + 2), (int8_t)(val[3]*4 + 3)};
+		return mipp::set<int8_t>(val_bis);
+	}
+
+	template <>
+	inline reg cmask2<int16_t>(const uint32_t val[nElReg<int16_t>()/2]) {
+		int8_t val_bis[nElReg<int8_t>()] = {(int8_t)(val[ 0]*2 + 0), (int8_t)(val[ 0]*2 + 1),
+		                                    (int8_t)(val[ 1]*2 + 0), (int8_t)(val[ 1]*2 + 1),
+		                                    (int8_t)(val[ 2]*2 + 0), (int8_t)(val[ 2]*2 + 1),
+		                                    (int8_t)(val[ 3]*2 + 0), (int8_t)(val[ 3]*2 + 1),
+		                                    (int8_t)(val[ 4]*2 + 0), (int8_t)(val[ 4]*2 + 1),
+		                                    (int8_t)(val[ 5]*2 + 0), (int8_t)(val[ 5]*2 + 1),
+		                                    (int8_t)(val[ 6]*2 + 0), (int8_t)(val[ 6]*2 + 1),
+		                                    (int8_t)(val[ 7]*2 + 0), (int8_t)(val[ 7]*2 + 1),
+		                                    (int8_t)(val[ 0]*2 + 0), (int8_t)(val[ 0]*2 + 1),
+		                                    (int8_t)(val[ 1]*2 + 0), (int8_t)(val[ 1]*2 + 1),
+		                                    (int8_t)(val[ 2]*2 + 0), (int8_t)(val[ 2]*2 + 1),
+		                                    (int8_t)(val[ 3]*2 + 0), (int8_t)(val[ 3]*2 + 1),
+		                                    (int8_t)(val[ 4]*2 + 0), (int8_t)(val[ 4]*2 + 1),
+		                                    (int8_t)(val[ 5]*2 + 0), (int8_t)(val[ 5]*2 + 1),
+		                                    (int8_t)(val[ 6]*2 + 0), (int8_t)(val[ 6]*2 + 1),
+		                                    (int8_t)(val[ 7]*2 + 0), (int8_t)(val[ 7]*2 + 1)};
+		return mipp::set<int8_t>(val_bis);
+	}
+
+	template <>
+	inline reg cmask2<int8_t>(const uint32_t val[nElReg<int8_t>()/2]) {
+		int8_t val_bis[nElReg<int8_t>()] = {(int8_t)val[ 0], (int8_t)val[ 1],
+		                                    (int8_t)val[ 2], (int8_t)val[ 3],
+		                                    (int8_t)val[ 4], (int8_t)val[ 5],
+		                                    (int8_t)val[ 6], (int8_t)val[ 7],
+		                                    (int8_t)val[ 8], (int8_t)val[ 9],
+		                                    (int8_t)val[10], (int8_t)val[11],
+		                                    (int8_t)val[12], (int8_t)val[13],
+		                                    (int8_t)val[14], (int8_t)val[15],
+		                                    (int8_t)val[ 0], (int8_t)val[ 1],
+		                                    (int8_t)val[ 2], (int8_t)val[ 3],
+		                                    (int8_t)val[ 4], (int8_t)val[ 5],
+		                                    (int8_t)val[ 6], (int8_t)val[ 7],
+		                                    (int8_t)val[ 8], (int8_t)val[ 9],
+		                                    (int8_t)val[10], (int8_t)val[11],
+		                                    (int8_t)val[12], (int8_t)val[13],
+		                                    (int8_t)val[14], (int8_t)val[15]};
+		return mipp::set<int8_t>(val_bis);
+	}
+
+	// --------------------------------------------------------------------------------------------------------- cmask4
+	template <>
+	inline reg cmask4<double>(const uint32_t val[nElReg<double>()/4]) {
+		int8_t val_bis[nElReg<int8_t>()] = {(int8_t)(val[0]*8 + 0 + 0), (int8_t)(val[0]*8 + 1 + 0),
+		                                    (int8_t)(val[0]*8 + 2 + 0), (int8_t)(val[0]*8 + 3 + 0),
+		                                    (int8_t)(val[0]*8 + 4 + 0), (int8_t)(val[0]*8 + 5 + 0),
+		                                    (int8_t)(val[0]*8 + 6 + 0), (int8_t)(val[0]*8 + 7 + 0),
+		                                    (int8_t)(val[0]*8 + 0 + 8), (int8_t)(val[0]*8 + 1 + 8),
+		                                    (int8_t)(val[0]*8 + 2 + 8), (int8_t)(val[0]*8 + 3 + 8),
+		                                    (int8_t)(val[0]*8 + 4 + 8), (int8_t)(val[0]*8 + 5 + 8),
+		                                    (int8_t)(val[0]*8 + 6 + 8), (int8_t)(val[0]*8 + 7 + 8),
+		                                    (int8_t)(val[0]*8 + 0 + 0), (int8_t)(val[0]*8 + 1 + 0),
+		                                    (int8_t)(val[0]*8 + 2 + 0), (int8_t)(val[0]*8 + 3 + 0),
+		                                    (int8_t)(val[0]*8 + 4 + 0), (int8_t)(val[0]*8 + 5 + 0),
+		                                    (int8_t)(val[0]*8 + 6 + 0), (int8_t)(val[0]*8 + 7 + 0),
+		                                    (int8_t)(val[0]*8 + 0 + 8), (int8_t)(val[0]*8 + 1 + 8),
+		                                    (int8_t)(val[0]*8 + 2 + 8), (int8_t)(val[0]*8 + 3 + 8),
+		                                    (int8_t)(val[0]*8 + 4 + 8), (int8_t)(val[0]*8 + 5 + 8),
+		                                    (int8_t)(val[0]*8 + 6 + 8), (int8_t)(val[0]*8 + 7 + 8)};
+		return mipp::set<int8_t>(val_bis);
+	}
+
+	template <>
+	inline reg cmask4<float>(const uint32_t val[nElReg<float>()/4]) {
+		int8_t val_bis[nElReg<int8_t>()] = {(int8_t)(val[0]*4 + 0 + 0), (int8_t)(val[0]*4 + 1 + 0),
+		                                    (int8_t)(val[0]*4 + 2 + 0), (int8_t)(val[0]*4 + 3 + 0),
+		                                    (int8_t)(val[1]*4 + 0 + 0), (int8_t)(val[1]*4 + 1 + 0),
+		                                    (int8_t)(val[1]*4 + 2 + 0), (int8_t)(val[1]*4 + 3 + 0),
+		                                    (int8_t)(val[0]*4 + 0 + 8), (int8_t)(val[0]*4 + 1 + 8),
+		                                    (int8_t)(val[0]*4 + 2 + 8), (int8_t)(val[0]*4 + 3 + 8),
+		                                    (int8_t)(val[1]*4 + 0 + 8), (int8_t)(val[1]*4 + 1 + 8),
+		                                    (int8_t)(val[1]*4 + 2 + 8), (int8_t)(val[1]*4 + 3 + 8),
+		                                    (int8_t)(val[0]*4 + 0 + 0), (int8_t)(val[0]*4 + 1 + 0),
+		                                    (int8_t)(val[0]*4 + 2 + 0), (int8_t)(val[0]*4 + 3 + 0),
+		                                    (int8_t)(val[1]*4 + 0 + 0), (int8_t)(val[1]*4 + 1 + 0),
+		                                    (int8_t)(val[1]*4 + 2 + 0), (int8_t)(val[1]*4 + 3 + 0),
+		                                    (int8_t)(val[0]*4 + 0 + 8), (int8_t)(val[0]*4 + 1 + 8),
+		                                    (int8_t)(val[0]*4 + 2 + 8), (int8_t)(val[0]*4 + 3 + 8),
+		                                    (int8_t)(val[1]*4 + 0 + 8), (int8_t)(val[1]*4 + 1 + 8),
+		                                    (int8_t)(val[1]*4 + 2 + 8), (int8_t)(val[1]*4 + 3 + 8)};
+		return mipp::set<int8_t>(val_bis);
+	}
+
+	template <>
+	inline reg cmask4<int64_t>(const uint32_t val[nElReg<int64_t>()/4]) {
+		int8_t val_bis[nElReg<int8_t>()] = {(int8_t)(val[0]*8 + 0 + 0), (int8_t)(val[0]*8 + 1 + 0),
+		                                    (int8_t)(val[0]*8 + 2 + 0), (int8_t)(val[0]*8 + 3 + 0),
+		                                    (int8_t)(val[0]*8 + 4 + 0), (int8_t)(val[0]*8 + 5 + 0),
+		                                    (int8_t)(val[0]*8 + 6 + 0), (int8_t)(val[0]*8 + 7 + 0),
+		                                    (int8_t)(val[0]*8 + 0 + 8), (int8_t)(val[0]*8 + 1 + 8),
+		                                    (int8_t)(val[0]*8 + 2 + 8), (int8_t)(val[0]*8 + 3 + 8),
+		                                    (int8_t)(val[0]*8 + 4 + 8), (int8_t)(val[0]*8 + 5 + 8),
+		                                    (int8_t)(val[0]*8 + 6 + 8), (int8_t)(val[0]*8 + 7 + 8),
+		                                    (int8_t)(val[0]*8 + 0 + 0), (int8_t)(val[0]*8 + 1 + 0),
+		                                    (int8_t)(val[0]*8 + 2 + 0), (int8_t)(val[0]*8 + 3 + 0),
+		                                    (int8_t)(val[0]*8 + 4 + 0), (int8_t)(val[0]*8 + 5 + 0),
+		                                    (int8_t)(val[0]*8 + 6 + 0), (int8_t)(val[0]*8 + 7 + 0),
+		                                    (int8_t)(val[0]*8 + 0 + 8), (int8_t)(val[0]*8 + 1 + 8),
+		                                    (int8_t)(val[0]*8 + 2 + 8), (int8_t)(val[0]*8 + 3 + 8),
+		                                    (int8_t)(val[0]*8 + 4 + 8), (int8_t)(val[0]*8 + 5 + 8),
+		                                    (int8_t)(val[0]*8 + 6 + 8), (int8_t)(val[0]*8 + 7 + 8)};
+		return mipp::set<int8_t>(val_bis);
+	}
+
+	template <>
+	inline reg cmask4<int32_t>(const uint32_t val[nElReg<int32_t>()/4]) {
+		int8_t val_bis[nElReg<int8_t>()] = {(int8_t)(val[0]*4 + 0 + 0), (int8_t)(val[0]*4 + 1 + 0),
+		                                    (int8_t)(val[0]*4 + 2 + 0), (int8_t)(val[0]*4 + 3 + 0),
+		                                    (int8_t)(val[1]*4 + 0 + 0), (int8_t)(val[1]*4 + 1 + 0),
+		                                    (int8_t)(val[1]*4 + 2 + 0), (int8_t)(val[1]*4 + 3 + 0),
+		                                    (int8_t)(val[0]*4 + 0 + 8), (int8_t)(val[0]*4 + 1 + 8),
+		                                    (int8_t)(val[0]*4 + 2 + 8), (int8_t)(val[0]*4 + 3 + 8),
+		                                    (int8_t)(val[1]*4 + 0 + 8), (int8_t)(val[1]*4 + 1 + 8),
+		                                    (int8_t)(val[1]*4 + 2 + 8), (int8_t)(val[1]*4 + 3 + 8),
+		                                    (int8_t)(val[0]*4 + 0 + 0), (int8_t)(val[0]*4 + 1 + 0),
+		                                    (int8_t)(val[0]*4 + 2 + 0), (int8_t)(val[0]*4 + 3 + 0),
+		                                    (int8_t)(val[1]*4 + 0 + 0), (int8_t)(val[1]*4 + 1 + 0),
+		                                    (int8_t)(val[1]*4 + 2 + 0), (int8_t)(val[1]*4 + 3 + 0),
+		                                    (int8_t)(val[0]*4 + 0 + 8), (int8_t)(val[0]*4 + 1 + 8),
+		                                    (int8_t)(val[0]*4 + 2 + 8), (int8_t)(val[0]*4 + 3 + 8),
+		                                    (int8_t)(val[1]*4 + 0 + 8), (int8_t)(val[1]*4 + 1 + 8),
+		                                    (int8_t)(val[1]*4 + 2 + 8), (int8_t)(val[1]*4 + 3 + 8)};
+		return mipp::set<int8_t>(val_bis);
+	}
+
+	template <>
+	inline reg cmask4<int16_t>(const uint32_t val[nElReg<int16_t>()/4]) {
+		int8_t val_bis[nElReg<int8_t>()] = {(int8_t)(val[ 0]*2 + 0 + 0), (int8_t)(val[ 0]*2 + 1 + 0),
+		                                    (int8_t)(val[ 1]*2 + 0 + 0), (int8_t)(val[ 1]*2 + 1 + 0),
+		                                    (int8_t)(val[ 2]*2 + 0 + 0), (int8_t)(val[ 2]*2 + 1 + 0),
+		                                    (int8_t)(val[ 3]*2 + 0 + 0), (int8_t)(val[ 3]*2 + 1 + 0),
+		                                    (int8_t)(val[ 0]*2 + 0 + 8), (int8_t)(val[ 0]*2 + 1 + 8),
+		                                    (int8_t)(val[ 1]*2 + 0 + 8), (int8_t)(val[ 1]*2 + 1 + 8),
+		                                    (int8_t)(val[ 2]*2 + 0 + 8), (int8_t)(val[ 2]*2 + 1 + 8),
+		                                    (int8_t)(val[ 3]*2 + 0 + 8), (int8_t)(val[ 3]*2 + 1 + 8),
+		                                    (int8_t)(val[ 0]*2 + 0 + 0), (int8_t)(val[ 0]*2 + 1 + 0),
+		                                    (int8_t)(val[ 1]*2 + 0 + 0), (int8_t)(val[ 1]*2 + 1 + 0),
+		                                    (int8_t)(val[ 2]*2 + 0 + 0), (int8_t)(val[ 2]*2 + 1 + 0),
+		                                    (int8_t)(val[ 3]*2 + 0 + 0), (int8_t)(val[ 3]*2 + 1 + 0),
+		                                    (int8_t)(val[ 0]*2 + 0 + 8), (int8_t)(val[ 0]*2 + 1 + 8),
+		                                    (int8_t)(val[ 1]*2 + 0 + 8), (int8_t)(val[ 1]*2 + 1 + 8),
+		                                    (int8_t)(val[ 2]*2 + 0 + 8), (int8_t)(val[ 2]*2 + 1 + 8),
+		                                    (int8_t)(val[ 3]*2 + 0 + 8), (int8_t)(val[ 3]*2 + 1 + 8)};
+		return mipp::set<int8_t>(val_bis);
+	}
+
+	template <>
+	inline reg cmask4<int8_t>(const uint32_t val[nElReg<int8_t>()/4]) {
+		int8_t val_bis[nElReg<int8_t>()] = {(int8_t)(val[ 0] + 0), (int8_t)(val[ 1] + 0),
+		                                    (int8_t)(val[ 2] + 0), (int8_t)(val[ 3] + 0),
+		                                    (int8_t)(val[ 4] + 0), (int8_t)(val[ 5] + 0),
+		                                    (int8_t)(val[ 6] + 0), (int8_t)(val[ 7] + 0),
+		                                    (int8_t)(val[ 0] + 8), (int8_t)(val[ 1] + 8),
+		                                    (int8_t)(val[ 2] + 8), (int8_t)(val[ 3] + 8),
+		                                    (int8_t)(val[ 4] + 8), (int8_t)(val[ 5] + 8),
+		                                    (int8_t)(val[ 6] + 8), (int8_t)(val[ 7] + 8),
+		                                    (int8_t)(val[ 0] + 0), (int8_t)(val[ 1] + 0),
+		                                    (int8_t)(val[ 2] + 0), (int8_t)(val[ 3] + 0),
+		                                    (int8_t)(val[ 4] + 0), (int8_t)(val[ 5] + 0),
+		                                    (int8_t)(val[ 6] + 0), (int8_t)(val[ 7] + 0),
+		                                    (int8_t)(val[ 0] + 8), (int8_t)(val[ 1] + 8),
+		                                    (int8_t)(val[ 2] + 8), (int8_t)(val[ 3] + 8),
+		                                    (int8_t)(val[ 4] + 8), (int8_t)(val[ 5] + 8),
+		                                    (int8_t)(val[ 6] + 8), (int8_t)(val[ 7] + 8)};
+		return mipp::set<int8_t>(val_bis);
+	}
+
+	// ---------------------------------------------------------------------------------------------------------- shuff
+	template <>
+	inline reg shuff<double>(const reg v, const reg cm) {
+		constexpr int N = mipp::N<double>();
+
+		double out[N];
+		for (auto i = 0; i < N; i++)
+			out[i] = *((double*)&v + (*((int64_t*)&cm +i)));
+
+		return mipp::loadu<double>(out);
+	}
+
+	template <>
+	inline reg shuff<float>(const reg v, const reg cm) {
+		constexpr int N = mipp::N<float>();
+
+		float out[N];
+		for (auto i = 0; i < N; i++)
+			out[i] = *((float*)&v + (*((int32_t*)&cm +i)));
+
+		return mipp::loadu<float>(out);
+	}
+
+	template <>
+	inline reg shuff<int64_t>(const reg v, const reg cm) {
+		constexpr int N = mipp::N<int64_t>();
+
+		int64_t out[N];
+		for (auto i = 0; i < N; i++)
+			out[i] = *((int64_t*)&v + (*((int64_t*)&cm +i)));
+
+		return mipp::loadu<int64_t>(out);
+	}
+
+	template <>
+	inline reg shuff<int32_t>(const reg v, const reg cm) {
+		constexpr int N = mipp::N<int32_t>();
+
+		int32_t out[N];
+		for (auto i = 0; i < N; i++)
+			out[i] = *((int32_t*)&v + (*((int32_t*)&cm +i)));
+
+		return mipp::loadu<int32_t>(out);
+	}
+
+	template <>
+	inline reg shuff<int16_t>(const reg v, const reg cm) {
+		constexpr int N = mipp::N<int16_t>();
+
+		int16_t out[N];
+		for (auto i = 0; i < N; i++)
+			out[i] = *((int16_t*)&v + (*((int16_t*)&cm +i)));
+
+		return mipp::loadu<int16_t>(out);
+	}
+
+	template <>
+	inline reg shuff<int8_t>(const reg v, const reg cm) {
+		constexpr int N = mipp::N<int8_t>();
+
+		int8_t out[N];
+		for (auto i = 0; i < N; i++)
+			out[i] = *((int8_t*)&v + (*((int8_t*)&cm +i)));
+
+		return mipp::loadu<int8_t>(out);
+	}
+
+	// --------------------------------------------------------------------------------------------------------- shuff2
+#ifdef __AVX2__
+	template <>
+	inline reg shuff2<double>(const reg v, const reg cm) {
+		return _mm256_castsi256_ps(_mm256_shuffle_epi8(_mm256_castps_si256(v), _mm256_castps_si256(cm)));
+	}
+
+	template <>
+	inline reg shuff2<float>(const reg v, const reg cm) {
+		return _mm256_castsi256_ps(_mm256_shuffle_epi8(_mm256_castps_si256(v), _mm256_castps_si256(cm)));
+	}
+
+	template <>
+	inline reg shuff2<int64_t>(const reg v, const reg cm) {
+		return _mm256_castsi256_ps(_mm256_shuffle_epi8(_mm256_castps_si256(v), _mm256_castps_si256(cm)));
+	}
+
+	template <>
+	inline reg shuff2<int32_t>(const reg v, const reg cm) {
+		return _mm256_castsi256_ps(_mm256_shuffle_epi8(_mm256_castps_si256(v), _mm256_castps_si256(cm)));
+	}
+
+	template <>
+	inline reg shuff2<int16_t>(const reg v, const reg cm) {
+		return _mm256_castsi256_ps(_mm256_shuffle_epi8(_mm256_castps_si256(v), _mm256_castps_si256(cm)));
+	}
+
+	template <>
+	inline reg shuff2<int8_t>(const reg v, const reg cm) {
+		return _mm256_castsi256_ps(_mm256_shuffle_epi8(_mm256_castps_si256(v), _mm256_castps_si256(cm)));
+	}
+#endif
+
+	// --------------------------------------------------------------------------------------------------------- shuff4
+#ifdef __AVX2__
+	template <>
+	inline reg shuff4<double>(const reg v, const reg cm) {
+		return mipp::shuff2<double>(v, cm);
+	}
+
+	template <>
+	inline reg shuff4<float>(const reg v, const reg cm) {
+		return mipp::shuff2<float>(v, cm);
+	}
+
+	template <>
+	inline reg shuff4<int64_t>(const reg v, const reg cm) {
+		return mipp::shuff2<int64_t>(v, cm);
+	}
+
+	template <>
+	inline reg shuff4<int32_t>(const reg v, const reg cm) {
+		return mipp::shuff2<int32_t>(v, cm);
+	}
+
+	template <>
+	inline reg shuff4<int16_t>(const reg v, const reg cm) {
+		return mipp::shuff2<int16_t>(v, cm);
+	}
+
+	template <>
+	inline reg shuff4<int8_t>(const reg v, const reg cm) {
+		return mipp::shuff2<int8_t>(v, cm);
+	}
+#endif
+
+	// -------------------------------------------------------------------------------------------------- interleavelo2
+#ifdef __AVX2__
+	template <>
+	inline reg interleavelo2<double>(const reg v1, const reg v2) {
+		return _mm256_castsi256_ps(_mm256_unpacklo_epi64(_mm256_castps_si256(v1), _mm256_castps_si256(v2)));
+	}
+
+	template <>
+	inline reg interleavelo2<float>(const reg v1, const reg v2) {
+		// v1  = [a0, b0, c0, d0, e0, f0, g0, h0], v2 = [a1, b1, c1, d1, e1, f1, g1, h1]
+		// res = [a0, a1, b0, b1, e0, e1, f0, f1]
+		return _mm256_castsi256_ps(_mm256_unpacklo_epi32(_mm256_castps_si256(v1), _mm256_castps_si256(v2)));
+	}
+
+	template <>
+	inline reg interleavelo2<int64_t>(const reg v1, const reg v2) {
+		return _mm256_castsi256_ps(_mm256_unpacklo_epi64(_mm256_castps_si256(v1), _mm256_castps_si256(v2)));
+	}
+
+	template <>
+	inline reg interleavelo2<int32_t>(const reg v1, const reg v2) {
+		// v1  = [a0, b0, c0, d0, e0, f0, g0, h0], v2 = [a1, b1, c1, d1, e1, f1, g1, h1]
+		// res = [a0, a1, b0, b1, e0, e1, f0, f1]
+		return _mm256_castsi256_ps(_mm256_unpacklo_epi32(_mm256_castps_si256(v1), _mm256_castps_si256(v2)));
+	}
+
+	template <>
+	inline reg interleavelo2<int16_t>(const reg v1, const reg v2) {
+		return _mm256_castsi256_ps(_mm256_unpacklo_epi16(_mm256_castps_si256(v1), _mm256_castps_si256(v2)));
+	}
+
+	template <>
+	inline reg interleavelo2<int8_t>(const reg v1, const reg v2) {
+		return _mm256_castsi256_ps(_mm256_unpacklo_epi8(_mm256_castps_si256(v1), _mm256_castps_si256(v2)));
+	}
+#endif
+
+	// -------------------------------------------------------------------------------------------------- interleavehi2
+#ifdef __AVX2__
+	template <>
+	inline reg interleavehi2<double>(const reg v1, const reg v2) {
+		return _mm256_castsi256_ps(_mm256_unpackhi_epi64(_mm256_castps_si256(v1), _mm256_castps_si256(v2)));
+	}
+
+	template <>
+	inline reg interleavehi2<float>(const reg v1, const reg v2) {
+		// v1  = [a0, b0, c0, d0, e0, f0, g0, h0], v2 = [a1, b1, c1, d1, e1, f1, g1, h1]
+		// res = [c0, c1, d0, d1, g0, g1, h0, h1]
+		return _mm256_castsi256_ps(_mm256_unpackhi_epi32(_mm256_castps_si256(v1), _mm256_castps_si256(v2)));
+	}
+
+	template <>
+	inline reg interleavehi2<int64_t>(const reg v1, const reg v2) {
+		return _mm256_castsi256_ps(_mm256_unpackhi_epi64(_mm256_castps_si256(v1), _mm256_castps_si256(v2)));
+	}
+
+	template <>
+	inline reg interleavehi2<int32_t>(const reg v1, const reg v2) {
+		// v1  = [a0, b0, c0, d0, e0, f0, g0, h0], v2 = [a1, b1, c1, d1, e1, f1, g1, h1]
+		// res = [c0, c1, d0, d1, g0, g1, h0, h1]
+		return _mm256_castsi256_ps(_mm256_unpackhi_epi32(_mm256_castps_si256(v1), _mm256_castps_si256(v2)));
+	}
+
+	template <>
+	inline reg interleavehi2<int16_t>(const reg v1, const reg v2) {
+		return _mm256_castsi256_ps(_mm256_unpackhi_epi16(_mm256_castps_si256(v1), _mm256_castps_si256(v2)));
+	}
+
+	template <>
+	inline reg interleavehi2<int8_t>(const reg v1, const reg v2) {
+		return _mm256_castsi256_ps(_mm256_unpackhi_epi8(_mm256_castps_si256(v1), _mm256_castps_si256(v2)));
+	}
+#endif
+
+	// ----------------------------------------------------------------------------------------------------- interleave
+#ifdef __AVX2__
+	template <>
+	inline regx2 interleave<double>(const reg v1, const reg v2) {
+		auto lo = _mm256_unpacklo_epi64(_mm256_castps_si256(v1), _mm256_castps_si256(v2));
+		auto hi = _mm256_unpackhi_epi64(_mm256_castps_si256(v1), _mm256_castps_si256(v2));
+
+		return {{_mm256_castsi256_ps(_mm256_permute2f128_si256(lo, hi, _MM_SHUFFLE(0,2,0,0))),
+		         _mm256_castsi256_ps(_mm256_permute2f128_si256(lo, hi, _MM_SHUFFLE(0,3,0,1)))}};
+	}
+
+	template <>
+	inline regx2 interleave<int64_t>(const reg v1, const reg v2) {
+		auto lo = _mm256_unpacklo_epi64(_mm256_castps_si256(v1), _mm256_castps_si256(v2));
+		auto hi = _mm256_unpackhi_epi64(_mm256_castps_si256(v1), _mm256_castps_si256(v2));
+
+		return {{_mm256_castsi256_ps(_mm256_permute2f128_si256(lo, hi, _MM_SHUFFLE(0,2,0,0))),
+		         _mm256_castsi256_ps(_mm256_permute2f128_si256(lo, hi, _MM_SHUFFLE(0,3,0,1)))}};
+	}
+
+	template <>
+	inline regx2 interleave<float>(const reg v1, const reg v2) {
+		// v1         = [a0, b0, c0, d0, e0, f0, g0, h0], v2         = [a1, b1, c1, d1, e1, f1, g1, h1]
+		// res.val[0] = [a0, a1, b0, b1, c0, c1, d0, d1], res.val[1] = [e0, e1, f0, f1, g0, g1, h0, h1]
+		auto lo = _mm256_unpacklo_epi32(_mm256_castps_si256(v1), _mm256_castps_si256(v2));
+		auto hi = _mm256_unpackhi_epi32(_mm256_castps_si256(v1), _mm256_castps_si256(v2));
+
+		return {{_mm256_castsi256_ps(_mm256_permute2f128_si256(lo, hi, _MM_SHUFFLE(0,2,0,0))),
+		         _mm256_castsi256_ps(_mm256_permute2f128_si256(lo, hi, _MM_SHUFFLE(0,3,0,1)))}};
+	}
+
+	template <>
+	inline regx2 interleave<int32_t>(const reg v1, const reg v2) {
+		// v1         = [a0, b0, c0, d0, e0, f0, g0, h0], v2         = [a1, b1, c1, d1, e1, f1, g1, h1]
+		// res.val[0] = [a0, a1, b0, b1, c0, c1, d0, d1], res.val[1] = [e0, e1, f0, f1, g0, g1, h0, h1]
+		auto lo = _mm256_unpacklo_epi32(_mm256_castps_si256(v1), _mm256_castps_si256(v2));
+		auto hi = _mm256_unpackhi_epi32(_mm256_castps_si256(v1), _mm256_castps_si256(v2));
+
+		return {{_mm256_castsi256_ps(_mm256_permute2f128_si256(lo, hi, _MM_SHUFFLE(0,2,0,0))),
+		         _mm256_castsi256_ps(_mm256_permute2f128_si256(lo, hi, _MM_SHUFFLE(0,3,0,1)))}};
+	}
+
+	template <>
+	inline regx2 interleave<int16_t>(const reg v1, const reg v2) {
+		auto lo = _mm256_unpacklo_epi16(_mm256_castps_si256(v1), _mm256_castps_si256(v2));
+		auto hi = _mm256_unpackhi_epi16(_mm256_castps_si256(v1), _mm256_castps_si256(v2));
+
+		return {{_mm256_castsi256_ps(_mm256_permute2f128_si256(lo, hi, _MM_SHUFFLE(0,2,0,0))),
+		         _mm256_castsi256_ps(_mm256_permute2f128_si256(lo, hi, _MM_SHUFFLE(0,3,0,1)))}};
+	}
+
+	template <>
+	inline regx2 interleave<int8_t>(const reg v1, const reg v2) {
+		auto lo = _mm256_unpacklo_epi8(_mm256_castps_si256(v1), _mm256_castps_si256(v2));
+		auto hi = _mm256_unpackhi_epi8(_mm256_castps_si256(v1), _mm256_castps_si256(v2));
+
+		return {{_mm256_castsi256_ps(_mm256_permute2f128_si256(lo, hi, _MM_SHUFFLE(0,2,0,0))),
+		         _mm256_castsi256_ps(_mm256_permute2f128_si256(lo, hi, _MM_SHUFFLE(0,3,0,1)))}};
+	}
+#endif
+
+	// ----------------------------------------------------------------------------------------------------- interleave
+	template <>
+	inline reg interleave<double>(const reg v) {
+		auto v_permute = _mm256_permute2f128_pd(_mm256_castps_pd(v), _mm256_castps_pd(v), _MM_SHUFFLE(0,0,0,3));
+
+		auto lo = _mm256_unpacklo_pd(_mm256_castps_pd(v), v_permute);
+		auto hi = _mm256_unpackhi_pd(_mm256_castps_pd(v), v_permute);
+
+		return _mm256_castpd_ps(_mm256_permute2f128_pd(lo, hi, _MM_SHUFFLE(0,2,0,0)));
+	}
+
+	template <>
+	inline reg interleave<float>(const reg v) {
+		auto v_permute = _mm256_permute2f128_ps(v, v, _MM_SHUFFLE(0,0,0,3));
+
+		auto lo = _mm256_unpacklo_ps(v, v_permute);
+		auto hi = _mm256_unpackhi_ps(v, v_permute);
+
+		return _mm256_permute2f128_ps(lo, hi, _MM_SHUFFLE(0,2,0,0));
+	}
+
+	template <>
+	inline reg interleave<int64_t>(const reg v) {
+		return interleave<double>(v);
+	}
+
+	template <>
+	inline reg interleave<int32_t>(const reg v) {
+		return interleave<float>(v);
+	}
+
+#ifdef __AVX2__
+	template <>
+	inline reg interleave<int16_t>(const reg v) {
+		auto v_permute = _mm256_permute2f128_si256(_mm256_castps_si256(v), _mm256_castps_si256(v), _MM_SHUFFLE(0,0,0,3));
+
+		auto lo = _mm256_unpacklo_epi16(_mm256_castps_si256(v), v_permute);
+		auto hi = _mm256_unpackhi_epi16(_mm256_castps_si256(v), v_permute);
+
+		return _mm256_castsi256_ps(_mm256_permute2f128_si256(lo, hi, _MM_SHUFFLE(0,2,0,0)));
+	}
+
+	template <>
+	inline reg interleave<int8_t>(const reg v) {
+		auto v_permute = _mm256_permute2f128_si256(_mm256_castps_si256(v), _mm256_castps_si256(v), _MM_SHUFFLE(0,0,0,3));
+
+		auto lo = _mm256_unpacklo_epi8(_mm256_castps_si256(v), v_permute);
+		auto hi = _mm256_unpackhi_epi8(_mm256_castps_si256(v), v_permute);
+
+		return _mm256_castsi256_ps(_mm256_permute2f128_si256(lo, hi, _MM_SHUFFLE(0,2,0,0)));
+	}
+#endif
+
+	// --------------------------------------------------------------------------------------------------- interleavelo
+	template <>
+	inline reg interleavelo<double>(const reg v1, const reg v2) {
+		auto rx2 = interleave<double>(v1, v2);
+		return rx2.val[0];
+	}
+
+	template <>
+	inline reg interleavelo<float>(const reg v1, const reg v2) {
+		auto rx2 = interleave<float>(v1, v2);
+		return rx2.val[0];
+	}
+
+	template <>
+	inline reg interleavelo<int64_t>(const reg v1, const reg v2) {
+		auto rx2 = interleave<int64_t>(v1, v2);
+		return rx2.val[0];
+	}
+
+	template <>
+	inline reg interleavelo<int32_t>(const reg v1, const reg v2) {
+		auto rx2 = interleave<int32_t>(v1, v2);
+		return rx2.val[0];
+	}
+
+	template <>
+	inline reg interleavelo<int16_t>(const reg v1, const reg v2) {
+		auto rx2 = interleave<int16_t>(v1, v2);
+		return rx2.val[0];
+	}
+
+	template <>
+	inline reg interleavelo<int8_t>(const reg v1, const reg v2) {
+		auto rx2 = interleave<int8_t>(v1, v2);
+		return rx2.val[0];
+	}
+
+	// --------------------------------------------------------------------------------------------------- interleavehi
+	template <>
+	inline reg interleavehi<double>(const reg v1, const reg v2) {
+		auto rx2 = interleave<double>(v1, v2);
+		return rx2.val[1];
+	}
+
+	template <>
+	inline reg interleavehi<int64_t>(const reg v1, const reg v2) {
+		auto rx2 = interleave<int64_t>(v1, v2);
+		return rx2.val[1];
+	}
+
+	template <>
+	inline reg interleavehi<float>(const reg v1, const reg v2) {
+		auto rx2 = interleave<float>(v1, v2);
+		return rx2.val[1];
+	}
+
+	template <>
+	inline reg interleavehi<int32_t>(const reg v1, const reg v2) {
+		auto rx2 = interleave<int32_t>(v1, v2);
+		return rx2.val[1];
+	}
+
+	template <>
+	inline reg interleavehi<int16_t>(const reg v1, const reg v2) {
+		auto rx2 = interleave<int16_t>(v1, v2);
+		return rx2.val[1];
+	}
+
+	template <>
+	inline reg interleavehi<int8_t>(const reg v1, const reg v2) {
+		auto rx2 = interleave<int8_t>(v1, v2);
+		return rx2.val[1];
+	}
+
+	// ---------------------------------------------------------------------------------------------------- interleave2
+	template <>
+	inline regx2 interleave2<double>(const reg v1, const reg v2) {
+		regx2 res = {{mipp::interleavelo2<double>(v1, v2), mipp::interleavehi2<double>(v1, v2)}};
+		return res;
+	}
+
+	template <>
+	inline regx2 interleave2<float>(const reg v1, const reg v2) {
+		regx2 res = {{mipp::interleavelo2<float>(v1, v2), mipp::interleavehi2<float>(v1, v2)}};
+		return res;
+	}
+
+	template <>
+	inline regx2 interleave2<int64_t>(const reg v1, const reg v2) {
+		regx2 res = {{mipp::interleavelo2<int64_t>(v1, v2), mipp::interleavehi2<int64_t>(v1, v2)}};
+		return res;
+	}
+
+	template <>
+	inline regx2 interleave2<int32_t>(const reg v1, const reg v2) {
+		regx2 res = {{mipp::interleavelo2<int32_t>(v1, v2), mipp::interleavehi2<int32_t>(v1, v2)}};
+		return res;
+	}
+
+	template <>
+	inline regx2 interleave2<int16_t>(const reg v1, const reg v2) {
+		regx2 res = {{mipp::interleavelo2<int16_t>(v1, v2), mipp::interleavehi2<int16_t>(v1, v2)}};
+		return res;
+	}
+
+	template <>
+	inline regx2 interleave2<int8_t>(const reg v1, const reg v2) {
+		regx2 res = {{mipp::interleavelo2<int8_t>(v1, v2), mipp::interleavehi2<int8_t>(v1, v2)}};
+		return res;
+	}
+
+	// --------------------------------------------------------------------------------------------------- interleavex2
+#ifdef __AVX2__
+	template <>
+	inline regx2 interleavex2<float>(const reg v1, const reg v2) {
+		// v1         = [a, b, c, d,| e, f, g, h]
+		// v2         = [A, B, C, D,| E, F, G, H]
+		// =>
+		// res.val[0] = [a, b, c, d,| A, B, C, D]
+		// res.val[1] = [e, f, g, h,| E, F, G, H]
+		auto lo = _mm256_castsi256_ps(_mm256_permute2f128_si256(_mm256_castps_si256(v1),
+		                                                        _mm256_castps_si256(v2),
+		                                                        _MM_SHUFFLE(0,2,0,0)));
+		auto hi = _mm256_castsi256_ps(_mm256_permute2f128_si256(_mm256_castps_si256(v1),
+		                                                        _mm256_castps_si256(v2),
+		                                                        _MM_SHUFFLE(0,3,0,1)));
+		regx2 res = {{lo, hi}};
+		return res;
+	}
+#endif
+
+	// --------------------------------------------------------------------------------------------------- interleavex4
+#ifdef __AVX2__
+	template <>
+	inline reg interleavex4<int16_t>(const reg v) {
+		// [a, b, c, d,| e, f, g, h,| i, j, k, l,| m, n, o, p]
+		// =>
+		// [a, b, c, d,| i, j, k, l,| e, f, g, h,| m, n, o, p]
+		return _mm256_castsi256_ps(_mm256_permute4x64_epi64(_mm256_castps_si256(v), _MM_SHUFFLE(3,1,2,0)));
+	}
+
+	template <>
+	inline reg interleavex4<int8_t>(const reg v) {
+		return _mm256_castsi256_ps(_mm256_permute4x64_epi64(_mm256_castps_si256(v), _MM_SHUFFLE(3,1,2,0)));
+	}
+#endif
+
+	// -------------------------------------------------------------------------------------------------- interleavex16
+	template <>
+	inline reg interleavex16<int8_t>(const reg v) {
+		return mipp::interleave<int16_t>(v);
+	}
+
+	// ------------------------------------------------------------------------------------------------------ transpose
+#ifdef __AVX2__
+	template <>
+	inline void transpose<float>(reg tab[nElReg<float>()]) {
+		// Transpose the 8x8 matrix:
+		// -------------------------
+		// tab[0] = [a0, a1, a2, a3, a4, a5, a6, a7]        tab[0] = [a0, b0, c0, d0, e0, f0, g0, h0]
+		// tab[1] = [b0, b1, b2, b3, b4, b5, b6, b7]        tab[1] = [a1, b1, c1, d1, e1, f1, g1, h1]
+		// tab[2] = [c0, c1, c2, c3, c4, c5, c6, c7]        tab[2] = [a2, b2, c2, d2, e2, f2, g2, h2]
+		// tab[3] = [d0, d1, d2, d3, d4, d5, d6, d7]        tab[3] = [a3, b3, c3, d3, e3, f3, g3, h3]
+		// tab[4] = [e0, e1, e2, e3, e4, e5, e6, e7]   =>   tab[4] = [a4, b4, c4, d4, e4, f4, g4, h4]
+		// tab[5] = [f0, f1, f2, f3, f4, f5, f6, f7]        tab[5] = [a5, b5, c5, d5, e5, f5, g5, h5]
+		// tab[6] = [g0, g1, g2, g3, g4, g5, g6, g7]        tab[6] = [a6, b6, c6, d6, e6, f6, g6, h6]
+		// tab[7] = [h0, h1, h2, h3, h4, h5, h6, h7]        tab[7] = [a7, b7, c7, d7, e7, f7, g7, h7]
+
+		auto ab = mipp::interleave<float>(tab[0], tab[1]);
+		auto cd = mipp::interleave<float>(tab[2], tab[3]);
+		auto ef = mipp::interleave<float>(tab[4], tab[5]);
+		auto gh = mipp::interleave<float>(tab[6], tab[7]);
+
+		auto a03b03 = ab.val[0];
+		auto c03d03 = cd.val[0];
+		auto e03f03 = ef.val[0];
+		auto g03h03 = gh.val[0];
+		auto a47b47 = ab.val[1];
+		auto c47d47 = cd.val[1];
+		auto e47f47 = ef.val[1];
+		auto g47h47 = gh.val[1];
+
+		auto a03b03c03d03 = mipp::interleave<int64_t>(a03b03, c03d03);
+		auto e03f03g03h03 = mipp::interleave<int64_t>(e03f03, g03h03);
+		auto a47b47c47d47 = mipp::interleave<int64_t>(a47b47, c47d47);
+		auto e47f47g47h47 = mipp::interleave<int64_t>(e47f47, g47h47);
+
+		auto a01b01c01d01 = a03b03c03d03.val[0];
+		auto a23b23c23d23 = a03b03c03d03.val[1];
+		auto e01f01g01h01 = e03f03g03h03.val[0];
+		auto e23f23g23h23 = e03f03g03h03.val[1];
+		auto a45b45c45d45 = a47b47c47d47.val[0];
+		auto a67b67c67d67 = a47b47c47d47.val[1];
+		auto e45f45g45h45 = e47f47g47h47.val[0];
+		auto e67f67g67h67 = e47f47g47h47.val[1];
+
+		auto a01b01c01d01e01f01g01h01 = mipp::interleavex2<float>(a01b01c01d01, e01f01g01h01);
+		auto a23b23c23d23e23f23g23h23 = mipp::interleavex2<float>(a23b23c23d23, e23f23g23h23);
+		auto a45b45c45d45e45f45g45h45 = mipp::interleavex2<float>(a45b45c45d45, e45f45g45h45);
+		auto a67b67c67d67e67f67g67h67 = mipp::interleavex2<float>(a67b67c67d67, e67f67g67h67);
+
+		auto a0b0c0d0e0f0g0h0 = a01b01c01d01e01f01g01h01.val[0];
+		auto a1b1c1d1e1f1g1h1 = a01b01c01d01e01f01g01h01.val[1];
+		auto a2b2c2d2e2f2g2h2 = a23b23c23d23e23f23g23h23.val[0];
+		auto a3b3c3d3e3f3g3h3 = a23b23c23d23e23f23g23h23.val[1];
+		auto a4b4c4d4e4f4g4h4 = a45b45c45d45e45f45g45h45.val[0];
+		auto a5b5c5d5e5f5g5h5 = a45b45c45d45e45f45g45h45.val[1];
+		auto a6b6c6d6e6f6g6h6 = a67b67c67d67e67f67g67h67.val[0];
+		auto a7b7c7d7e7f7g7h7 = a67b67c67d67e67f67g67h67.val[1];
+
+		tab[0] = (reg)a0b0c0d0e0f0g0h0;
+		tab[1] = (reg)a1b1c1d1e1f1g1h1;
+		tab[2] = (reg)a2b2c2d2e2f2g2h2;
+		tab[3] = (reg)a3b3c3d3e3f3g3h3;
+		tab[4] = (reg)a4b4c4d4e4f4g4h4;
+		tab[5] = (reg)a5b5c5d5e5f5g5h5;
+		tab[6] = (reg)a6b6c6d6e6f6g6h6;
+		tab[7] = (reg)a7b7c7d7e7f7g7h7;
+	}
+#endif
+
+	// ----------------------------------------------------------------------------------------------------- transpose2
+#ifdef __AVX2__
+	template <>
+	inline void transpose2<int16_t>(reg tab[nElReg<int16_t>()/2]) {
+		// Transpose the 8x8 matrix:
+		// -------------------------
+		//
+		// Input:
+		// ------
+		// tab[0] = [a0, a1, a2, a3, a4, a5, a6, a7,  A0, A1, A2, A3, A4, A5, A6, A7]
+		// tab[1] = [b0, b1, b2, b3, b4, b5, b6, b7,  B0, B1, B2, B3, B4, B5, B6, B7]
+		// tab[2] = [c0, c1, c2, c3, c4, c5, c6, c7,  C0, C1, C2, C3, C4, C5, C6, C7]
+		// tab[3] = [d0, d1, d2, d3, d4, d5, d6, d7,  D0, D1, D2, D3, D4, D5, D6, D7]
+		// tab[4] = [e0, e1, e2, e3, e4, e5, e6, e7,  E0, E1, E2, E3, E4, E5, E6, E7]
+		// tab[5] = [f0, f1, f2, f3, f4, f5, f6, f7,  F0, F1, F2, F3, F4, F5, F6, F7]
+		// tab[6] = [g0, g1, g2, g3, g4, g5, g6, g7,  G0, G1, G2, G3, G4, G5, G6, G7]
+		// tab[7] = [h0, h1, h2, h3, h4, h5, h6, h7,  H0, H1, H2, H3, H4, H5, H6, H7]
+		//
+		// Output:
+		// -------
+		// tab[0] = [a0, b0, c0, d0, e0, f0, g0, h0,  A0, B0, C0, D0, E0, F0, G0, H0]
+		// tab[1] = [a1, b1, c1, d1, e1, f1, g1, h1,  A1, B1, C1, D1, E1, F1, G1, H1]
+		// tab[2] = [a2, b2, c2, d2, e2, f2, g2, h2,  A2, B2, C2, D2, E2, F2, G2, H2]
+		// tab[3] = [a3, b3, c3, d3, e3, f3, g3, h3,  A3, B3, C3, D3, E3, F3, G3, H3]
+		// tab[4] = [a4, b4, c4, d4, e4, f4, g4, h4,  A4, B4, C4, D4, E4, F4, G4, H4]
+		// tab[5] = [a5, b5, c5, d5, e5, f5, g5, h5,  A5, B5, C5, D5, E5, F5, G5, H5]
+		// tab[6] = [a6, b6, c6, d6, e6, f6, g6, h6,  A6, B6, C6, D6, E6, F6, G6, H6]
+		// tab[7] = [a7, b7, c7, d7, e7, f7, g7, h7,  A7, B7, C7, D7, E7, F7, G7, H7]
+
+		auto a03b03 = mipp::interleavelo2<int16_t>(tab[0], tab[1]);
+		auto c03d03 = mipp::interleavelo2<int16_t>(tab[2], tab[3]);
+		auto e03f03 = mipp::interleavelo2<int16_t>(tab[4], tab[5]);
+		auto g03h03 = mipp::interleavelo2<int16_t>(tab[6], tab[7]);
+		auto a47b47 = mipp::interleavehi2<int16_t>(tab[0], tab[1]);
+		auto c47d47 = mipp::interleavehi2<int16_t>(tab[2], tab[3]);
+		auto e47f47 = mipp::interleavehi2<int16_t>(tab[4], tab[5]);
+		auto g47h47 = mipp::interleavehi2<int16_t>(tab[6], tab[7]);
+
+		auto a01b01c01d01 = mipp::interleavelo2<int32_t>(a03b03, c03d03);
+		auto a23b23c23d23 = mipp::interleavehi2<int32_t>(a03b03, c03d03);
+		auto e01f01g01h01 = mipp::interleavelo2<int32_t>(e03f03, g03h03);
+		auto e23f23g23h23 = mipp::interleavehi2<int32_t>(e03f03, g03h03);
+		auto a45b45c45d45 = mipp::interleavelo2<int32_t>(a47b47, c47d47);
+		auto a67b67c67d67 = mipp::interleavehi2<int32_t>(a47b47, c47d47);
+		auto e45f45g45h45 = mipp::interleavelo2<int32_t>(e47f47, g47h47);
+		auto e67f67g67h67 = mipp::interleavehi2<int32_t>(e47f47, g47h47);
+
+		auto a0b0c0d0e0f0g0h0 = mipp::interleavelo2<int64_t>(a01b01c01d01, e01f01g01h01);
+		auto a1b1c1d1e1f1g1h1 = mipp::interleavehi2<int64_t>(a01b01c01d01, e01f01g01h01);
+		auto a2b2c2d2e2f2g2h2 = mipp::interleavelo2<int64_t>(a23b23c23d23, e23f23g23h23);
+		auto a3b3c3d3e3f3g3h3 = mipp::interleavehi2<int64_t>(a23b23c23d23, e23f23g23h23);
+		auto a4b4c4d4e4f4g4h4 = mipp::interleavelo2<int64_t>(a45b45c45d45, e45f45g45h45);
+		auto a5b5c5d5e5f5g5h5 = mipp::interleavehi2<int64_t>(a45b45c45d45, e45f45g45h45);
+		auto a6b6c6d6e6f6g6h6 = mipp::interleavelo2<int64_t>(a67b67c67d67, e67f67g67h67);
+		auto a7b7c7d7e7f7g7h7 = mipp::interleavehi2<int64_t>(a67b67c67d67, e67f67g67h67);
+
+		tab[0] = (reg)a0b0c0d0e0f0g0h0;
+		tab[1] = (reg)a1b1c1d1e1f1g1h1;
+		tab[2] = (reg)a2b2c2d2e2f2g2h2;
+		tab[3] = (reg)a3b3c3d3e3f3g3h3;
+		tab[4] = (reg)a4b4c4d4e4f4g4h4;
+		tab[5] = (reg)a5b5c5d5e5f5g5h5;
+		tab[6] = (reg)a6b6c6d6e6f6g6h6;
+		tab[7] = (reg)a7b7c7d7e7f7g7h7;
+	}
+#endif
+
+	// -------------------------------------------------------------------------------------------------- transpose28x8
+	template <>
+	inline void transpose28x8<int8_t>(reg tab[8]) {
+		mipp::transpose2<int16_t>(tab);
+	}
+
+	// ----------------------------------------------------------------------------------------------------------- andb
+	template <>
+	inline reg andb<double>(const reg v1, const reg v2) {
+		return _mm256_castpd_ps(_mm256_and_pd(_mm256_castps_pd(v1), _mm256_castps_pd(v2)));
+	}
+
+	template <>
+	inline reg andb<float>(const reg v1, const reg v2) {
+		return _mm256_and_ps(v1, v2);
+	}
+
+	template <>
+	inline reg andb<int64_t>(const reg v1, const reg v2) {
+		return _mm256_castpd_ps(_mm256_and_pd(_mm256_castps_pd(v1), _mm256_castps_pd(v2)));
+	}
+
+	template <>
+	inline reg andb<int32_t>(const reg v1, const reg v2) {
+		return _mm256_and_ps(v1, v2);
+	}
+
+#ifdef __AVX2__
+	template <>
+	inline reg andb<int16_t>(const reg v1, const reg v2) {
+		return _mm256_castsi256_ps(_mm256_and_si256(_mm256_castps_si256(v1), _mm256_castps_si256(v2)));
+	}
+
+	template <>
+	inline reg andb<int8_t>(const reg v1, const reg v2) {
+		return _mm256_castsi256_ps(_mm256_and_si256(_mm256_castps_si256(v1), _mm256_castps_si256(v2)));
+	}
+#endif
+
+	// ---------------------------------------------------------------------------------------------------- andb (mask)
+	template <>
+	inline msk andb<4>(const msk v1, const msk v2) {
+		return _mm256_castpd_si256(_mm256_and_pd(_mm256_castsi256_pd(v1), _mm256_castsi256_pd(v2)));
+	}
+
+	template <>
+	inline msk andb<8>(const msk v1, const msk v2) {
+		return _mm256_castps_si256(_mm256_and_ps(_mm256_castsi256_ps(v1), _mm256_castsi256_ps(v2)));
+	}
+
+#ifdef __AVX2__
+	template <>
+	inline msk andb<16>(const msk v1, const msk v2) {
+		return _mm256_and_si256(v1, v2);
+	}
+
+	template <>
+	inline msk andb<32>(const msk v1, const msk v2) {
+		return _mm256_and_si256(v1, v2);
+	}
+#endif
+
+	// ---------------------------------------------------------------------------------------------------------- andnb
+	template <>
+	inline reg andnb<double>(const reg v1, const reg v2) {
+		return _mm256_castpd_ps(_mm256_andnot_pd(_mm256_castps_pd(v1), _mm256_castps_pd(v2)));
+	}
+
+	template <>
+	inline reg andnb<float>(const reg v1, const reg v2) {
+		return _mm256_andnot_ps(v1, v2);
+	}
+
+	template <>
+	inline reg andnb<int64_t>(const reg v1, const reg v2) {
+		return _mm256_castpd_ps(_mm256_andnot_pd(_mm256_castps_pd(v1), _mm256_castps_pd(v2)));
+	}
+
+	template <>
+	inline reg andnb<int32_t>(const reg v1, const reg v2) {
+		return _mm256_andnot_ps(v1, v2);
+	}
+
+#ifdef __AVX2__
+	template <>
+	inline reg andnb<int16_t>(const reg v1, const reg v2) {
+		return _mm256_castsi256_ps(_mm256_andnot_si256(_mm256_castps_si256(v1), _mm256_castps_si256(v2)));
+	}
+
+	template <>
+	inline reg andnb<int8_t>(const reg v1, const reg v2) {
+		return _mm256_castsi256_ps(_mm256_andnot_si256(_mm256_castps_si256(v1), _mm256_castps_si256(v2)));
+	}
+#endif
+
+	// --------------------------------------------------------------------------------------------------- andnb (mask)
+	template <>
+	inline msk andnb<4>(const msk v1, const msk v2) {
+		return _mm256_castpd_si256(_mm256_andnot_pd(_mm256_castsi256_pd(v1), _mm256_castsi256_pd(v2)));
+	}
+
+	template <>
+	inline msk andnb<8>(const msk v1, const msk v2) {
+		return _mm256_castps_si256(_mm256_andnot_ps(_mm256_castsi256_ps(v1), _mm256_castsi256_ps(v2)));
+	}
+
+#ifdef __AVX2__
+	template <>
+	inline msk andnb<16>(const msk v1, const msk v2) {
+		return _mm256_andnot_si256(v1, v2);
+	}
+
+	template <>
+	inline msk andnb<32>(const msk v1, const msk v2) {
+		return _mm256_andnot_si256(v1, v2);
+	}
+#endif
+
+	// ----------------------------------------------------------------------------------------------------------- notb
+	template <>
+	inline reg notb<float>(const reg v) {
+		return andnb<float>(v, set1<int32_t>(0xFFFFFFFF));
+	}
+
+	template <>
+	inline reg notb<double>(const reg v) {
+		return andnb<double>(v, set1<int64_t>(0xFFFFFFFFFFFFFFFF));
+	}
+
+	template <>
+	inline reg notb<int64_t>(const reg v) {
+		return andnb<int64_t>(v, set1<int64_t>(0xFFFFFFFFFFFFFFFF));
+	}
+
+	template <>
+	inline reg notb<int32_t>(const reg v) {
+		return andnb<int32_t>(v, set1<int32_t>(0xFFFFFFFF));
+	}
+
+	template <>
+	inline reg notb<int16_t>(const reg v) {
+#ifdef _MSC_VER
+#pragma warning( disable : 4309 )
+#endif
+		return andnb<int16_t>(v, set1<int16_t>(0xFFFF));
+#ifdef _MSC_VER
+#pragma warning( default : 4309 )
+#endif
+	}
+
+	template <>
+	inline reg notb<int8_t>(const reg v) {
+#ifdef _MSC_VER
+#pragma warning( disable : 4309 )
+#endif
+		return andnb<int8_t>(v, set1<int8_t>(0xFF));
+#ifdef _MSC_VER
+#pragma warning( default : 4309 )
+#endif
+	}
+
+	// ---------------------------------------------------------------------------------------------------- notb (mask)
+	template <>
+	inline msk notb<4>(const msk v) {
+		return andnb<4>(v, _mm256_castps_si256(set1<int64_t>(0xFFFFFFFFFFFFFFFF)));
+	}
+
+	template <>
+	inline msk notb<8>(const msk v) {
+		return andnb<8>(v, _mm256_castps_si256(set1<int32_t>(0xFFFFFFFF)));
+	}
+
+	template <>
+	inline msk notb<16>(const msk v) {
+#ifdef _MSC_VER
+#pragma warning( disable : 4309 )
+#endif
+		return andnb<16>(v, _mm256_castps_si256(set1<int16_t>(0xFFFF)));
+#ifdef _MSC_VER
+#pragma warning( default : 4309 )
+#endif
+	}
+
+	template <>
+	inline msk notb<32>(const msk v) {
+#ifdef _MSC_VER
+#pragma warning( disable : 4309 )
+#endif
+		return andnb<32>(v, _mm256_castps_si256(set1<int8_t>(0xFF)));
+#ifdef _MSC_VER
+#pragma warning( default : 4309 )
+#endif
+	}
+
+	// ------------------------------------------------------------------------------------------------------------ orb
+	template <>
+	inline reg orb<float>(const reg v1, const reg v2) {
+		return _mm256_or_ps(v1, v2);
+	}
+
+	template <>
+	inline reg orb<double>(const reg v1, const reg v2) {
+		return _mm256_castpd_ps(_mm256_or_pd(_mm256_castps_pd(v1), _mm256_castps_pd(v2)));
+	}
+
+	template <>
+	inline reg orb<int64_t>(const reg v1, const reg v2) {
+		return _mm256_castpd_ps(_mm256_or_pd(_mm256_castps_pd(v1), _mm256_castps_pd(v2)));
+	}
+
+	template <>
+	inline reg orb<int32_t>(const reg v1, const reg v2) {
+		return _mm256_or_ps(v1, v2);
+	}
+
+#ifdef __AVX2__
+	template <>
+	inline reg orb<int16_t>(const reg v1, const reg v2) {
+		return _mm256_castsi256_ps(_mm256_or_si256(_mm256_castps_si256(v1), _mm256_castps_si256(v2)));
+	}
+
+	template <>
+	inline reg orb<int8_t>(const reg v1, const reg v2) {
+		return _mm256_castsi256_ps(_mm256_or_si256(_mm256_castps_si256(v1), _mm256_castps_si256(v2)));
+	}
+#endif
+
+	// ----------------------------------------------------------------------------------------------------- orb (mask)
+	template <>
+	inline msk orb<4>(const msk v1, const msk v2) {
+		return _mm256_castpd_si256(_mm256_or_pd(_mm256_castsi256_pd(v1), _mm256_castsi256_pd(v2)));
+	}
+
+	template <>
+	inline msk orb<8>(const msk v1, const msk v2) {
+		return _mm256_castps_si256(_mm256_or_ps(_mm256_castsi256_ps(v1), _mm256_castsi256_ps(v2)));
+	}
+
+#ifdef __AVX2__
+	template <>
+	inline msk orb<16>(const msk v1, const msk v2) {
+		return _mm256_or_si256(v1, v2);
+	}
+
+	template <>
+	inline msk orb<32>(const msk v1, const msk v2) {
+		return _mm256_or_si256(v1, v2);
+	}
+#endif
+
+	// ----------------------------------------------------------------------------------------------------------- xorb
+	template <>
+	inline reg xorb<float>(const reg v1, const reg v2) {
+		return _mm256_xor_ps(v1, v2);
+	}
+
+	template <>
+	inline reg xorb<double>(const reg v1, const reg v2) {
+		return _mm256_castpd_ps(_mm256_xor_pd(_mm256_castps_pd(v1), _mm256_castps_pd(v2)));
+	}
+
+	template <>
+	inline reg xorb<int64_t>(const reg v1, const reg v2) {
+		return _mm256_castpd_ps(_mm256_xor_pd(_mm256_castps_pd(v1), _mm256_castps_pd(v2)));
+	}
+
+	template <>
+	inline reg xorb<int32_t>(const reg v1, const reg v2) {
+		return _mm256_xor_ps(v1, v2);
+	}
+
+#ifdef __AVX2__
+	template <>
+	inline reg xorb<int16_t>(const reg v1, const reg v2) {
+		return _mm256_castsi256_ps(_mm256_xor_si256(_mm256_castps_si256(v1), _mm256_castps_si256(v2)));
+	}
+
+	template <>
+	inline reg xorb<int8_t>(const reg v1, const reg v2) {
+		return _mm256_castsi256_ps(_mm256_xor_si256(_mm256_castps_si256(v1), _mm256_castps_si256(v2)));
+	}
+#endif
+
+	// ---------------------------------------------------------------------------------------------------- xorb (mask)
+	template <>
+	inline msk xorb<4>(const msk v1, const msk v2) {
+		return _mm256_castps_si256(_mm256_xor_ps(_mm256_castsi256_ps(v1), _mm256_castsi256_ps(v2)));
+	}
+
+	template <>
+	inline msk xorb<8>(const msk v1, const msk v2) {
+		return _mm256_castps_si256(_mm256_xor_ps(_mm256_castsi256_ps(v1), _mm256_castsi256_ps(v2)));
+	}
+
+#ifdef __AVX2__
+	template <>
+	inline msk xorb<16>(const msk v1, const msk v2) {
+		return _mm256_xor_si256(v1, v2);
+	}
+
+	template <>
+	inline msk xorb<32>(const msk v1, const msk v2) {
+		return _mm256_xor_si256(v1, v2);
+	}
+#endif
+
+	// --------------------------------------------------------------------------------------------------------- lshift
+#ifdef __AVX2__
+	template <>
+	inline reg lshift<int64_t>(const reg v1, const uint32_t n) {
+		return _mm256_castsi256_ps(_mm256_slli_epi64(_mm256_castps_si256(v1), n));
+	}
+
+	template <>
+	inline reg lshift<int32_t>(const reg v1, const uint32_t n) {
+		return _mm256_castsi256_ps(_mm256_slli_epi32(_mm256_castps_si256(v1), n));
+	}
+
+	template <>
+	inline reg lshift<int16_t>(const reg v1, const uint32_t n) {
+		return _mm256_castsi256_ps(_mm256_slli_epi16(_mm256_castps_si256(v1), n));
+	}
+
+	template <>
+	inline reg lshift<int8_t>(const reg v1, const uint32_t n) {
+//		auto shu = _mm256_set_epi8(30,31,28,29,26,27,24,25,22,23,20,21,18,19,16,17,14,15,12,13,10,11,8,9,6,7,4,5,2,3,0,1);
+//		reg v2 = _mm256_castsi256_ps(_mm256_shuffle_epi8(_mm256_castps_si256(v1), shu));
+//		reg lsh1 = lshift<int16_t>(v1, n);
+//		reg lsh2 = lshift<int16_t>(v2, n);
+//		lsh2 = _mm256_castsi256_ps(_mm256_shuffle_epi8(_mm256_castps_si256(lsh2), shu));
+//
+//		reg msk = set1<int16_t>(0x00FF);
+//		lsh1 = andb <int16_t>(msk, lsh1);
+//		lsh2 = andnb<int16_t>(msk, lsh2);
+//
+//		return xorb<int16_t>(lsh1, lsh2);
+
+		auto msk = set1<int8_t>((1 << n) -1);
+		reg lsh = lshift<int16_t>(v1, n);
+		lsh = andnb<int16_t>(msk, lsh);
+		return lsh;
+
+//		// TODO: Be careful this is not a shift 8 but a shift 16 bits...
+//		return _mm256_castsi256_ps(_mm256_slli_epi16(_mm256_castps_si256(v1), n));
+	}
+#else
+	template <>
+	inline reg lshift<int32_t>(const reg v1, const uint32_t n) {
+		__m128 v1_lane0, v1_lane1;
+		__m256 res = v1;
+
+		// apply left shift on lane 0
+		v1_lane0 = _mm256_castps256_ps128(v1);
+		v1_lane0 = _mm_castsi128_ps(_mm_slli_epi32(_mm_castps_si128(v1_lane0), n));
+
+		// permute lane 0 with lane 1
+		//   -> _mm256_permute2f128_ps(a, a, _MM_SHUFFLE(0, 0, 0, 1)
+		//            lane 0        lane 1
+		//       in[7, 6, 5, 4, | 3, 2, 1, 0] =>
+		//      out[3, 2, 1, 0, | 7, 6, 5, 4]
+		res = _mm256_permute2f128_ps(v1, v1, _MM_SHUFFLE(0, 0, 0, 1));
+
+		// apply left shift on lane 1
+		v1_lane1 = _mm256_castps256_ps128(res);
+		v1_lane1 = _mm_castsi128_ps(_mm_slli_epi32(_mm_castps_si128(v1_lane1), n));
+
+		// convert two SSE-128 registers into one AVX-256 register
+		res = _mm256_castps128_ps256(v1_lane0);
+		res = _mm256_insertf128_ps(res, v1_lane1, 1);
+
+		return res;
+	}
+#endif
+
+	// -------------------------------------------------------------------------------------------------- lshift (mask)
+
+	// --------------------------------------------------------------------------------------------------------- rshift
+#ifdef __AVX2__
+	template <>
+	inline reg rshift<int64_t>(const reg v1, const uint32_t n) {
+		return _mm256_castsi256_ps(_mm256_srli_epi64(_mm256_castps_si256(v1), n));
+	}
+
+	template <>
+	inline reg rshift<int32_t>(const reg v1, const uint32_t n) {
+		return _mm256_castsi256_ps(_mm256_srli_epi32(_mm256_castps_si256(v1), n));
+	}
+
+	template <>
+	inline reg rshift<int16_t>(const reg v1, const uint32_t n) {
+		return _mm256_castsi256_ps(_mm256_srli_epi16(_mm256_castps_si256(v1), n));
+	}
+
+	template <>
+	inline reg rshift<int8_t>(const reg v1, const uint32_t n) {
+//		auto shu = _mm256_set_epi8(30,31,28,29,26,27,24,25,22,23,20,21,18,19,16,17,14,15,12,13,10,11,8,9,6,7,4,5,2,3,0,1);
+//		reg v2 = _mm256_castsi256_ps(_mm256_shuffle_epi8(_mm256_castps_si256(v1), shu));
+//		reg rsh1 = rshift<int16_t>(v1, n);
+//		reg rsh2 = rshift<int16_t>(v2, n);
+//		rsh2 = _mm256_castsi256_ps(_mm256_shuffle_epi8(_mm256_castps_si256(rsh2), shu));
+//
+//		reg msk = set1<int16_t>(0xFF00);
+//		rsh1 = andb <int16_t>(msk, rsh1);
+//		rsh2 = andnb<int16_t>(msk, rsh2);
+//
+//		return xorb<int16_t>(rsh1, rsh2);
+
+		auto msk = set1<int8_t>((1 << (8 -n)) -1);
+		reg rsh = rshift<int16_t>(v1, n);
+		rsh = andb<int16_t>(msk, rsh);
+		return rsh;
+
+//		// TODO: Be careful this is not a shift 8 but a shift 16 bits...
+//		return _mm256_castsi256_ps(_mm256_srli_epi16(_mm256_castps_si256(v1), n));
+	}
+#else
+	template <>
+	inline reg rshift<int32_t>(const reg v1, const uint32_t n) {
+		__m128 v1_lane0, v1_lane1;
+		__m256 res = v1;
+
+		// apply left shift on lane 0
+		v1_lane0 = _mm256_castps256_ps128(v1);
+		v1_lane0 = _mm_castsi128_ps(_mm_srli_epi32(_mm_castps_si128(v1_lane0), n));
+
+		// permute lane 0 with lane 1
+		//   -> _mm256_permute2f128_ps(a, a, _MM_SHUFFLE(0, 0, 0, 1))
+		//            lane 0        lane 1
+		//       in[7, 6, 5, 4, | 3, 2, 1, 0] =>
+		//      out[3, 2, 1, 0, | 7, 6, 5, 4]
+		res = _mm256_permute2f128_ps(v1, v1, _MM_SHUFFLE(0, 0, 0, 1));
+
+		// apply left shift on lane 1
+		v1_lane1 = _mm256_castps256_ps128(res);
+		v1_lane1 = _mm_castsi128_ps(_mm_srli_epi32(_mm_castps_si128(v1_lane1), n));
+
+		// convert two SSE-128 registers into one AVX-256 register
+		res = _mm256_castps128_ps256(v1_lane0);
+		res = _mm256_insertf128_ps(res, v1_lane1, 1);
+
+		return res;
+	}
+#endif
+
+	// -------------------------------------------------------------------------------------------------- rshift (mask)
+
+	// ---------------------------------------------------------------------------------------------------------- cmpeq
+	template <>
+	inline msk cmpeq<float>(const reg v1, const reg v2) {
+		return _mm256_castps_si256(_mm256_cmp_ps(v1, v2, _CMP_EQ_OQ));
+	}
+
+	template <>
+	inline msk cmpeq<double>(const reg v1, const reg v2) {
+		return _mm256_castpd_si256(_mm256_cmp_pd(_mm256_castps_pd(v1), _mm256_castps_pd(v2), _CMP_EQ_OQ));
+	}
+
+#ifdef __AVX2__
+	template <>
+	inline msk cmpeq<int64_t>(const reg v1, const reg v2) {
+		return _mm256_cmpeq_epi64(_mm256_castps_si256(v1), _mm256_castps_si256(v2));
+	}
+
+	template <>
+	inline msk cmpeq<int32_t>(const reg v1, const reg v2) {
+		return _mm256_cmpeq_epi32(_mm256_castps_si256(v1), _mm256_castps_si256(v2));
+	}
+
+	template <>
+	inline msk cmpeq<int16_t>(const reg v1, const reg v2) {
+		return _mm256_cmpeq_epi16(_mm256_castps_si256(v1), _mm256_castps_si256(v2));
+	}
+
+	template <>
+	inline msk cmpeq<int8_t>(const reg v1, const reg v2) {
+		return _mm256_cmpeq_epi8(_mm256_castps_si256(v1), _mm256_castps_si256(v2));
+	}
+#elif !defined(__INTEL_COMPILER) && !defined(__ICL) && !defined(__ICC)
+	template <>
+	inline msk cmpeq<int64_t>(const reg v1, const reg v2) {
+		return cmpeq<double>(v1, v2);
+	}
+
+	template <>
+	inline msk cmpeq<int32_t>(const reg v1, const reg v2) {
+		return cmpeq<float>(v1, v2);
+	}
+#endif
+
+	// --------------------------------------------------------------------------------------------------------- cmpneq
+	template <>
+	inline msk cmpneq<float>(const reg v1, const reg v2) {
+		return _mm256_castps_si256(_mm256_cmp_ps(v1, v2, _CMP_NEQ_OQ));
+	}
+
+	template <>
+	inline msk cmpneq<double>(const reg v1, const reg v2) {
+		return _mm256_castpd_si256(_mm256_cmp_pd(_mm256_castps_pd(v1), _mm256_castps_pd(v2), _CMP_NEQ_OQ));
+	}
+
+	template <>
+	inline msk cmpneq<int64_t>(const reg v1, const reg v2) {
+		return notb<N<int64_t>()>(cmpeq<int64_t>(v1, v2));
+	}
+
+	template <>
+	inline msk cmpneq<int32_t>(const reg v1, const reg v2) {
+		return notb<N<int32_t>()>(cmpeq<int32_t>(v1, v2));
+	}
+
+	template <>
+	inline msk cmpneq<int16_t>(const reg v1, const reg v2) {
+		return notb<N<int16_t>()>(cmpeq<int16_t>(v1, v2));
+	}
+
+	template <>
+	inline msk cmpneq<int8_t>(const reg v1, const reg v2) {
+		return notb<N<int8_t>()>(cmpeq<int8_t>(v1, v2));
+	}
+
+	// ---------------------------------------------------------------------------------------------------------- cmpgt
+	template <>
+	inline msk cmpgt<float>(const reg v1, const reg v2) {
+		return _mm256_castps_si256(_mm256_cmp_ps(v1, v2, _CMP_GT_OS));
+	}
+
+	template <>
+	inline msk cmpgt<double>(const reg v1, const reg v2) {
+		return _mm256_castpd_si256(_mm256_cmp_pd(_mm256_castps_pd(v1), _mm256_castps_pd(v2), _CMP_GT_OS));
+	}
+
+#ifdef __AVX2__
+	template <>
+	inline msk cmpgt<int64_t>(const reg v1, const reg v2) {
+		return _mm256_cmpgt_epi64(_mm256_castps_si256(v1), _mm256_castps_si256(v2));
+	}
+
+	template <>
+	inline msk cmpgt<int32_t>(const reg v1, const reg v2) {
+		return _mm256_cmpgt_epi32(_mm256_castps_si256(v1), _mm256_castps_si256(v2));
+	}
+
+	template <>
+	inline msk cmpgt<int16_t>(const reg v1, const reg v2) {
+		return _mm256_cmpgt_epi16(_mm256_castps_si256(v1), _mm256_castps_si256(v2));
+	}
+
+	template <>
+	inline msk cmpgt<int8_t>(const reg v1, const reg v2) {
+		return _mm256_cmpgt_epi8(_mm256_castps_si256(v1), _mm256_castps_si256(v2));
+	}
+#endif
+
+	// ---------------------------------------------------------------------------------------------------------- cmpge
+	template <>
+	inline msk cmpge<float>(const reg v1, const reg v2) {
+		return _mm256_castps_si256(_mm256_cmp_ps(v1, v2, _CMP_GE_OS));
+	}
+
+	template <>
+	inline msk cmpge<double>(const reg v1, const reg v2) {
+		return _mm256_castpd_si256(_mm256_cmp_pd(_mm256_castps_pd(v1), _mm256_castps_pd(v2), _CMP_GE_OS));
+	}
+
+	template <>
+	inline msk cmpge<int64_t>(const reg v1, const reg v2) {
+		return orb<N<int64_t>()>(cmpeq<int64_t>(v1, v2), cmpgt<int64_t>(v1, v2));
+	}
+
+	template <>
+	inline msk cmpge<int32_t>(const reg v1, const reg v2) {
+		return orb<N<int32_t>()>(cmpeq<int32_t>(v1, v2), cmpgt<int32_t>(v1, v2));
+	}
+
+	template <>
+	inline msk cmpge<int16_t>(const reg v1, const reg v2) {
+		return orb<N<int16_t>()>(cmpeq<int16_t>(v1, v2), cmpgt<int16_t>(v1, v2));
+	}
+
+	template <>
+	inline msk cmpge<int8_t>(const reg v1, const reg v2) {
+		return orb<N<int8_t>()>(cmpeq<int8_t>(v1, v2), cmpgt<int8_t>(v1, v2));
+	}
+
+	// ---------------------------------------------------------------------------------------------------------- cmple
+	template <>
+	inline msk cmple<float>(const reg v1, const reg v2) {
+		return _mm256_castps_si256(_mm256_cmp_ps(v1, v2, _CMP_LE_OS));
+	}
+
+	template <>
+	inline msk cmple<double>(const reg v1, const reg v2) {
+		return _mm256_castpd_si256(_mm256_cmp_pd(_mm256_castps_pd(v1), _mm256_castps_pd(v2), _CMP_LE_OS));
+	}
+
+	template <>
+	inline msk cmple<int64_t>(const reg v1, const reg v2) {
+		return notb<N<int64_t>()>(cmpgt<int64_t>(v1, v2));
+	}
+
+	template <>
+	inline msk cmple<int32_t>(const reg v1, const reg v2) {
+		return notb<N<int32_t>()>(cmpgt<int32_t>(v1, v2));
+	}
+
+	template <>
+	inline msk cmple<int16_t>(const reg v1, const reg v2) {
+		return notb<N<int16_t>()>(cmpgt<int16_t>(v1, v2));
+	}
+
+	template <>
+	inline msk cmple<int8_t>(const reg v1, const reg v2) {
+		return notb<N<int8_t>()>(cmpgt<int8_t>(v1, v2));
+	}
+
+	// ---------------------------------------------------------------------------------------------------------- cmplt
+	template <>
+	inline msk cmplt<float>(const reg v1, const reg v2) {
+		return _mm256_castps_si256(_mm256_cmp_ps(v1, v2, _CMP_LT_OS));
+	}
+
+	template <>
+	inline msk cmplt<double>(const reg v1, const reg v2) {
+		return _mm256_castpd_si256(_mm256_cmp_pd(_mm256_castps_pd(v1), _mm256_castps_pd(v2), _CMP_LT_OS));
+	}
+
+	template <>
+	inline msk cmplt<int64_t>(const reg v1, const reg v2) {
+		return notb<N<int64_t>()>(cmpge<int64_t>(v1, v2));
+	}
+
+	template <>
+	inline msk cmplt<int32_t>(const reg v1, const reg v2) {
+		return notb<N<int32_t>()>(cmpge<int32_t>(v1, v2));
+	}
+
+	template <>
+	inline msk cmplt<int16_t>(const reg v1, const reg v2) {
+		return notb<N<int16_t>()>(cmpge<int16_t>(v1, v2));
+	}
+
+	template <>
+	inline msk cmplt<int8_t>(const reg v1, const reg v2) {
+		return notb<N<int8_t>()>(cmpge<int8_t>(v1, v2));
+	}
+
+	// ------------------------------------------------------------------------------------------------------------ add
+	template <>
+	inline reg add<float>(const reg v1, const reg v2) {
+		return _mm256_add_ps(v1, v2);
+	}
+
+	template <>
+	inline reg add<double>(const reg v1, const reg v2) {
+		return _mm256_castpd_ps(_mm256_add_pd(_mm256_castps_pd(v1), _mm256_castps_pd(v2)));
+	}
+
+#ifdef __AVX2__
+	template <>
+	inline reg add<int64_t>(const reg v1, const reg v2) {
+		return _mm256_castsi256_ps(_mm256_add_epi64(_mm256_castps_si256(v1), _mm256_castps_si256(v2)));
+	}
+
+	template <>
+	inline reg add<int32_t>(const reg v1, const reg v2) {
+		return _mm256_castsi256_ps(_mm256_add_epi32(_mm256_castps_si256(v1), _mm256_castps_si256(v2)));
+	}
+
+	template <>
+	inline reg add<int16_t>(const reg v1, const reg v2) {
+		return _mm256_castsi256_ps(_mm256_adds_epi16(_mm256_castps_si256(v1), _mm256_castps_si256(v2)));
+	}
+
+	template <>
+	inline reg add<int8_t>(const reg v1, const reg v2) {
+		return _mm256_castsi256_ps(_mm256_adds_epi8(_mm256_castps_si256(v1), _mm256_castps_si256(v2)));
+	}
+#endif
+
+	// ------------------------------------------------------------------------------------------------------------ sub
+	template <>
+	inline reg sub<float>(const reg v1, const reg v2) {
+		return _mm256_sub_ps(v1, v2);
+	}
+
+	template <>
+	inline reg sub<double>(const reg v1, const reg v2) {
+		return _mm256_castpd_ps(_mm256_sub_pd(_mm256_castps_pd(v1), _mm256_castps_pd(v2)));
+	}
+
+#ifdef __AVX2__
+	template <>
+	inline reg sub<int64_t>(const reg v1, const reg v2) {
+		return _mm256_castsi256_ps(_mm256_sub_epi64(_mm256_castps_si256(v1), _mm256_castps_si256(v2)));
+	}
+
+	template <>
+	inline reg sub<int32_t>(const reg v1, const reg v2) {
+		return _mm256_castsi256_ps(_mm256_sub_epi32(_mm256_castps_si256(v1), _mm256_castps_si256(v2)));
+	}
+
+	template <>
+	inline reg sub<int16_t>(const reg v1, const reg v2) {
+		return _mm256_castsi256_ps(_mm256_subs_epi16(_mm256_castps_si256(v1), _mm256_castps_si256(v2)));
+	}
+
+	template <>
+	inline reg sub<int8_t>(const reg v1, const reg v2) {
+		return _mm256_castsi256_ps(_mm256_subs_epi8(_mm256_castps_si256(v1), _mm256_castps_si256(v2)));
+	}
+#endif
+
+	// ------------------------------------------------------------------------------------------------------------ mul
+	template <>
+	inline reg mul<float>(const reg v1, const reg v2) {
+		return _mm256_mul_ps(v1, v2);
+	}
+
+	template <>
+	inline reg mul<double>(const reg v1, const reg v2) {
+		return _mm256_castpd_ps(_mm256_mul_pd(_mm256_castps_pd(v1), _mm256_castps_pd(v2)));
+	}
+
+#ifdef __AVX2__
+	template <>
+	inline reg mul<int32_t>(const reg v1, const reg v2) {
+		return _mm256_castsi256_ps(_mm256_mullo_epi32(_mm256_castps_si256(v1), _mm256_castps_si256(v2)));
+	}
+
+	template <>
+	inline reg mul<int16_t>(const reg v1, const reg v2) {
+		return _mm256_castsi256_ps(_mm256_mullo_epi16(_mm256_castps_si256(v1), _mm256_castps_si256(v2)));
+	}
+#endif
+
+	// ------------------------------------------------------------------------------------------------------------ div
+	template <>
+	inline reg div<float>(const reg v1, const reg v2) {
+		return _mm256_div_ps(v1, v2);
+	}
+
+	template <>
+	inline reg div<double>(const reg v1, const reg v2) {
+		return _mm256_castpd_ps(_mm256_div_pd(_mm256_castps_pd(v1), _mm256_castps_pd(v2)));
+	}
+
+	// ------------------------------------------------------------------------------------------------------------ min
+	template <>
+	inline reg min<float>(const reg v1, const reg v2) {
+		return _mm256_min_ps(v1, v2);
+	}
+
+	template <>
+	inline reg min<double>(const reg v1, const reg v2) {
+		return _mm256_castpd_ps(_mm256_min_pd(_mm256_castps_pd(v1), _mm256_castps_pd(v2)));
+	}
+
+#ifdef __AVX2__
+	template <>
+	inline reg min<int32_t>(const reg v1, const reg v2) {
+		return _mm256_castsi256_ps(_mm256_min_epi32(_mm256_castps_si256(v1), _mm256_castps_si256(v2)));
+	}
+
+	template <>
+	inline reg min<int16_t>(const reg v1, const reg v2) {
+		return _mm256_castsi256_ps(_mm256_min_epi16(_mm256_castps_si256(v1), _mm256_castps_si256(v2)));
+	}
+
+	template <>
+	inline reg min<int8_t>(const reg v1, const reg v2) {
+		return _mm256_castsi256_ps(_mm256_min_epi8(_mm256_castps_si256(v1), _mm256_castps_si256(v2)));
+	}
+#endif
+
+	// ------------------------------------------------------------------------------------------------------------ max
+	template <>
+	inline reg max<float>(const reg v1, const reg v2) {
+		return _mm256_max_ps(v1, v2);
+	}
+
+	template <>
+	inline reg max<double>(const reg v1, const reg v2) {
+		return _mm256_castpd_ps(_mm256_max_pd(_mm256_castps_pd(v1), _mm256_castps_pd(v2)));
+	}
+
+#ifdef __AVX2__
+	template <>
+	inline reg max<int32_t>(const reg v1, const reg v2) {
+		return _mm256_castsi256_ps(_mm256_max_epi32(_mm256_castps_si256(v1), _mm256_castps_si256(v2)));
+	}
+
+	template <>
+	inline reg max<int16_t>(const reg v1, const reg v2) {
+		return _mm256_castsi256_ps(_mm256_max_epi16(_mm256_castps_si256(v1), _mm256_castps_si256(v2)));
+	}
+
+	template <>
+	inline reg max<int8_t>(const reg v1, const reg v2) {
+		return _mm256_castsi256_ps(_mm256_max_epi8(_mm256_castps_si256(v1), _mm256_castps_si256(v2)));
+	}
+#endif
+
+	// ------------------------------------------------------------------------------------------------------------ msb
+	template <>
+	inline reg msb<float>(const reg v1) {
+		// msb_mask = 10000000000000000000000000000000 // 32 bits
+		const reg msb_mask = set1<int32_t>(0x80000000);
+
+		// indices = 31 30 29 28 27 26 25 24 23 22 21 20 19 18 17 16 15 14 13 12 11 10  9  8  7  6  5  4  3  2  1  0
+		// mask    =  1  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0
+		// v1      =  ù  €  è  é  à  &  z  y  x  w  v  u  t  s  r  q  p  o  n  m  l  k  j  i  h  g  f  e  d  c  b  a
+		// res     =  ù  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0
+		return andb<float>(v1, msb_mask);
+	}
+
+	template <>
+	inline reg msb<float>(const reg v1, const reg v2) {
+		reg msb_v1_v2 = xorb<float>(v1, v2);
+		    msb_v1_v2 = msb<float>(msb_v1_v2);
+		return msb_v1_v2;
+	}
+
+	template <>
+	inline reg msb<double>(const reg v1) {
+		// msb_mask = 1000000000000000000000000000000000000000000000000000000000000000 // 64 bits
+		const reg msb_mask = set1<int64_t>(0x8000000000000000);
+
+		// indices = 63 62 61 60 59 58 57 56 55 54 53 52 51 50 49 48 47 46 45 44 43 42 41 40 39 38 37 36 35 34 33 32...
+		// mask    =  1  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0...
+		// v1      =  ù  €  è  é  à  &  z  y  x  w  v  u  t  s  r  q  p  o  n  m  l  k  j  i  h  g  f  e  d  c  b  a...
+		// res     =  ù  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0...
+		return andb<double>(v1, msb_mask);
+	}
+
+	template <>
+	inline reg msb<double>(const reg v1, const reg v2) {
+		reg msb_v1_v2 = xorb<double>(v1, v2);
+		    msb_v1_v2 = msb<double>(msb_v1_v2);
+		return msb_v1_v2;
+	}
+
+	template <>
+	inline reg msb<int16_t>(const reg v1) {
+#ifdef _MSC_VER
+#pragma warning( disable : 4309 )
+#endif
+		const reg msb_mask = set1<int16_t>(0x8000);
+		return andb<int16_t>(v1, msb_mask);
+#ifdef _MSC_VER
+#pragma warning( default : 4309 )
+#endif
+	}
+
+	template <>
+	inline reg msb<int8_t>(const reg v1) {
+#ifdef _MSC_VER
+#pragma warning( disable : 4309 )
+#endif
+		// msb_mask = 10000000 // 8 bits
+		const reg msb_mask = set1<int8_t>(0x80);
+#ifdef _MSC_VER
+#pragma warning( default : 4309 )
+#endif
+		// indices = 7  6  5  4  3  2  1  0
+		// mask    = 1  0  0  0  0  0  0  0
+		// v1      = h  g  f  e  d  c  b  a
+		// res     = h  0  0  0  0  0  0  0
+		return andb<int8_t>(v1, msb_mask);
+	}
+
+	template <>
+	inline reg msb<int16_t>(const reg v1, const reg v2) {
+		reg msb_v1_v2 = xorb<int16_t>(v1, v2);
+		    msb_v1_v2 = msb<int16_t>(msb_v1_v2);
+		return msb_v1_v2;
+	}
+
+	template <>
+	inline reg msb<int8_t>(const reg v1, const reg v2) {
+		reg msb_v1_v2 = xorb<int8_t>(v1, v2);
+		    msb_v1_v2 = msb<int8_t>(msb_v1_v2);
+		return msb_v1_v2;
+	}
+
+	// ----------------------------------------------------------------------------------------------------------- sign
+	template <>
+	inline msk sign<double>(const reg v1) {
+		return cmplt<double>(v1, set0<double>());
+	}
+
+	template <>
+	inline msk sign<float>(const reg v1) {
+		return cmplt<float>(v1, set0<float>());
+	}
+
+	template <>
+	inline msk sign<int64_t>(const reg v1) {
+		return cmpgt<int64_t>(set0<int64_t>(), v1);
+	}
+
+	template <>
+	inline msk sign<int32_t>(const reg v1) {
+		return cmpgt<int32_t>(set0<int32_t>(), v1);
+	}
+
+	template <>
+	inline msk sign<int16_t>(const reg v1) {
+		return cmpgt<int16_t>(set0<int16_t>(), v1);
+	}
+
+	template <>
+	inline msk sign<int8_t>(const reg v1) {
+		return cmpgt<int8_t>(set0<int8_t>(), v1);
+	}
+
+	// ------------------------------------------------------------------------------------------------------------ neg
+	template <>
+	inline reg neg<float>(const reg v1, const reg v2) {
+		return xorb<float>(v1, msb<float>(v2));
+	}
+
+	template <>
+	inline reg neg<float>(const reg v1, const msk v2) {
+		return neg<float>(v1, toreg<8>(v2));
+	}
+
+	template <>
+	inline reg neg<double>(const reg v1, const reg v2) {
+		return xorb<double>(v1, msb<double>(v2));
+	}
+
+	template <>
+	inline reg neg<double>(const reg v1, const msk v2) {
+		return neg<double>(v1, toreg<4>(v2));
+	}
+
+#ifdef __AVX2__
+	template <>
+	inline reg neg<int32_t>(const reg v1, const reg v2) {
+		reg v2_2 = orb<int32_t>(v2, set1<int32_t>(1)); // hack to avoid -0 case
+		return _mm256_castsi256_ps(_mm256_sign_epi32(_mm256_castps_si256(v1), _mm256_castps_si256(v2_2)));
+	}
+
+	template <>
+	inline reg neg<int32_t>(const reg v1, const msk v2) {
+		return neg<int32_t>(v1, toreg<8>(v2));
+	}
+
+	template <>
+	inline reg neg<int16_t>(const reg v1, const reg v2) {
+		reg v2_2 = orb<int16_t>(v2, set1<int16_t>(1)); // hack to avoid -0 case
+		return _mm256_castsi256_ps(_mm256_sign_epi16(_mm256_castps_si256(v1), _mm256_castps_si256(v2_2)));
+	}
+
+	template <>
+	inline reg neg<int16_t>(const reg v1, const msk v2) {
+		return neg<int16_t>(v1, toreg<16>(v2));
+	}
+
+	template <>
+	inline reg neg<int8_t>(const reg v1, const reg v2) {
+		reg v2_2 = orb<int8_t>(v2, set1<int8_t>(1)); // hack to avoid -0 case
+		return _mm256_castsi256_ps(_mm256_sign_epi8(_mm256_castps_si256(v1), _mm256_castps_si256(v2_2)));
+	}
+
+	template <>
+	inline reg neg<int8_t>(const reg v1, const msk v2) {
+		return neg<int8_t>(v1, toreg<32>(v2));
+	}
+#endif
+
+	// ------------------------------------------------------------------------------------------------------------ abs
+	template <>
+	inline reg abs<float>(const reg v1) {
+		// abs_mask = 01111111111111111111111111111111 // 32 bits
+		const reg abs_mask = set1<int32_t>(0x7FFFFFFF);
+
+		// indices = 31 30 29 28 27 26 25 24 23 22 21 20 19 18 17 16 15 14 13 12 11 10  9  8  7  6  5  4  3  2  1  0
+		// mask    =  0  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1
+		// v1      =  ù  €  è  é  à  &  z  y  x  w  v  u  t  s  r  q  p  o  n  m  l  k  j  i  h  g  f  e  d  c  b  a
+		// v1      =  0  €  è  é  à  &  z  y  x  w  v  u  t  s  r  q  p  o  n  m  l  k  j  i  h  g  f  e  d  c  b  a
+		// res is the sign because the first bit is the sign bit (0 = positive, 1 = negative)
+		return andb<float>(v1, abs_mask);
+	}
+
+	template <>
+	inline reg abs<double>(const reg v1) {
+		// abs_mask = 0111111111111111111111111111111111111111111111111111111111111111 // 64 bits
+		const reg abs_mask = set1<int64_t>(0x7FFFFFFFFFFFFFFF);
+
+		// indices = 63 62 61 60 59 58 57 56 55 54 53 52 51 50 49 48 47 46 45 44 43 42 41 40 39 38 37 36 35 34 33 32...
+		// mask    =  0  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1...
+		// v1      =  ù  €  è  é  à  &  z  y  x  w  v  u  t  s  r  q  p  o  n  m  l  k  j  i  h  g  f  e  d  c  b  a...
+		// v1      =  0  €  è  é  à  &  z  y  x  w  v  u  t  s  r  q  p  o  n  m  l  k  j  i  h  g  f  e  d  c  b  a...
+		// res is the sign because the first bit is the sign bit (0 = positive, 1 = negative)
+		return andb<double>(v1, abs_mask);
+	}
+
+#ifdef __AVX2__
+	template <>
+	inline reg abs<int32_t>(const reg v1) {
+		return _mm256_castsi256_ps(_mm256_abs_epi32(_mm256_castps_si256(v1)));
+	}
+
+	template <>
+	inline reg abs<int16_t>(const reg v1) {
+		return _mm256_castsi256_ps(_mm256_abs_epi16(_mm256_castps_si256(v1)));
+	}
+
+	template <>
+	inline reg abs<int8_t>(const reg v1) {
+		return _mm256_castsi256_ps(_mm256_abs_epi8(_mm256_castps_si256(v1)));
+	}
+#endif
+
+	// ----------------------------------------------------------------------------------------------------------- sqrt
+	template <>
+	inline reg sqrt<float>(const reg v1) {
+		return _mm256_sqrt_ps(v1);
+	}
+
+	template <>
+	inline reg sqrt<double>(const reg v1) {
+		return _mm256_castpd_ps(_mm256_sqrt_pd(_mm256_castps_pd(v1)));
+	}
+
+	// ---------------------------------------------------------------------------------------------------------- rsqrt
+	template <>
+	inline reg rsqrt<float>(const reg v1) {
+		return _mm256_rsqrt_ps(v1);
+	}
+
+	template <>
+	inline reg rsqrt<double>(const reg v1) {
+		return div<double>(set1<double>(1.0), sqrt<double>(v1));
+	}
+
+	// ------------------------------------------------------------------------------------------------------------ log
+#if defined(__INTEL_COMPILER) || defined(__ICL) || defined(__ICC)
+	template <>
+	inline reg log<float>(const reg v) {
+		return _mm256_log_ps(v);
+	}
+
+	template <>
+	inline reg log<double>(const reg v) {
+		return _mm256_castpd_ps(_mm256_log_pd(_mm256_castps_pd(v)));
+	}
+#else
+	template <>
+	inline reg log<float>(const reg v) {
+		auto v_bis = v;
+		return log256_ps(v_bis);
+	}
+#endif
+
+	// ------------------------------------------------------------------------------------------------------------ exp
+#if defined(__INTEL_COMPILER) || defined(__ICL) || defined(__ICC)
+	template <>
+	inline reg exp<float>(const reg v) {
+		return _mm256_exp_ps(v);
+	}
+
+	template <>
+	inline reg exp<double>(const reg v) {
+		return _mm256_castpd_ps(_mm256_exp_pd(_mm256_castps_pd(v)));
+	}
+#else
+	template <>
+	inline reg exp<float>(const reg v) {
+		auto v_bis = v;
+		return exp256_ps(v_bis);
+	}
+#endif
+
+	// ------------------------------------------------------------------------------------------------------------ sin
+#if defined(__INTEL_COMPILER) || defined(__ICL) || defined(__ICC)
+	template <>
+	inline reg sin<float>(const reg v) {
+		return _mm256_sin_ps(v);
+	}
+
+	template <>
+	inline reg sin<double>(const reg v) {
+		return _mm256_castpd_ps(_mm256_sin_pd(_mm256_castps_pd(v)));
+	}
+#else
+	template <>
+	inline reg sin<float>(const reg v) {
+		auto v_bis = v;
+		return sin256_ps(v_bis);
+	}
+#endif
+
+	// ------------------------------------------------------------------------------------------------------------ cos
+#if defined(__INTEL_COMPILER) || defined(__ICL) || defined(__ICC)
+	template <>
+	inline reg cos<float>(const reg v) {
+		return _mm256_cos_ps(v);
+	}
+
+	template <>
+	inline reg cos<double>(const reg v) {
+		return _mm256_castpd_ps(_mm256_cos_pd(_mm256_castps_pd(v)));
+	}
+#else
+	template <>
+	inline reg cos<float>(const reg v) {
+		auto v_bis = v;
+		return cos256_ps(v_bis);
+	}
+#endif
+
+	// --------------------------------------------------------------------------------------------------------- sincos
+#if defined(__INTEL_COMPILER) || defined(__ICL) || defined(__ICC)
+	template <>
+	inline void sincos<float>(const reg x, reg &s, reg &c) {
+		s = _mm256_sincos_ps(&c, x);
+	}
+
+	template <>
+	inline void sincos<double>(const reg x, reg &s, reg &c) {
+		s = (reg)_mm256_sincos_pd((__m256d*) &c, (__m256d)x);
+	}
+#else
+	template <>
+	inline void sincos<float>(const reg x, reg &s, reg &c) {
+		sincos256_ps(x, &s, &c);
+	}
+#endif
+
+	// ---------------------------------------------------------------------------------------------------------- fmadd
+#ifdef __FMA__
+	template <>
+	inline reg fmadd<float>(const reg v1, const reg v2, const reg v3) {
+		return _mm256_fmadd_ps(v1, v2, v3);
+	}
+
+	template <>
+	inline reg fmadd<double>(const reg v1, const reg v2, const reg v3) {
+		return _mm256_castpd_ps(_mm256_fmadd_pd(_mm256_castps_pd(v1), _mm256_castps_pd(v2), _mm256_castps_pd(v3)));
+	}
+#else
+	template <>
+	inline reg fmadd<float>(const reg v1, const reg v2, const reg v3) {
+		return add<float>(v3, mul<float>(v1, v2));
+	}
+
+	template <>
+	inline reg fmadd<double>(const reg v1, const reg v2, const reg v3) {
+		return add<double>(v3, mul<double>(v1, v2));
+	}
+#endif
+
+	// --------------------------------------------------------------------------------------------------------- fnmadd
+#ifdef __FMA__
+	template <>
+	inline reg fnmadd<float>(const reg v1, const reg v2, const reg v3) {
+		return _mm256_fnmadd_ps(v1, v2, v3);
+	}
+
+	template <>
+	inline reg fnmadd<double>(const reg v1, const reg v2, const reg v3) {
+		return _mm256_castpd_ps(_mm256_fnmadd_pd(_mm256_castps_pd(v1), _mm256_castps_pd(v2), _mm256_castps_pd(v3)));
+	}
+#else
+	template <>
+	inline reg fnmadd<float>(const reg v1, const reg v2, const reg v3) {
+		return sub<float>(v3, mul<float>(v1, v2));
+	}
+
+	template <>
+	inline reg fnmadd<double>(const reg v1, const reg v2, const reg v3) {
+		return sub<double>(v3, mul<double>(v1, v2));
+	}
+#endif
+
+	// ---------------------------------------------------------------------------------------------------------- fmsub
+#ifdef __FMA__
+	template <>
+	inline reg fmsub<float>(const reg v1, const reg v2, const reg v3) {
+		return _mm256_fmsub_ps(v1, v2, v3);
+	}
+
+	template <>
+	inline reg fmsub<double>(const reg v1, const reg v2, const reg v3) {
+		return _mm256_castpd_ps(_mm256_fmsub_pd(_mm256_castps_pd(v1), _mm256_castps_pd(v2), _mm256_castps_pd(v3)));
+	}
+#else
+	template <>
+	inline reg fmsub<float>(const reg v1, const reg v2, const reg v3) {
+		return sub<float>(mul<float>(v1, v2), v3);
+	}
+
+	template <>
+	inline reg fmsub<double>(const reg v1, const reg v2, const reg v3) {
+		return sub<double>(mul<double>(v1, v2), v3);
+	}
+#endif
+
+	// --------------------------------------------------------------------------------------------------------- fnmsub
+#ifdef __FMA__
+	template <>
+	inline reg fnmsub<float>(const reg v1, const reg v2, const reg v3) {
+		return _mm256_fnmsub_ps(v1, v2, v3);
+	}
+
+	template <>
+	inline reg fnmsub<double>(const reg v1, const reg v2, const reg v3) {
+		return _mm256_castpd_ps(_mm256_fnmsub_pd(_mm256_castps_pd(v1), _mm256_castps_pd(v2), _mm256_castps_pd(v3)));
+	}
+#else
+	template <>
+	inline reg fnmsub<float>(const reg v1, const reg v2, const reg v3) {
+		return sub<float>(sub<float>(set0<float>(), mul<float>(v1, v2)), v3);
+	}
+
+	template <>
+	inline reg fnmsub<double>(const reg v1, const reg v2, const reg v3) {
+		return sub<double>(sub<double>(set0<double>(), mul<double>(v1, v2)), v3);
+	}
+#endif
+
+	// ---------------------------------------------------------------------------------------------------------- blend
+	template <>
+	inline reg blend<double>(const reg v1, const reg v2, const msk m) {
+		return _mm256_castpd_ps(_mm256_blendv_pd(_mm256_castps_pd(v2), _mm256_castps_pd(v1), _mm256_castsi256_pd(m)));
+	}
+
+	template <>
+	inline reg blend<float>(const reg v1, const reg v2, const msk m) {
+		return _mm256_blendv_ps(v2, v1, _mm256_castsi256_ps(m));
+	}
+
+	template <>
+	inline reg blend<int64_t>(const reg v1, const reg v2, const msk m) {
+		return _mm256_castpd_ps(_mm256_blendv_pd(_mm256_castps_pd(v2), _mm256_castps_pd(v1), _mm256_castsi256_pd(m)));
+	}
+
+	template <>
+	inline reg blend<int32_t>(const reg v1, const reg v2, const msk m) {
+		return _mm256_blendv_ps(v2, v1, _mm256_castsi256_ps(m));
+	}
+
+#ifdef __AVX2__
+	template <>
+	inline reg blend<int16_t>(const reg v1, const reg v2, const msk m) {
+		return _mm256_castsi256_ps(_mm256_blendv_epi8(_mm256_castps_si256(v2),
+		                                              _mm256_castps_si256(v1),
+		                                              m));
+	}
+
+	template <>
+	inline reg blend<int8_t>(const reg v1, const reg v2, const msk m) {
+		return _mm256_castsi256_ps(_mm256_blendv_epi8(_mm256_castps_si256(v2),
+		                                              _mm256_castps_si256(v1),
+		                                              m));
+	}
+#else
+	template <>
+	inline reg blend<int16_t>(const reg v1, const reg v2, const msk m) {
+		auto m_reg = toreg<16>(m);
+		auto v1_2 = andb <int32_t>(m_reg, v1);
+		auto v2_2 = andnb<int32_t>(m_reg, v2);
+		auto blen = xorb <int32_t>(v1_2, v2_2);
+		return blen;
+	}
+
+	template <>
+	inline reg blend<int8_t>(const reg v1, const reg v2, const msk m) {
+		auto m_reg = toreg<32>(m);
+		auto v1_2 = andb <int32_t>(m_reg, v1);
+		auto v2_2 = andnb<int32_t>(m_reg, v2);
+		auto blen = xorb <int32_t>(v1_2, v2_2);
+		return blen;
+	}
+#endif
+
+	// ----------------------------------------------------------------------------------------------------------- lrot
+#ifdef __AVX2__
+	template <>
+	inline reg lrot<double>(const reg v1) {
+		return _mm256_castpd_ps(_mm256_permute4x64_pd(_mm256_castps_pd(v1), _MM_SHUFFLE(0, 3, 2 ,1)));
+	}
+
+	template <>
+	inline reg lrot<float>(const reg v1) {
+		return _mm256_permutevar8x32_ps(v1, _mm256_setr_epi32(1, 2, 3, 4, 5, 6, 7, 0));
+	}
+
+	template <>
+	inline reg lrot<int64_t>(const reg v1) {
+		return _mm256_castpd_ps(_mm256_permute4x64_pd(_mm256_castps_pd(v1), _MM_SHUFFLE(0, 3, 2 ,1)));
+	}
+
+	template <>
+	inline reg lrot<int32_t>(const reg v1) {
+		return _mm256_permutevar8x32_ps(v1, _mm256_setr_epi32(1, 2, 3, 4, 5, 6, 7, 0));
+	}
+
+	template <>
+	inline reg lrot<int16_t>(const reg v1) {
+		auto r = _mm256_castsi256_ps(_mm256_shuffle_epi8(_mm256_castps_si256(v1),
+		                                                 _mm256_set_epi8(1,0,31,30,29,28,27,26,25,24,23,22,21,20,19,18,17,16,15,14,13,12,11,10,9,8,7,6,5,4,3,2)));
+
+		const uint16_t mask[16] = {0,0,0,0,0,0,0,0xFFFF,0,0,0,0,0,0,0,0xFFFF};
+		auto m = set<int16_t>((int16_t*)mask);
+		auto r2 = _mm256_permutevar8x32_ps(r, _mm256_setr_epi32(0, 1, 2, 7, 4, 5, 6, 3));
+		return blend<int16_t>(r2, r, _mm256_castps_si256(m));
+	}
+
+	template <>
+	inline reg lrot<int8_t>(const reg v1) {
+		auto r = _mm256_castsi256_ps(_mm256_shuffle_epi8(_mm256_castps_si256(v1),
+		                                                 _mm256_set_epi8(0,31,30,29,28,27,26,25,24,23,22,21,20,19,18,17,16,15,14,13,12,11,10,9,8,7,6,5,4,3,2,1)));
+
+		const uint8_t mask[32] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0xFF,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0xFF};
+		auto m = set<int8_t>((int8_t*)mask);
+		auto r2 = _mm256_permutevar8x32_ps(r, _mm256_setr_epi32(0, 1, 2, 7, 4, 5, 6, 3));
+		return blend<int8_t>(r2, r, _mm256_castps_si256(m));
+	}
+#else
+	template <>
+	inline reg lrot<double>(const reg v1) {
+		// make a rotation in:[3, 2 , 1, 0] => out:[0, 3, 2, 1]
+		//
+		//   -> _mm256_permute_pd(a, _MM_SHUFFLE(1, 1, 1, 1)) # rotation per lane of 128 bits
+		//      /!\ I think this is a wrong shuffle and the good one is: _MM_SHUFFLE(0, 1, 0, 1)
+		//           l0      l1
+		//       in[3, 2, | 1, 0] =>
+		//      out[2, 3, | 0, 1]
+		//
+		//   -> _mm256_permute2f128_pd(a, a, _MM_SHUFFLE(0, 0, 0, 1)) # switch lanes
+		//           l0     l1
+		//       in[3, 2, | 1, 0] =>
+		//      out[1, 0, | 3, 2]
+		//
+		//   -> _mm256_blend_pd(a, b, _MM_SHUFFLE(0, 0, 2, 2))
+		//      ina[3a, 2a, 1a, 0a] and inb[3b, 2b, 1b, 0b] => out[3b, 2a, 1b, 0a]
+		auto rTmp = _mm256_permute_pd(_mm256_castps_pd(v1), _MM_SHUFFLE(0, 0, 1, 1));
+		return _mm256_castpd_ps(_mm256_blend_pd(rTmp,
+		                                        _mm256_permute2f128_pd(rTmp,
+		                                                               rTmp,
+		                                                               _MM_SHUFFLE(0, 0, 0, 1)),
+		                                        _MM_SHUFFLE(0, 0, 2, 2)));
+	}
+
+	template <>
+	inline reg lrot<float>(const reg v1) {
+		// make a rotation in:[7, 6, 5, 4, 3, 2 , 1, 0] =>  out:[0, 7, 6, 5, 4, 3, 2, 1]
+		//
+		//   -> _mm256_permute_ps(a, _MM_SHUFFLE(0, 3, 2, 1)) # rotation per lane of 128 bits
+		//            lane 0        lane 1
+		//       in[7, 6, 5, 4, | 3, 2, 1, 0] =>
+		//      out[4, 5, 6, 7, | 0, 3, 2, 1]
+		//
+		//   -> _mm256_permute2f128_ps(a, a, _MM_SHUFFLE(0, 0, 0, 1)) # switch lanes
+		//            lane 0        lane 1
+		//       in[7, 6, 5, 4, | 3, 2, 1, 0] =>
+		//      out[3, 2, 1, 0, | 7, 6, 5, 4]
+		//
+		//   -> _mm256_blend_ps(a, b, _MM_SHUFFLE(2, 0, 2, 0))
+		//         ina[7a, 6a, 5a, 4a, 3a, 2a, 1a, 0a]
+		//         inb[7b, 6b, 5b, 4b, 3b, 2b, 1b, 0b] =>
+		//         out[7b, 6a, 5a, 4a, 3b, 2a, 1a, 0a]
+		auto rTmp = _mm256_permute_ps(v1, _MM_SHUFFLE(0, 3, 2, 1));
+		return _mm256_blend_ps(rTmp,
+		                       _mm256_permute2f128_ps(rTmp, rTmp, _MM_SHUFFLE(0, 0, 0, 1)),
+		                       _MM_SHUFFLE(2, 0, 2, 0));
+	}
+
+	template <>
+	inline reg lrot<int64_t>(const reg v1) {
+		return lrot<double>(v1);
+	}
+
+	template <>
+	inline reg lrot<int32_t>(const reg v1) {
+		return lrot<float>(v1);
+	}
+#endif
+
+	// ----------------------------------------------------------------------------------------------------------- rrot
+#ifdef __AVX2__
+	template <>
+	inline reg rrot<double>(const reg v1) {
+		return _mm256_castpd_ps(_mm256_permute4x64_pd(_mm256_castps_pd(v1), _MM_SHUFFLE(2 ,1, 0, 3)));
+	}
+
+	template <>
+	inline reg rrot<float>(const reg v1) {
+		return _mm256_permutevar8x32_ps(v1, _mm256_setr_epi32(7, 0, 1, 2, 3, 4, 5, 6));
+	}
+
+	template <>
+	inline reg rrot<int64_t>(const reg v1) {
+		return _mm256_castpd_ps(_mm256_permute4x64_pd(_mm256_castps_pd(v1), _MM_SHUFFLE(2 ,1, 0, 3)));
+	}
+
+	template <>
+	inline reg rrot<int32_t>(const reg v1) {
+		return _mm256_permutevar8x32_ps(v1, _mm256_setr_epi32(7, 0, 1, 2, 3, 4, 5, 6));
+	}
+
+	template <>
+	inline reg rrot<int16_t>(const reg v1) {
+		auto r = _mm256_castsi256_ps(_mm256_shuffle_epi8(_mm256_castps_si256(v1),
+		                                                 _mm256_set_epi8(29,28,27,26,25,24,23,22,21,20,19,18,17,16,15,14,13,12,11,10,9,8,7,6,5,4,3,2,1,0,31,30)));
+
+		const uint16_t mask[16] = {0xFFFF,0,0,0,0,0,0,0,0xFFFF,0,0,0,0,0,0,0};
+		auto m = set<int16_t>((int16_t*)mask);
+		auto r2 = _mm256_permutevar8x32_ps(r, _mm256_setr_epi32(4, 1, 2, 3, 0, 5, 6, 7));
+		return blend<int16_t>(r2, r, _mm256_castps_si256(m));
+	}
+
+	template <>
+	inline reg rrot<int8_t>(const reg v1) {
+		auto r = _mm256_castsi256_ps(_mm256_shuffle_epi8(_mm256_castps_si256(v1),
+		                                                 _mm256_set_epi8(30,29,28,27,26,25,24,23,22,21,20,19,18,17,16,15,14,13,12,11,10,9,8,7,6,5,4,3,2,1,0,31)));
+
+		const uint8_t mask[32] = {0xFF,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0xFF,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+		auto m = set<int8_t>((int8_t*)mask);
+		auto r2 = _mm256_permutevar8x32_ps(r, _mm256_setr_epi32(4, 1, 2, 3, 0, 5, 6, 7));
+		return blend<int8_t>(r2, r, _mm256_castps_si256(m));
+	}
+#else
+	template <>
+	inline reg rrot<double>(const reg v1) {
+		auto rTmp = _mm256_permute_pd(_mm256_castps_pd(v1), _MM_SHUFFLE(0, 0, 1, 1));
+		return _mm256_castpd_ps(_mm256_blend_pd(rTmp,
+		                                        _mm256_permute2f128_pd(rTmp,
+		                                                               rTmp,
+		                                                               _MM_SHUFFLE(0, 0, 0, 1)),
+		                                        _MM_SHUFFLE(0, 0, 1, 1)));
+	}
+
+	template <>
+	inline reg rrot<float>(const reg v1) {
+		auto rTmp = _mm256_permute_ps(v1, _MM_SHUFFLE(2, 1, 0, 3));
+		return _mm256_blend_ps(rTmp,
+		                       _mm256_permute2f128_ps(rTmp, rTmp, _MM_SHUFFLE(0, 0, 0, 1)),
+		                       _MM_SHUFFLE(0, 1, 0, 1));
+	}
+
+	template <>
+	inline reg rrot<int64_t>(const reg v1) {
+		return rrot<double>(v1);
+	}
+
+	template <>
+	inline reg rrot<int32_t>(const reg v1) {
+		return rrot<float>(v1);
+	}
+#endif
+
+	// ----------------------------------------------------------------------------------------------------------- div2
+	template <>
+	inline reg div2<float>(const reg v1) {
+		return mul<float>(v1, set1<float>(0.5f));
+	}
+
+	template <>
+	inline reg div2<double>(const reg v1) {
+		return mul<double>(v1, set1<double>(0.5));
+	}
+
+#ifdef __AVX2__
+	template <>
+	inline reg div2<int32_t>(const reg v1) {
+//		return _mm256_castsi256_ps(_mm256_srai_epi32(_mm256_castps_si256(v1), 1)); // seems to do not work
+		reg abs_v1 = abs<int32_t>(v1);
+		reg sh = rshift<int32_t>(abs_v1, 1);
+		sh = neg<int32_t>(sh, v1);
+		return sh;
+	}
+
+	template <>
+	inline reg div2<int16_t>(const reg v1) {
+//		return _mm256_castsi256_ps(_mm256_srai_epi16(_mm256_castps_si256(v1), 1)); // seems to do not work
+		reg abs_v1 = abs<int16_t>(v1);
+		reg sh = rshift<int16_t>(abs_v1, 1);
+		sh = neg<int16_t>(sh, v1);
+		return sh;
+	}
+
+	template <>
+	inline reg div2<int8_t>(const reg v1) {
+		reg abs_v1 = abs<int8_t>(v1);
+		reg sh16 = rshift<int16_t>(abs_v1, 1);
+#ifdef _MSC_VER
+#pragma warning( disable : 4309 )
+#endif
+		sh16 = andnb<int8_t>(set1<int8_t>(0x80), sh16);
+#ifdef _MSC_VER
+#pragma warning( default : 4309 )
+#endif
+		reg sh8 = neg<int8_t>(sh16, v1);
+		return sh8;
+	}
+#endif
+
+	// ----------------------------------------------------------------------------------------------------------- div4
+	template <>
+	inline reg div4<float>(const reg v1) {
+		return mul<float>(v1, set1<float>(0.25f));
+	}
+
+	template <>
+	inline reg div4<double>(const reg v1) {
+		return mul<double>(v1, set1<double>(0.25));
+	}
+
+#ifdef __AVX2__
+	template <>
+	inline reg div4<int32_t>(const reg v1) {
+//		return _mm256_castsi256_ps(_mm256_srai_epi32(_mm256_castps_si256(v1), 2)); // seems to do not work
+		reg abs_v1 = abs<int32_t>(v1);
+		reg sh = rshift<int32_t>(abs_v1, 2);
+		sh = neg<int32_t>(sh, v1);
+		return sh;
+	}
+
+	template <>
+	inline reg div4<int16_t>(const reg v1) {
+//		return _mm256_castsi256_ps(_mm256_srai_epi16(_mm256_castps_si256(v1), 2)); // seems to do not work
+		reg abs_v1 = abs<int16_t>(v1);
+		reg sh = rshift<int16_t>(abs_v1, 2);
+		sh = neg<int16_t>(sh, v1);
+		return sh;
+	}
+
+	template <>
+	inline reg div4<int8_t>(const reg v1) {
+		reg abs_v1 = abs<int8_t>(v1);
+		reg sh16 = rshift<int16_t>(abs_v1, 2);
+#ifdef _MSC_VER
+#pragma warning( disable : 4309 )
+#endif
+		sh16 = andnb<int8_t>(set1<int8_t>(0xc0), sh16);
+#ifdef _MSC_VER
+#pragma warning( default : 4309 )
+#endif
+		reg sh8 = neg<int8_t>(sh16, v1);
+		return sh8;
+	}
+#endif
+
+	// ------------------------------------------------------------------------------------------------------------ sat
+	template <>
+	inline reg sat<float>(const reg v1, float min, float max) {
+		return mipp::min<float>(mipp::max<float>(v1, set1<float>(min)), set1<float>(max));
+	}
+
+	template <>
+	inline reg sat<double>(const reg v1, double min, double max) {
+		return mipp::min<double>(mipp::max<double>(v1, set1<double>(min)), set1<double>(max));
+	}
+
+	template <>
+	inline reg sat<int32_t>(const reg v1, int32_t min, int32_t max) {
+		return mipp::min<int32_t>(mipp::max<int32_t>(v1, set1<int32_t>(min)), set1<int32_t>(max));
+	}
+
+	template <>
+	inline reg sat<int16_t>(const reg v1, int16_t min, int16_t max) {
+		return mipp::min<int16_t>(mipp::max<int16_t>(v1, set1<int16_t>(min)), set1<int16_t>(max));
+	}
+
+	template <>
+	inline reg sat<int8_t>(const reg v1, int8_t min, int8_t max) {
+		return mipp::min<int8_t>(mipp::max<int8_t>(v1, set1<int8_t>(min)), set1<int8_t>(max));
+	}
+
+	// ---------------------------------------------------------------------------------------------------------- round
+	template <>
+	inline reg round<float>(const reg v) {
+		return _mm256_round_ps(v, _MM_FROUND_TO_NEAREST_INT |_MM_FROUND_NO_EXC);
+	}
+
+	template <>
+	inline reg round<double>(const reg v) {
+		return _mm256_castpd_ps(_mm256_round_pd(_mm256_castps_pd(v), _MM_FROUND_TO_NEAREST_INT |_MM_FROUND_NO_EXC));
+	}
+
+	// ------------------------------------------------------------------------------------------------------------ cvt
+	template <>
+	inline reg cvt<float,int32_t>(const reg v) {
+		return _mm256_castsi256_ps(_mm256_cvtps_epi32(v));
+	}
+
+	template <>
+	inline reg cvt<int32_t,float>(const reg v) {
+		return _mm256_cvtepi32_ps(_mm256_castps_si256(v));
+	}
+
+#ifdef __AVX2__
+	template <>
+	inline reg cvt<int8_t,int16_t>(const reg_2 v) {
+		return _mm256_castsi256_ps(_mm256_cvtepi8_epi16(_mm_castps_si128(v)));
+	}
+
+	template <>
+	inline reg cvt<int16_t,int32_t>(const reg_2 v) {
+		return _mm256_castsi256_ps(_mm256_cvtepi16_epi32(_mm_castps_si128(v)));
+	}
+
+	template <>
+	inline reg cvt<int32_t,int64_t>(const reg_2 v) {
+		return _mm256_castsi256_ps(_mm256_cvtepi32_epi64(_mm_castps_si128(v)));
+	}
+#endif
+
+	// ----------------------------------------------------------------------------------------------------------- pack
+#ifdef __AVX2__
+	template <>
+	inline reg pack<int32_t,int16_t>(const reg v1, const reg v2) {
+		return _mm256_castsi256_ps(_mm256_permute4x64_epi64(_mm256_packs_epi32(_mm256_castps_si256(v1),
+		                                                                       _mm256_castps_si256(v2)),
+		                                                    _MM_SHUFFLE(3, 1, 2, 0)));
+	}
+
+	template <>
+	inline reg pack<int16_t,int8_t>(const reg v1, const reg v2) {
+		return _mm256_castsi256_ps(_mm256_permute4x64_epi64(_mm256_packs_epi16(_mm256_castps_si256(v1),
+		                                                                       _mm256_castps_si256(v2)),
+		                                                    _MM_SHUFFLE(3, 1, 2, 0)));
+	}
+#endif
+
+	// ---------------------------------------------------------------------------------------------------------- testz
+	template <>
+	inline bool testz<float>(const reg v1, const reg v2) {
+		return _mm256_testz_ps(v1, v2);
+	}
+
+	template <>
+	inline bool testz<double>(const reg v1, const reg v2) {
+		return _mm256_testz_pd(_mm256_castps_pd(v1), _mm256_castps_pd(v2));
+	}
+
+	template <>
+	inline bool testz<int64_t>(const reg v1, const reg v2) {
+		return _mm256_testz_si256(_mm256_castps_si256(v1), _mm256_castps_si256(v2));
+	}
+
+	template <>
+	inline bool testz<int32_t>(const reg v1, const reg v2) {
+		return _mm256_testz_si256(_mm256_castps_si256(v1), _mm256_castps_si256(v2));
+	}
+
+	template <>
+	inline bool testz<int16_t>(const reg v1, const reg v2) {
+		return _mm256_testz_si256(_mm256_castps_si256(v1), _mm256_castps_si256(v2));
+	}
+
+	template <>
+	inline bool testz<int8_t>(const reg v1, const reg v2) {
+		return _mm256_testz_si256(_mm256_castps_si256(v1), _mm256_castps_si256(v2));
+	}
+
+	template <>
+	inline bool testz<double>(const reg v1) {
+		return testz<double>(v1, mipp::set1<int64_t>(-1));
+	}
+
+	template <>
+	inline bool testz<float>(const reg v1) {
+		return testz<float>(v1, mipp::set1<int32_t>(-1));
+	}
+
+	template <>
+	inline bool testz<int64_t>(const reg v1) {
+		return testz<int64_t>(v1, mipp::set1<int64_t>(-1));
+	}
+
+	template <>
+	inline bool testz<int32_t>(const reg v1) {
+		return testz<int32_t>(v1, mipp::set1<int32_t>(-1));
+	}
+
+	template <>
+	inline bool testz<int16_t>(const reg v1) {
+		return testz<int16_t>(v1, mipp::set1<int16_t>(-1));
+	}
+
+	template <>
+	inline bool testz<int8_t>(const reg v1) {
+		return testz<int8_t>(v1, mipp::set1<int8_t>(-1));
+	}
+
+	// --------------------------------------------------------------------------------------------------- testz (mask)
+	template <>
+	inline bool testz<4>(const msk v1, const msk v2) {
+		return _mm256_testz_si256(v1, v2);
+	}
+
+	template <>
+	inline bool testz<8>(const msk v1, const msk v2) {
+		return _mm256_testz_si256(v1, v2);
+	}
+
+	template <>
+	inline bool testz<16>(const msk v1, const msk v2) {
+		return _mm256_testz_si256(v1, v2);
+	}
+
+	template <>
+	inline bool testz<32>(const msk v1, const msk v2) {
+		return _mm256_testz_si256(v1, v2);
+	}
+
+	template <>
+	inline bool testz<4>(const msk v1) {
+		return testz<4>(v1, _mm256_castps_si256(mipp::set1<int64_t>(-1)));
+	}
+
+	template <>
+	inline bool testz<8>(const msk v1) {
+		return testz<8>(v1, _mm256_castps_si256(mipp::set1<int32_t>(-1)));
+	}
+
+	template <>
+	inline bool testz<16>(const msk v1) {
+		return testz<16>(v1, _mm256_castps_si256(mipp::set1<int16_t>(-1)));
+	}
+
+	template <>
+	inline bool testz<32>(const msk v1) {
+		return testz<32>(v1, _mm256_castps_si256(mipp::set1<int8_t>(-1)));
+	}
+
+	// ------------------------------------------------------------------------------------------------------ reduction
+	template <red_op<double> OP>
+	struct _reduction<double,OP>
+	{
+		static reg apply(const reg v1) {
+			auto val = v1;
+			val = OP(val, _mm256_permute2f128_ps(val, val, _MM_SHUFFLE(0,0,0,1)));
+			val = OP(val, _mm256_shuffle_ps     (val, val, _MM_SHUFFLE(1,0,3,2)));
+			return val;
+		}
+	};
+
+	template <Red_op<double> OP>
+	struct _Reduction<double,OP>
+	{
+		static const Reg<double> apply(const Reg<double> v1) {
+			auto val = v1;
+			val = OP(val, Reg<double>(_mm256_permute2f128_ps(val.r, val.r, _MM_SHUFFLE(0,0,0,1))));
+			val = OP(val, Reg<double>(_mm256_shuffle_ps     (val.r, val.r, _MM_SHUFFLE(1,0,3,2))));
+			return val;
+		}
+	};
+
+	template <red_op<float> OP>
+	struct _reduction<float,OP>
+	{
+		static reg apply(const reg v1) {
+			auto val = v1;
+			val = OP(val, _mm256_permute2f128_ps(val, val, _MM_SHUFFLE(0,0,0,1)));
+			val = OP(val, _mm256_shuffle_ps     (val, val, _MM_SHUFFLE(1,0,3,2)));
+			val = OP(val, _mm256_shuffle_ps     (val, val, _MM_SHUFFLE(2,3,0,1)));
+			return val;
+		}
+	};
+
+	template <Red_op<float> OP>
+	struct _Reduction<float,OP>
+	{
+		static Reg<float> apply(const Reg<float> v1) {
+			auto val = v1;
+			val = OP(val, Reg<float>(_mm256_permute2f128_ps(val.r, val.r, _MM_SHUFFLE(0,0,0,1))));
+			val = OP(val, Reg<float>(_mm256_shuffle_ps     (val.r, val.r, _MM_SHUFFLE(1,0,3,2))));
+			val = OP(val, Reg<float>(_mm256_shuffle_ps     (val.r, val.r, _MM_SHUFFLE(2,3,0,1))));
+			return val;
+		}
+	};
+
+	template <red_op<int64_t> OP>
+	struct _reduction<int64_t,OP>
+	{
+		static reg apply(const reg v1) {
+			auto val = v1;
+			val = OP(val, _mm256_permute2f128_ps(val, val, _MM_SHUFFLE(0,0,0,1)));
+			val = OP(val, _mm256_shuffle_ps     (val, val, _MM_SHUFFLE(1,0,3,2)));
+			return val;
+		}
+	};
+
+	template <Red_op<int64_t> OP>
+	struct _Reduction<int64_t,OP>
+	{
+		static const Reg<int64_t> apply(const Reg<int64_t> v1) {
+			auto val = v1;
+			val = OP(val, Reg<int64_t>(_mm256_permute2f128_ps(val.r, val.r, _MM_SHUFFLE(0,0,0,1))));
+			val = OP(val, Reg<int64_t>(_mm256_shuffle_ps     (val.r, val.r, _MM_SHUFFLE(1,0,3,2))));
+			return val;
+		}
+	};
+
+	template <red_op<int32_t> OP>
+	struct _reduction<int32_t,OP>
+	{
+		static reg apply(const reg v1) {
+			auto val = v1;
+			val = OP(val, _mm256_permute2f128_ps(val, val, _MM_SHUFFLE(0,0,0,1)));
+			val = OP(val, _mm256_shuffle_ps     (val, val, _MM_SHUFFLE(1,0,3,2)));
+			val = OP(val, _mm256_shuffle_ps     (val, val, _MM_SHUFFLE(2,3,0,1)));
+			return val;
+		}
+	};
+
+	template <Red_op<int32_t> OP>
+	struct _Reduction<int32_t,OP>
+	{
+		static Reg<int32_t> apply(const Reg<int32_t> v1) {
+			auto val = v1;
+			val = OP(val, Reg<int32_t>(_mm256_permute2f128_ps(val.r, val.r, _MM_SHUFFLE(0,0,0,1))));
+			val = OP(val, Reg<int32_t>(_mm256_shuffle_ps     (val.r, val.r, _MM_SHUFFLE(1,0,3,2))));
+			val = OP(val, Reg<int32_t>(_mm256_shuffle_ps     (val.r, val.r, _MM_SHUFFLE(2,3,0,1))));
+			return val;
+		}
+	};
+
+#ifdef __AVX2__
+	template <red_op<int16_t> OP>
+	struct _reduction<int16_t,OP>
+	{
+		static reg apply(const reg v1) {
+			__m256i mask_16 = _mm256_set_epi8(29, 28, 31, 30, 25, 24, 27, 26, 21, 20, 23, 22, 17, 16, 19, 18, 13, 12, 15,
+			                                  14, 9, 8, 11, 10, 5, 4, 7, 6, 1, 0, 3, 2);
+
+			auto val = v1;
+			val = OP(val, _mm256_castsi256_ps(_mm256_permute2f128_si256(_mm256_castps_si256(val),
+			                                                            _mm256_castps_si256(val),
+			                                                            _MM_SHUFFLE(0,0,0,1))));
+			val = OP(val, _mm256_castsi256_ps(_mm256_permute4x64_epi64 (_mm256_castps_si256(val),
+			                                                            _MM_SHUFFLE(2,3,0,1))));
+			val = OP(val, _mm256_castsi256_ps(_mm256_shuffle_epi32     (_mm256_castps_si256(val),
+			                                                            _MM_SHUFFLE(2,3,0,1))));
+			val = OP(val, _mm256_castsi256_ps(_mm256_shuffle_epi8      (_mm256_castps_si256(val),
+			                                                            mask_16)));
+			return val;
+		}
+	};
+
+	template <Red_op<int16_t> OP>
+	struct _Reduction<int16_t,OP>
+	{
+		static Reg<int16_t> apply(const Reg<int16_t> v1) {
+			__m256i mask_16 = _mm256_set_epi8(29, 28, 31, 30, 25, 24, 27, 26, 21, 20, 23, 22, 17, 16, 19, 18, 13, 12, 15,
+			                                  14, 9, 8, 11, 10, 5, 4, 7, 6, 1, 0, 3, 2);
+
+			auto val = v1;
+			val = OP(val, Reg<int16_t>(_mm256_castsi256_ps(_mm256_permute2f128_si256(_mm256_castps_si256(val.r),
+			                                                                         _mm256_castps_si256(val.r),
+			                                                                         _MM_SHUFFLE(0,0,0,1)))));
+			val = OP(val, Reg<int16_t>(_mm256_castsi256_ps(_mm256_permute4x64_epi64 (_mm256_castps_si256(val.r),
+			                                                                         _MM_SHUFFLE(2,3,0,1)))));
+			val = OP(val, Reg<int16_t>(_mm256_castsi256_ps(_mm256_shuffle_epi32     (_mm256_castps_si256(val.r),
+			                                                                         _MM_SHUFFLE(2,3,0,1)))));
+			val = OP(val, Reg<int16_t>(_mm256_castsi256_ps(_mm256_shuffle_epi8      (_mm256_castps_si256(val.r),
+			                                                                         mask_16))));
+			return val;
+		}
+	};
+#endif
+
+#ifdef __AVX2__
+	template <red_op<int8_t> OP>
+	struct _reduction<int8_t,OP>
+	{
+		static reg apply(const reg v1) {
+			__m256i mask_16 = _mm256_set_epi8(29, 28, 31, 30, 25, 24, 27, 26, 21, 20, 23, 22, 17, 16, 19, 18, 13, 12, 15,
+			                                  14, 9, 8, 11, 10, 5, 4, 7, 6, 1, 0, 3, 2);
+			__m256i mask_8  = _mm256_set_epi8(30, 31, 28, 29, 26, 27, 24, 25, 22, 23, 20, 21, 18, 19, 16, 17, 14, 15, 12,
+			                                  13, 10, 11, 8, 9, 6, 7, 4, 5, 2, 3, 0, 1);
+
+			auto val = v1;
+			val = OP(val, _mm256_castsi256_ps(_mm256_permute2f128_si256(_mm256_castps_si256(val),
+			                                                            _mm256_castps_si256(val),
+			                                                            _MM_SHUFFLE(0,0,0,1))));
+			val = OP(val, _mm256_castsi256_ps(_mm256_permute4x64_epi64 (_mm256_castps_si256(val),
+			                                                            _MM_SHUFFLE(2,3,0,1))));
+			val = OP(val, _mm256_castsi256_ps(_mm256_shuffle_epi32     (_mm256_castps_si256(val),
+			                                                            _MM_SHUFFLE(2,3,0,1))));
+			val = OP(val, _mm256_castsi256_ps(_mm256_shuffle_epi8      (_mm256_castps_si256(val),
+			                                                            mask_16)));
+			val = OP(val, _mm256_castsi256_ps(_mm256_shuffle_epi8      (_mm256_castps_si256(val),
+			                                                            mask_8)));
+			return val;
+		}
+	};
+
+	template <Red_op<int8_t> OP>
+	struct _Reduction<int8_t,OP>
+	{
+		static Reg<int8_t> apply(const Reg<int8_t> v1) {
+			__m256i mask_16 = _mm256_set_epi8(29, 28, 31, 30, 25, 24, 27, 26, 21, 20, 23, 22, 17, 16, 19, 18, 13, 12, 15,
+			                                  14, 9, 8, 11, 10, 5, 4, 7, 6, 1, 0, 3, 2);
+			__m256i mask_8  = _mm256_set_epi8(30, 31, 28, 29, 26, 27, 24, 25, 22, 23, 20, 21, 18, 19, 16, 17, 14, 15, 12,
+			                                  13, 10, 11, 8, 9, 6, 7, 4, 5, 2, 3, 0, 1);
+
+			auto val = v1;
+			val = OP(val, Reg<int8_t>(_mm256_castsi256_ps(_mm256_permute2f128_si256(_mm256_castps_si256(val.r),
+			                                                                        _mm256_castps_si256(val.r),
+			                                                                        _MM_SHUFFLE(0,0,0,1)))));
+			val = OP(val, Reg<int8_t>(_mm256_castsi256_ps(_mm256_permute4x64_epi64 (_mm256_castps_si256(val.r),
+			                                                                        _MM_SHUFFLE(2,3,0,1)))));
+			val = OP(val, Reg<int8_t>(_mm256_castsi256_ps(_mm256_shuffle_epi32     (_mm256_castps_si256(val.r),
+			                                                                        _MM_SHUFFLE(2,3,0,1)))));
+			val = OP(val, Reg<int8_t>(_mm256_castsi256_ps(_mm256_shuffle_epi8      (_mm256_castps_si256(val.r),
+			                                                                        mask_16))));
+			val = OP(val, Reg<int8_t>(_mm256_castsi256_ps(_mm256_shuffle_epi8      (_mm256_castps_si256(val.r),
+			                                                                        mask_8))));
+			return val;
+		}
+	};
+#endif
+#endif
+
+// -------------------------------------------------------------------------------------------------------- X86 SSE-128
+// --------------------------------------------------------------------------------------------------------------------
+#elif defined(__SSE__)
+// original file: ../external/MIPP/src/mipp_impl_SSE.hxx
+
+// #include "mipp.h"
+
+// -------------------------------------------------------------------------------------------------------- X86 SSE-128
+// --------------------------------------------------------------------------------------------------------------------
+#if defined(__SSE__)
+
+	// ---------------------------------------------------------------------------------------------------------- loadu
+	template <>
+	inline reg loadu<float>(const float *mem_addr) {
+		return _mm_loadu_ps(mem_addr);
+	}
+
+#ifdef __SSE2__
+	template <>
+	inline reg loadu<double>(const double *mem_addr) {
+		return _mm_castpd_ps(_mm_loadu_pd(mem_addr));
+	}
+#endif
+
+	template <>
+	inline reg loadu<int64_t>(const int64_t *mem_addr) {
+		return _mm_loadu_ps((const float*) mem_addr);
+	}
+
+	template <>
+	inline reg loadu<int32_t>(const int32_t *mem_addr) {
+		return _mm_loadu_ps((const float*) mem_addr);
+	}
+
+	template <>
+	inline reg loadu<int16_t>(const int16_t *mem_addr) {
+		return _mm_loadu_ps((const float*) mem_addr);
+	}
+
+	template <>
+	inline reg loadu<int8_t>(const int8_t *mem_addr) {
+		return _mm_loadu_ps((const float*) mem_addr);
+	}
+
+	// ----------------------------------------------------------------------------------------------------------- load
+#ifdef MIPP_ALIGNED_LOADS
+	template <>
+	inline reg load<float>(const float *mem_addr) {
+		return _mm_load_ps(mem_addr);
+	}
+
+#ifdef __SSE2__
+	template <>
+	inline reg load<double>(const double *mem_addr) {
+		return _mm_castpd_ps(_mm_load_pd(mem_addr));
+	}
+#endif
+
+	template <>
+	inline reg load<int64_t>(const int64_t *mem_addr) {
+		return _mm_load_ps((const float*) mem_addr);
+	}
+
+	template <>
+	inline reg load<int32_t>(const int32_t *mem_addr) {
+		return _mm_load_ps((const float*) mem_addr);
+	}
+
+	template <>
+	inline reg load<int16_t>(const int16_t *mem_addr) {
+		return _mm_load_ps((const float*) mem_addr);
+	}
+
+	template <>
+	inline reg load<int8_t>(const int8_t *mem_addr) {
+		return _mm_load_ps((const float*) mem_addr);
+	}
+#else
+	template <>
+	inline reg load<float>(const float *mem_addr) {
+		return mipp::loadu<float>(mem_addr);
+	}
+
+	template <>
+	inline reg load<double>(const double *mem_addr) {
+		return mipp::loadu<double>(mem_addr);
+	}
+
+	template <>
+	inline reg load<int64_t>(const int64_t *mem_addr) {
+		return mipp::loadu<int64_t>(mem_addr);
+	}
+
+	template <>
+	inline reg load<int32_t>(const int32_t *mem_addr) {
+		return mipp::loadu<int32_t>(mem_addr);
+	}
+
+	template <>
+	inline reg load<int16_t>(const int16_t *mem_addr) {
+		return mipp::loadu<int16_t>(mem_addr);
+	}
+
+	template <>
+	inline reg load<int8_t>(const int8_t *mem_addr) {
+		return mipp::loadu<int8_t>(mem_addr);
+	}
+#endif
+
+	// --------------------------------------------------------------------------------------------------------- storeu
+	template <>
+	inline void storeu<float>(float *mem_addr, const reg v) {
+		_mm_storeu_ps(mem_addr, v);
+	}
+
+#ifdef __SSE2__
+	template <>
+	inline void storeu<double>(double *mem_addr, const reg v) {
+		_mm_storeu_pd(mem_addr, _mm_castps_pd(v));
+	}
+#endif
+
+	template <>
+	inline void storeu<int64_t>(int64_t *mem_addr, const reg v) {
+		_mm_storeu_ps((float*) mem_addr, v);
+	}
+
+	template <>
+	inline void storeu<int32_t>(int32_t *mem_addr, const reg v) {
+		_mm_storeu_ps((float*) mem_addr, v);
+	}
+
+	template <>
+	inline void storeu<int16_t>(int16_t *mem_addr, const reg v) {
+		_mm_storeu_ps((float*) mem_addr, v);
+	}
+
+	template <>
+	inline void storeu<int8_t>(int8_t *mem_addr, const reg v) {
+		_mm_storeu_ps((float*) mem_addr, v);
+	}
+
+	// ---------------------------------------------------------------------------------------------------------- store
+#ifdef MIPP_ALIGNED_LOADS
+	template <>
+	inline void store<float>(float *mem_addr, const reg v) {
+		_mm_store_ps(mem_addr, v);
+	}
+
+#ifdef __SSE2__
+	template <>
+	inline void store<double>(double *mem_addr, const reg v) {
+		_mm_store_pd(mem_addr, _mm_castps_pd(v));
+	}
+#endif
+
+	template <>
+	inline void store<int64_t>(int64_t *mem_addr, const reg v) {
+		_mm_store_ps((float*) mem_addr, v);
+	}
+
+	template <>
+	inline void store<int32_t>(int32_t *mem_addr, const reg v) {
+		_mm_store_ps((float*) mem_addr, v);
+	}
+
+	template <>
+	inline void store<int16_t>(int16_t *mem_addr, const reg v) {
+		_mm_store_ps((float*) mem_addr, v);
+	}
+
+	template <>
+	inline void store<int8_t>(int8_t *mem_addr, const reg v) {
+		_mm_store_ps((float*) mem_addr, v);
+	}
+#else
+	template <>
+	inline void store<float>(float *mem_addr, const reg v) {
+		mipp::storeu<float>(mem_addr, v);
+	}
+
+	template <>
+	inline void store<double>(double *mem_addr, const reg v) {
+		mipp::storeu<double>(mem_addr, v);
+	}
+
+	template <>
+	inline void store<int64_t>(int64_t *mem_addr, const reg v) {
+		mipp::storeu<int64_t>(mem_addr, v);
+	}
+
+	template <>
+	inline void store<int32_t>(int32_t *mem_addr, const reg v) {
+		mipp::storeu<int32_t>(mem_addr, v);
+	}
+
+	template <>
+	inline void store<int16_t>(int16_t *mem_addr, const reg v) {
+		mipp::storeu<int16_t>(mem_addr, v);
+	}
+
+	template <>
+	inline void store<int8_t>(int8_t *mem_addr, const reg v) {
+		mipp::storeu<int8_t>(mem_addr, v);
+	}
+#endif
+
+	// ------------------------------------------------------------------------------------------------------------ set
+#ifdef __SSE2__
+	template <>
+	inline reg set<double>(const double vals[nElReg<double>()]) {
+		return _mm_castpd_ps(_mm_set_pd(vals[1], vals[0]));
+	}
+#endif
+
+	template <>
+	inline reg set<float>(const float vals[nElReg<float>()]) {
+		return _mm_set_ps(vals[3], vals[2], vals[1], vals[0]);
+	}
+
+#ifdef __SSE2__
+	template <>
+	inline reg set<int64_t>(const int64_t vals[nElReg<int64_t>()]) {
+		return _mm_castsi128_ps(_mm_set_epi64x(vals[1], vals[0]));
+	}
+
+	template <>
+	inline reg set<int32_t>(const int32_t vals[nElReg<int32_t>()]) {
+		return _mm_castsi128_ps(_mm_set_epi32(vals[3], vals[2], vals[1], vals[0]));
+	}
+
+	template <>
+	inline reg set<int16_t>(const int16_t vals[nElReg<int16_t>()]) {
+		return _mm_castsi128_ps(_mm_set_epi16(vals[7], vals[6], vals[5], vals[4], vals[3], vals[2], vals[1], vals[0]));
+	}
+
+	template <>
+	inline reg set<int8_t>(const int8_t vals[nElReg<int8_t>()]) {
+		return _mm_castsi128_ps(_mm_set_epi8((int8_t)vals[15], (int8_t)vals[14], (int8_t)vals[13], (int8_t)vals[12],
+		                                     (int8_t)vals[11], (int8_t)vals[10], (int8_t)vals[ 9], (int8_t)vals[ 8],
+		                                     (int8_t)vals[ 7], (int8_t)vals[ 6], (int8_t)vals[ 5], (int8_t)vals[ 4],
+		                                     (int8_t)vals[ 3], (int8_t)vals[ 2], (int8_t)vals[ 1], (int8_t)vals[ 0]));
+	}
+#endif
+
+	// ----------------------------------------------------------------------------------------------------- set (mask)
+#ifdef __SSE2__
+	template <>
+	inline msk set<2>(const bool vals[2]) {
+		return _mm_set_epi64x(vals[1] ? (uint64_t)0xFFFFFFFFFFFFFFFF : (uint64_t)0,
+		                      vals[0] ? (uint64_t)0xFFFFFFFFFFFFFFFF : (uint64_t)0);
+	}
+
+	template <>
+	inline msk set<4>(const bool vals[4]) {
+		return _mm_set_epi32(vals[3] ? 0xFFFFFFFF : 0, vals[2] ? 0xFFFFFFFF : 0,
+		                     vals[1] ? 0xFFFFFFFF : 0, vals[0] ? 0xFFFFFFFF : 0);
+	}
+
+	template <>
+	inline msk set<8>(const bool vals[8]) {
+		return _mm_set_epi16(vals[ 7] ? 0xFFFF : 0, vals[ 6] ? 0xFFFF : 0,
+		                     vals[ 5] ? 0xFFFF : 0, vals[ 4] ? 0xFFFF : 0,
+		                     vals[ 3] ? 0xFFFF : 0, vals[ 2] ? 0xFFFF : 0,
+		                     vals[ 1] ? 0xFFFF : 0, vals[ 0] ? 0xFFFF : 0);
+	}
+
+	template <>
+	inline msk set<16>(const bool vals[16]) {
+		return _mm_set_epi8(vals[15] ? 0xFF : 0, vals[14] ? 0xFF : 0, vals[13] ? 0xFF : 0, vals[12] ? 0xFF : 0,
+		                    vals[11] ? 0xFF : 0, vals[10] ? 0xFF : 0, vals[ 9] ? 0xFF : 0, vals[ 8] ? 0xFF : 0,
+		                    vals[ 7] ? 0xFF : 0, vals[ 6] ? 0xFF : 0, vals[ 5] ? 0xFF : 0, vals[ 4] ? 0xFF : 0,
+		                    vals[ 3] ? 0xFF : 0, vals[ 2] ? 0xFF : 0, vals[ 1] ? 0xFF : 0, vals[ 0] ? 0xFF : 0);
+	}
+#endif
+
+	// ----------------------------------------------------------------------------------------------------------- set1
+	template <>
+	inline reg set1<float>(const float val) {
+		return _mm_set1_ps(val);
+	}
+
+#ifdef __SSE2__
+	template <>
+	inline reg set1<double>(const double val) {
+		return _mm_castpd_ps(_mm_set1_pd(val));
+	}
+
+	template <>
+	inline reg set1<int32_t>(const int32_t val) {
+		return _mm_castsi128_ps(_mm_set1_epi32(val));
+	}
+
+	template <>
+	inline reg set1<int16_t>(const int16_t val) {
+		return _mm_castsi128_ps(_mm_set1_epi16(val));
+	}
+
+	template <>
+	inline reg set1<int8_t>(const int8_t val) {
+		return _mm_castsi128_ps(_mm_set1_epi8(val));
+	}
+
+	template <>
+	inline reg set1<int64_t>(const int64_t val) {
+		return _mm_castsi128_ps(_mm_set1_epi64x(val));
+	}
+#endif
+
+	// ---------------------------------------------------------------------------------------------------- set1 (mask)
+#ifdef __SSE2__
+	template <>
+	inline msk set1<2>(const bool val) {
+		return _mm_set1_epi64x(val ? (uint64_t)0xFFFFFFFFFFFFFFFF : (uint64_t)0);
+	}
+
+	template <>
+	inline msk set1<4>(const bool val) {
+		return _mm_set1_epi32(val ? 0xFFFFFFFF : 0);
+	}
+
+	template <>
+	inline msk set1<8>(const bool val) {
+		return _mm_set1_epi16(val ? 0xFFFF : 0);
+	}
+
+	template <>
+	inline msk set1<16>(const bool val) {
+		return _mm_set1_epi8(val ? 0xFF : 0);
+	}
+#endif
+
+	// ----------------------------------------------------------------------------------------------------------- set0
+	template <>
+	inline reg set0<float>() {
+		return _mm_setzero_ps();
+	}
+
+#ifdef __SSE2__
+	template <>
+	inline reg set0<double>() {
+		return _mm_castpd_ps(_mm_setzero_pd());
+	}
+
+	template <>
+	inline reg set0<int64_t>() {
+		return _mm_castsi128_ps(_mm_setzero_si128());
+	}
+
+	template <>
+	inline reg set0<int32_t>() {
+		return _mm_castsi128_ps(_mm_setzero_si128());
+	}
+
+	template <>
+	inline reg set0<int16_t>() {
+		return _mm_castsi128_ps(_mm_setzero_si128());
+	}
+
+	template <>
+	inline reg set0<int8_t>() {
+		return _mm_castsi128_ps(_mm_setzero_si128());
+	}
+#endif
+
+	// ---------------------------------------------------------------------------------------------------- set0 (mask)
+#ifdef __SSE2__
+	template <>
+	inline msk set0<2>() {
+		return _mm_setzero_si128();
+	}
+
+	template <>
+	inline msk set0<4>() {
+		return _mm_setzero_si128();
+	}
+
+	template <>
+	inline msk set0<8>() {
+		return _mm_setzero_si128();
+	}
+
+	template <>
+	inline msk set0<16>() {
+		return _mm_setzero_si128();
+	}
+#endif
+
+	// ------------------------------------------------------------------------------------------------------------ low
+	template <>
+	inline reg_2 low<double>(const reg v) {
+		return _mm_castps_pd(v);
+	}
+
+	template <>
+	inline reg_2 low<float>(const reg v) {
+		return _mm_castps_pd(v);
+	}
+
+	template <>
+	inline reg_2 low<int64_t>(const reg v) {
+		return _mm_castps_pd(v);
+	}
+
+	template <>
+	inline reg_2 low<int32_t>(const reg v) {
+		return _mm_castps_pd(v);
+	}
+
+	template <>
+	inline reg_2 low<int16_t>(const reg v) {
+		return _mm_castps_pd(v);
+	}
+
+	template <>
+	inline reg_2 low<int8_t>(const reg v) {
+		return _mm_castps_pd(v);
+	}
+
+	// ----------------------------------------------------------------------------------------------------------- high
+	template <>
+	inline reg_2 high<double>(const reg v) {
+		return _mm_castps_pd(_mm_shuffle_ps(v, v, _MM_SHUFFLE(1, 0, 3, 2)));
+	}
+
+	template <>
+	inline reg_2 high<float>(const reg v) {
+		return _mm_castps_pd(_mm_shuffle_ps(v, v, _MM_SHUFFLE(1, 0, 3, 2)));
+	}
+
+	template <>
+	inline reg_2 high<int64_t>(const reg v) {
+		return _mm_castps_pd(_mm_shuffle_ps(v, v, _MM_SHUFFLE(1, 0, 3, 2)));
+	}
+
+	template <>
+	inline reg_2 high<int32_t>(const reg v) {
+		return _mm_castps_pd(_mm_shuffle_ps(v, v, _MM_SHUFFLE(1, 0, 3, 2)));
+	}
+
+	template <>
+	inline reg_2 high<int16_t>(const reg v) {
+		return _mm_castps_pd(_mm_shuffle_ps(v, v, _MM_SHUFFLE(1, 0, 3, 2)));
+	}
+
+	template <>
+	inline reg_2 high<int8_t>(const reg v) {
+		return _mm_castps_pd(_mm_shuffle_ps(v, v, _MM_SHUFFLE(1, 0, 3, 2)));
+	}
+
+	// ----------------------------------------------------------------------------------------------------------- andb
+	template <>
+	inline reg andb<float>(const reg v1, const reg v2) {
+		return _mm_and_ps(v1, v2);
+	}
+
+#ifdef __SSE2__
+	template <>
+	inline reg andb<double>(const reg v1, const reg v2) {
+		return _mm_castpd_ps(_mm_and_pd(_mm_castps_pd(v1), _mm_castps_pd(v2)));
+	}
+
+	template <>
+	inline reg andb<int64_t>(const reg v1, const reg v2) {
+		return _mm_castsi128_ps(_mm_and_si128(_mm_castps_si128(v1), _mm_castps_si128(v2)));
+	}
+
+	template <>
+	inline reg andb<int32_t>(const reg v1, const reg v2) {
+		return _mm_castsi128_ps(_mm_and_si128(_mm_castps_si128(v1), _mm_castps_si128(v2)));
+	}
+
+	template <>
+	inline reg andb<int16_t>(const reg v1, const reg v2) {
+		return _mm_castsi128_ps(_mm_and_si128(_mm_castps_si128(v1), _mm_castps_si128(v2)));
+	}
+
+	template <>
+	inline reg andb<int8_t>(const reg v1, const reg v2) {
+		return _mm_castsi128_ps(_mm_and_si128(_mm_castps_si128(v1), _mm_castps_si128(v2)));
+	}
+#endif
+
+	// ---------------------------------------------------------------------------------------------------- andb (mask)
+#ifdef __SSE2__
+	template <>
+	inline msk andb<2>(const msk v1, const msk v2) {
+		return _mm_castpd_si128(_mm_and_pd(_mm_castsi128_pd(v1), _mm_castsi128_pd(v2)));
+	}
+#endif
+
+	template <>
+	inline msk andb<4>(const msk v1, const msk v2) {
+		return _mm_castps_si128(_mm_and_ps(_mm_castsi128_ps(v1), _mm_castsi128_ps(v2)));
+	}
+
+#ifdef __SSE2__
+	template <>
+	inline msk andb<8>(const msk v1, const msk v2) {
+		return _mm_and_si128(v1, v2);
+	}
+
+	template <>
+	inline msk andb<16>(const msk v1, const msk v2) {
+		return _mm_and_si128(v1, v2);
+	}
+#endif
+
+	// ---------------------------------------------------------------------------------------------------------- andnb
+	template <>
+	inline reg andnb<float>(const reg v1, const reg v2) {
+		return _mm_andnot_ps(v1, v2);
+	}
+
+#ifdef __SSE2__
+	template <>
+	inline reg andnb<double>(const reg v1, const reg v2) {
+		return _mm_castpd_ps(_mm_andnot_pd(_mm_castps_pd(v1), _mm_castps_pd(v2)));
+	}
+
+	template <>
+	inline reg andnb<int64_t>(const reg v1, const reg v2) {
+		return _mm_castsi128_ps(_mm_andnot_si128(_mm_castps_si128(v1), _mm_castps_si128(v2)));
+	}
+
+	template <>
+	inline reg andnb<int32_t>(const reg v1, const reg v2) {
+		return _mm_castsi128_ps(_mm_andnot_si128(_mm_castps_si128(v1), _mm_castps_si128(v2)));
+	}
+
+	template <>
+	inline reg andnb<int16_t>(const reg v1, const reg v2) {
+		return _mm_castsi128_ps(_mm_andnot_si128(_mm_castps_si128(v1), _mm_castps_si128(v2)));
+	}
+
+	template <>
+	inline reg andnb<int8_t>(const reg v1, const reg v2) {
+		return _mm_castsi128_ps(_mm_andnot_si128(_mm_castps_si128(v1), _mm_castps_si128(v2)));
+	}
+#endif
+
+	// --------------------------------------------------------------------------------------------------- andnb (mask)
+#ifdef __SSE2__
+	template <>
+	inline msk andnb<2>(const msk v1, const msk v2) {
+		return _mm_castpd_si128(_mm_andnot_pd(_mm_castsi128_pd(v1), _mm_castsi128_pd(v2)));
+	}
+#endif
+
+	template <>
+	inline msk andnb<4>(const msk v1, const msk v2) {
+		return _mm_castps_si128(_mm_andnot_ps(_mm_castsi128_ps(v1), _mm_castsi128_ps(v2)));
+	}
+
+#ifdef __SSE2__
+	template <>
+	inline msk andnb<8>(const msk v1, const msk v2) {
+		return _mm_andnot_si128(v1, v2);
+	}
+
+	template <>
+	inline msk andnb<16>(const msk v1, const msk v2) {
+		return _mm_andnot_si128(v1, v2);
+	}
+#endif
+
+	// ----------------------------------------------------------------------------------------------------------- notb
+	template <>
+	inline reg notb<double>(const reg v) {
+		return andnb<double>(v, set1<int64_t>(0xFFFFFFFFFFFFFFFF));
+	}
+
+	template <>
+	inline reg notb<float>(const reg v) {
+		return andnb<float>(v, set1<int32_t>(0xFFFFFFFF));
+	}
+
+	template <>
+	inline reg notb<int64_t>(const reg v) {
+		return andnb<int64_t>(v, set1<int64_t>(0xFFFFFFFFFFFFFFFF));
+	}
+
+	template <>
+	inline reg notb<int32_t>(const reg v) {
+		return andnb<int32_t>(v, set1<int32_t>(0xFFFFFFFF));
+	}
+
+	template <>
+	inline reg notb<int16_t>(const reg v) {
+#ifdef _MSC_VER
+#pragma warning( disable : 4309 )
+#endif
+		return andnb<int16_t>(v, set1<int16_t>(0xFFFF));
+#ifdef _MSC_VER
+#pragma warning( default : 4309 )
+#endif
+	}
+
+	template <>
+	inline reg notb<int8_t>(const reg v) {
+#ifdef _MSC_VER
+#pragma warning( disable : 4309 )
+#endif
+		return andnb<int8_t>(v, set1<int8_t>(0xFF));
+#ifdef _MSC_VER
+#pragma warning( default : 4309 )
+#endif
+	}
+
+	// ---------------------------------------------------------------------------------------------------- notb (mask)
+	template <>
+	inline msk notb<2>(const msk v) {
+		return andnb<2>(v, _mm_castps_si128(set1<int64_t>(0xFFFFFFFFFFFFFFFF)));
+	}
+
+	template <>
+	inline msk notb<4>(const msk v) {
+		return andnb<4>(v, _mm_castps_si128(set1<int32_t>(0xFFFFFFFF)));
+	}
+
+	template <>
+	inline msk notb<8>(const msk v) {
+#ifdef _MSC_VER
+#pragma warning( disable : 4309 )
+#endif
+		return andnb<8>(v, _mm_castps_si128(set1<int16_t>(0xFFFF)));
+#ifdef _MSC_VER
+#pragma warning( default : 4309 )
+#endif
+	}
+
+	template <>
+	inline msk notb<16>(const msk v) {
+#ifdef _MSC_VER
+#pragma warning( disable : 4309 )
+#endif
+		return andnb<16>(v, _mm_castps_si128(set1<int8_t>(0xFF)));
+#ifdef _MSC_VER
+#pragma warning( default : 4309 )
+#endif
+	}
+
+	// ------------------------------------------------------------------------------------------------------------ orb
+	template <>
+	inline reg orb<float>(const reg v1, const reg v2) {
+		return _mm_or_ps(v1, v2);
+	}
+
+#ifdef __SSE2__
+	template <>
+	inline reg orb<double>(const reg v1, const reg v2) {
+		return _mm_castpd_ps(_mm_or_pd(_mm_castps_pd(v1), _mm_castps_pd(v2)));
+	}
+
+	template <>
+	inline reg orb<int64_t>(const reg v1, const reg v2) {
+		return _mm_castsi128_ps(_mm_or_si128(_mm_castps_si128(v1), _mm_castps_si128(v2)));
+	}
+
+	template <>
+	inline reg orb<int32_t>(const reg v1, const reg v2) {
+		return _mm_castsi128_ps(_mm_or_si128(_mm_castps_si128(v1), _mm_castps_si128(v2)));
+	}
+
+	template <>
+	inline reg orb<int16_t>(const reg v1, const reg v2) {
+		return _mm_castsi128_ps(_mm_or_si128(_mm_castps_si128(v1), _mm_castps_si128(v2)));
+	}
+
+	template <>
+	inline reg orb<int8_t>(const reg v1, const reg v2) {
+		return _mm_castsi128_ps(_mm_or_si128(_mm_castps_si128(v1), _mm_castps_si128(v2)));
+	}
+#endif
+
+	// ----------------------------------------------------------------------------------------------------- orb (mask)
+#ifdef __SSE2__
+	template <>
+	inline msk orb<2>(const msk v1, const msk v2) {
+		return _mm_castpd_si128(_mm_or_pd(_mm_castsi128_pd(v1), _mm_castsi128_pd(v2)));
+	}
+#endif
+
+	template <>
+	inline msk orb<4>(const msk v1, const msk v2) {
+		return _mm_castps_si128(_mm_or_ps(_mm_castsi128_ps(v1), _mm_castsi128_ps(v2)));
+	}
+
+#ifdef __SSE2__
+	template <>
+	inline msk orb<8>(const msk v1, const msk v2) {
+		return _mm_or_si128(v1, v2);
+	}
+
+	template <>
+	inline msk orb<16>(const msk v1, const msk v2) {
+		return _mm_or_si128(v1, v2);
+	}
+#endif
+
+	// ----------------------------------------------------------------------------------------------------------- xorb
+	template <>
+	inline reg xorb<float>(const reg v1, const reg v2) {
+		return _mm_xor_ps(v1, v2);
+	}
+
+#ifdef __SSE2__
+	template <>
+	inline reg xorb<double>(const reg v1, const reg v2) {
+		return _mm_castpd_ps(_mm_xor_pd(_mm_castps_pd(v1), _mm_castps_pd(v2)));
+	}
+
+	template <>
+	inline reg xorb<int64_t>(const reg v1, const reg v2) {
+		return _mm_castsi128_ps(_mm_xor_si128(_mm_castps_si128(v1), _mm_castps_si128(v2)));
+	}
+
+	template <>
+	inline reg xorb<int32_t>(const reg v1, const reg v2) {
+		return _mm_castsi128_ps(_mm_xor_si128(_mm_castps_si128(v1), _mm_castps_si128(v2)));
+	}
+
+	template <>
+	inline reg xorb<int16_t>(const reg v1, const reg v2) {
+		return _mm_castsi128_ps(_mm_xor_si128(_mm_castps_si128(v1), _mm_castps_si128(v2)));
+	}
+
+	template <>
+	inline reg xorb<int8_t>(const reg v1, const reg v2) {
+		return _mm_castsi128_ps(_mm_xor_si128(_mm_castps_si128(v1), _mm_castps_si128(v2)));
+	}
+#endif
+
+	// ----------------------------------------------------------------------------------------------------- orb (mask)
+#ifdef __SSE2__
+	template <>
+	inline msk xorb<2>(const msk v1, const msk v2) {
+		return _mm_castpd_si128(_mm_xor_pd(_mm_castsi128_pd(v1), _mm_castsi128_pd(v2)));
+	}
+#endif
+
+	template <>
+	inline msk xorb<4>(const msk v1, const msk v2) {
+		return _mm_castps_si128(_mm_xor_ps(_mm_castsi128_ps(v1), _mm_castsi128_ps(v2)));
+	}
+
+#ifdef __SSE2__
+	template <>
+	inline msk xorb<8>(const msk v1, const msk v2) {
+		return _mm_xor_si128(v1, v2);
+	}
+
+	template <>
+	inline msk xorb<16>(const msk v1, const msk v2) {
+		return _mm_xor_si128(v1, v2);
+	}
+#endif
+
+	// --------------------------------------------------------------------------------------------------------- lshift
+#ifdef __SSE2__
+	template <>
+	inline reg lshift<int64_t>(const reg v1, const uint32_t n) {
+		return _mm_castsi128_ps(_mm_slli_epi64(_mm_castps_si128(v1), n));
+	}
+
+	template <>
+	inline reg lshift<int32_t>(const reg v1, const uint32_t n) {
+		return _mm_castsi128_ps(_mm_slli_epi32(_mm_castps_si128(v1), n));
+	}
+
+	template <>
+	inline reg lshift<int16_t>(const reg v1, const uint32_t n) {
+		return _mm_castsi128_ps(_mm_slli_epi16(_mm_castps_si128(v1), n));
+	}
+
+	template <>
+	inline reg lshift<int8_t>(const reg v1, uint32_t n) {
+//		auto shu = _mm_set_epi8(14,15,12,13,10,11,8,9,6,7,4,5,2,3,0,1);
+//		reg v2 = _mm_castsi128_ps(_mm_shuffle_epi8(_mm_castps_si128(v1), shu));
+//		reg lsh1 = lshift<int16_t>(v1, n);
+//		reg lsh2 = lshift<int16_t>(v2, n);
+//		lsh2 = _mm_castsi128_ps(_mm_shuffle_epi8(_mm_castps_si128(lsh2), shu));
+//
+//		reg msk = set1<int16_t>(0x00FF);
+//		lsh1 = andb <int16_t>(msk, lsh1);
+//		lsh2 = andnb<int16_t>(msk, lsh2);
+//
+//		return xorb<int16_t>(lsh1, lsh2);
+
+		auto msk = set1<int8_t>((1 << n) -1);
+		reg lsh = lshift<int16_t>(v1, n);
+		lsh = andnb<int16_t>(msk, lsh);
+		return lsh;
+
+//		// TODO: Be careful this is not a shift 8 but a shift 16 bits...
+//		// return _mm_castsi128_ps(_mm_slli_epi16(_mm_castps_si128(v1), n));
+	}
+#endif
+
+	// -------------------------------------------------------------------------------------------------- lshift (mask)
+#ifdef __SSE2__
+#if !defined(__clang__) && !defined(_MSC_VER) && !defined(__GNUC__)
+	template <>
+	inline msk lshift<2>(const msk v1, const uint32_t n) {
+		return _mm_slli_si128(v1, n * 8);
+	}
+
+	template <>
+	inline msk lshift<4>(const msk v1, const uint32_t n) {
+		return _mm_slli_si128(v1, n * 4);
+	}
+
+	template <>
+	inline msk lshift<8>(const msk v1, const uint32_t n) {
+		return _mm_slli_si128(v1, n * 2);
+	}
+
+	template <>
+	inline msk lshift<16>(const msk v1, const uint32_t n) {
+		return _mm_slli_si128(v1, n * 1);
+	}
+#endif
+#endif
+
+	// --------------------------------------------------------------------------------------------------------- rshift
+#ifdef __SSE2__
+	template <>
+	inline reg rshift<int64_t>(const reg v1, const uint32_t n) {
+		return _mm_castsi128_ps(_mm_srli_epi64(_mm_castps_si128(v1), n));
+	}
+
+	template <>
+	inline reg rshift<int32_t>(const reg v1, const uint32_t n) {
+		return _mm_castsi128_ps(_mm_srli_epi32(_mm_castps_si128(v1), n));
+	}
+
+	template <>
+	inline reg rshift<int16_t>(const reg v1, const uint32_t n) {
+		return _mm_castsi128_ps(_mm_srli_epi16(_mm_castps_si128(v1), n));
+	}
+
+	template <>
+	inline reg rshift<int8_t>(const reg v1, const uint32_t n) {
+//		auto shu = _mm_set_epi8(14,15,12,13,10,11,8,9,6,7,4,5,2,3,0,1);
+//		reg v2 = _mm_castsi128_ps(_mm_shuffle_epi8(_mm_castps_si128(v1), shu));
+//		reg rsh1 = rshift<int16_t>(v1, n);
+//		reg rsh2 = rshift<int16_t>(v2, n);
+//		rsh2 = _mm_castsi128_ps(_mm_shuffle_epi8(_mm_castps_si128(rsh2), shu));
+//
+//		reg msk = set1<int16_t>(0xFF00);
+//		rsh1 = andb <int16_t>(msk, rsh1);
+//		rsh2 = andnb<int16_t>(msk, rsh2);
+//
+//		return xorb<int16_t>(rsh1, rsh2);
+
+		auto msk = set1<int8_t>((1 << (8 -n)) -1);
+		reg rsh = rshift<int16_t>(v1, n);
+		rsh = andb<int16_t>(msk, rsh);
+		return rsh;
+
+//		// TODO: Be careful this is not a shift 8 but a shift 16 bits...
+//		return _mm_castsi128_ps(_mm_srli_epi16(_mm_castps_si128(v1), n));
+	}
+#endif
+
+	// -------------------------------------------------------------------------------------------------- rshift (mask)
+#ifdef __SSE2__
+#if !defined(__clang__) && !defined(_MSC_VER) && !defined(__GNUC__)
+	template <>
+	inline msk rshift<2>(const msk v1, const uint32_t n) {
+		return _mm_srli_si128(v1, n * 8);
+	}
+
+	template <>
+	inline msk rshift<4>(const msk v1, const uint32_t n) {
+		return _mm_srli_si128(v1, n * 4);
+	}
+
+	template <>
+	inline msk rshift<8>(const msk v1, const uint32_t n) {
+		return _mm_srli_si128(v1, n * 2);
+	}
+
+	template <>
+	inline msk rshift<16>(const msk v1, const uint32_t n) {
+		return _mm_srli_si128(v1, n * 1);
+	}
+#endif
+#endif
+
+	// ---------------------------------------------------------------------------------------------------------- blend
+#ifdef __SSE4_1__
+	template <>
+	inline reg blend<double>(const reg v1, const reg v2, const msk m) {
+		return _mm_castpd_ps(_mm_blendv_pd(_mm_castps_pd(v2), _mm_castps_pd(v1), _mm_castsi128_pd(m)));
+	}
+
+	template <>
+	inline reg blend<float>(const reg v1, const reg v2, const msk m) {
+		return _mm_blendv_ps(v2, v1, _mm_castsi128_ps(m));
+	}
+
+	template <>
+	inline reg blend<int64_t>(const reg v1, const reg v2, const msk m) {
+		return _mm_castpd_ps(_mm_blendv_pd(_mm_castps_pd(v2), _mm_castps_pd(v1), _mm_castsi128_pd(m)));
+	}
+
+	template <>
+	inline reg blend<int32_t>(const reg v1, const reg v2, const msk m) {
+		return _mm_blendv_ps(v2, v1, _mm_castsi128_ps(m));
+	}
+
+	template <>
+	inline reg blend<int16_t>(const reg v1, const reg v2, const msk m) {
+		return _mm_castsi128_ps(_mm_blendv_epi8(_mm_castps_si128(v2), _mm_castps_si128(v1), m));
+	}
+
+	template <>
+	inline reg blend<int8_t>(const reg v1, const reg v2, const msk m) {
+		return _mm_castsi128_ps(_mm_blendv_epi8(_mm_castps_si128(v2), _mm_castps_si128(v1), m));
+	}
+#else
+	template <>
+	inline reg blend<double>(const reg v1, const reg v2, const msk m) {
+		auto m_reg = toreg<2>(m);
+		auto v1_2 = andb <int32_t>(m_reg, v1);
+		auto v2_2 = andnb<int32_t>(m_reg, v2);
+		auto blen = xorb <int32_t>(v1_2, v2_2);
+		return blen;
+	}
+
+	template <>
+	inline reg blend<float>(const reg v1, const reg v2, const msk m) {
+		return blend<double>(v1, v2, m);
+	}
+
+	template <>
+	inline reg blend<int64_t>(const reg v1, const reg v2, const msk m) {
+		return blend<double>(v1, v2, m);
+	}
+
+	template <>
+	inline reg blend<int32_t>(const reg v1, const reg v2, const msk m) {
+		return blend<double>(v1, v2, m);
+	}
+
+	template <>
+	inline reg blend<int16_t>(const reg v1, const reg v2, const msk m) {
+		return blend<double>(v1, v2, m);
+	}
+
+	template <>
+	inline reg blend<int8_t>(const reg v1, const reg v2, const msk m) {
+		return blend<double>(v1, v2, m);
+	}
+#endif
+
+	// ---------------------------------------------------------------------------------------------------------- cmask
+#ifdef __SSE2__
+	template <>
+	inline reg cmask<double>(const uint32_t val[nElReg<double>()]) {
+		int8_t val_bis[nElReg<int8_t>()] = {(int8_t)(val[0]*8 + 0), (int8_t)(val[0]*8 + 1),
+		                                    (int8_t)(val[0]*8 + 2), (int8_t)(val[0]*8 + 3),
+		                                    (int8_t)(val[0]*8 + 4), (int8_t)(val[0]*8 + 5),
+		                                    (int8_t)(val[0]*8 + 6), (int8_t)(val[0]*8 + 7),
+		                                    (int8_t)(val[1]*8 + 0), (int8_t)(val[1]*8 + 1),
+		                                    (int8_t)(val[1]*8 + 2), (int8_t)(val[1]*8 + 3),
+		                                    (int8_t)(val[1]*8 + 4), (int8_t)(val[1]*8 + 5),
+		                                    (int8_t)(val[1]*8 + 6), (int8_t)(val[1]*8 + 7)};
+		return mipp::set<int8_t>(val_bis);
+	}
+
+	template <>
+	inline reg cmask<float>(const uint32_t val[nElReg<float>()]) {
+		int8_t val_bis[nElReg<int8_t>()] = {(int8_t)(val[0]*4 + 0), (int8_t)(val[0]*4 + 1),
+		                                    (int8_t)(val[0]*4 + 2), (int8_t)(val[0]*4 + 3),
+		                                    (int8_t)(val[1]*4 + 0), (int8_t)(val[1]*4 + 1),
+		                                    (int8_t)(val[1]*4 + 2), (int8_t)(val[1]*4 + 3),
+		                                    (int8_t)(val[2]*4 + 0), (int8_t)(val[2]*4 + 1),
+		                                    (int8_t)(val[2]*4 + 2), (int8_t)(val[2]*4 + 3),
+		                                    (int8_t)(val[3]*4 + 0), (int8_t)(val[3]*4 + 1),
+		                                    (int8_t)(val[3]*4 + 2), (int8_t)(val[3]*4 + 3)};
+		return mipp::set<int8_t>(val_bis);
+	}
+
+	template <>
+	inline reg cmask<int64_t>(const uint32_t val[nElReg<int64_t>()]) {
+		int8_t val_bis[nElReg<int8_t>()] = {(int8_t)(val[0]*8 + 0), (int8_t)(val[0]*8 + 1),
+		                                    (int8_t)(val[0]*8 + 2), (int8_t)(val[0]*8 + 3),
+		                                    (int8_t)(val[0]*8 + 4), (int8_t)(val[0]*8 + 5),
+		                                    (int8_t)(val[0]*8 + 6), (int8_t)(val[0]*8 + 7),
+		                                    (int8_t)(val[1]*8 + 0), (int8_t)(val[1]*8 + 1),
+		                                    (int8_t)(val[1]*8 + 2), (int8_t)(val[1]*8 + 3),
+		                                    (int8_t)(val[1]*8 + 4), (int8_t)(val[1]*8 + 5),
+		                                    (int8_t)(val[1]*8 + 6), (int8_t)(val[1]*8 + 7)};
+		return mipp::set<int8_t>(val_bis);
+	}
+
+	template <>
+	inline reg cmask<int32_t>(const uint32_t val[nElReg<int32_t>()]) {
+		int8_t val_bis[nElReg<int8_t>()] = {(int8_t)(val[0]*4 + 0), (int8_t)(val[0]*4 + 1),
+		                                    (int8_t)(val[0]*4 + 2), (int8_t)(val[0]*4 + 3),
+		                                    (int8_t)(val[1]*4 + 0), (int8_t)(val[1]*4 + 1),
+		                                    (int8_t)(val[1]*4 + 2), (int8_t)(val[1]*4 + 3),
+		                                    (int8_t)(val[2]*4 + 0), (int8_t)(val[2]*4 + 1),
+		                                    (int8_t)(val[2]*4 + 2), (int8_t)(val[2]*4 + 3),
+		                                    (int8_t)(val[3]*4 + 0), (int8_t)(val[3]*4 + 1),
+		                                    (int8_t)(val[3]*4 + 2), (int8_t)(val[3]*4 + 3)};
+		return mipp::set<int8_t>(val_bis);
+	}
+
+	template <>
+	inline reg cmask<int16_t>(const uint32_t val[nElReg<int16_t>()]) {
+		int8_t val_bis[nElReg<int8_t>()] = {(int8_t)(val[0]*2 + 0), (int8_t)(val[0]*2 + 1),
+		                                    (int8_t)(val[1]*2 + 0), (int8_t)(val[1]*2 + 1),
+		                                    (int8_t)(val[2]*2 + 0), (int8_t)(val[2]*2 + 1),
+		                                    (int8_t)(val[3]*2 + 0), (int8_t)(val[3]*2 + 1),
+		                                    (int8_t)(val[4]*2 + 0), (int8_t)(val[4]*2 + 1),
+		                                    (int8_t)(val[5]*2 + 0), (int8_t)(val[5]*2 + 1),
+		                                    (int8_t)(val[6]*2 + 0), (int8_t)(val[6]*2 + 1),
+		                                    (int8_t)(val[7]*2 + 0), (int8_t)(val[7]*2 + 1)};
+		return mipp::set<int8_t>(val_bis);
+	}
+
+	template <>
+	inline reg cmask<int8_t>(const uint32_t val[nElReg<int8_t>()]) {
+		int8_t val_bis[nElReg<int8_t>()] = {(int8_t)val[ 0], (int8_t)val[ 1],
+		                                    (int8_t)val[ 2], (int8_t)val[ 3],
+		                                    (int8_t)val[ 4], (int8_t)val[ 5],
+		                                    (int8_t)val[ 6], (int8_t)val[ 7],
+		                                    (int8_t)val[ 8], (int8_t)val[ 9],
+		                                    (int8_t)val[10], (int8_t)val[11],
+		                                    (int8_t)val[12], (int8_t)val[13],
+		                                    (int8_t)val[14], (int8_t)val[15]};
+		return mipp::set<int8_t>(val_bis);
+	}
+#endif
+
+	// --------------------------------------------------------------------------------------------------------- cmask2
+#ifdef __SSE2__
+	template <>
+	inline reg cmask2<double>(const uint32_t val[nElReg<double>()/2]) {
+		int8_t val_bis[nElReg<int8_t>()] = {(int8_t)(val[0]*8 + 0+0), (int8_t)(val[0]*8 + 1+0),
+		                                    (int8_t)(val[0]*8 + 2+0), (int8_t)(val[0]*8 + 3+0),
+		                                    (int8_t)(val[0]*8 + 4+0), (int8_t)(val[0]*8 + 5+0),
+		                                    (int8_t)(val[0]*8 + 6+0), (int8_t)(val[0]*8 + 7+0),
+		                                    (int8_t)(val[0]*8 + 0+8), (int8_t)(val[0]*8 + 1+8),
+		                                    (int8_t)(val[0]*8 + 2+8), (int8_t)(val[0]*8 + 3+8),
+		                                    (int8_t)(val[0]*8 + 4+8), (int8_t)(val[0]*8 + 5+8),
+		                                    (int8_t)(val[0]*8 + 6+8), (int8_t)(val[0]*8 + 7+8)};
+		return mipp::set<int8_t>(val_bis);
+	}
+
+	template <>
+	inline reg cmask2<float>(const uint32_t val[nElReg<float>()/2]) {
+		int8_t val_bis[nElReg<int8_t>()] = {(int8_t)(val[0]*4 + 0+0), (int8_t)(val[0]*4 + 1+0),
+		                                    (int8_t)(val[0]*4 + 2+0), (int8_t)(val[0]*4 + 3+0),
+		                                    (int8_t)(val[1]*4 + 0+0), (int8_t)(val[1]*4 + 1+0),
+		                                    (int8_t)(val[1]*4 + 2+0), (int8_t)(val[1]*4 + 3+0),
+		                                    (int8_t)(val[0]*4 + 0+8), (int8_t)(val[0]*4 + 1+8),
+		                                    (int8_t)(val[0]*4 + 2+8), (int8_t)(val[0]*4 + 3+8),
+		                                    (int8_t)(val[1]*4 + 0+8), (int8_t)(val[1]*4 + 1+8),
+		                                    (int8_t)(val[1]*4 + 2+8), (int8_t)(val[1]*4 + 3+8)};
+		return mipp::set<int8_t>(val_bis);
+	}
+
+	template <>
+	inline reg cmask2<int64_t>(const uint32_t val[nElReg<int64_t>()/2]) {
+		int8_t val_bis[nElReg<int8_t>()] = {(int8_t)(val[0]*8 + 0+0), (int8_t)(val[0]*8 + 1+0),
+		                                    (int8_t)(val[0]*8 + 2+0), (int8_t)(val[0]*8 + 3+0),
+		                                    (int8_t)(val[0]*8 + 4+0), (int8_t)(val[0]*8 + 5+0),
+		                                    (int8_t)(val[0]*8 + 6+0), (int8_t)(val[0]*8 + 7+0),
+		                                    (int8_t)(val[0]*8 + 0+8), (int8_t)(val[0]*8 + 1+8),
+		                                    (int8_t)(val[0]*8 + 2+8), (int8_t)(val[0]*8 + 3+8),
+		                                    (int8_t)(val[0]*8 + 4+8), (int8_t)(val[0]*8 + 5+8),
+		                                    (int8_t)(val[0]*8 + 6+8), (int8_t)(val[0]*8 + 7+8)};
+		return mipp::set<int8_t>(val_bis);
+	}
+
+	template <>
+	inline reg cmask2<int32_t>(const uint32_t val[nElReg<int32_t>()/2]) {
+		int8_t val_bis[nElReg<int8_t>()] = {(int8_t)(val[0]*4 + 0+0), (int8_t)(val[0]*4 + 1+0),
+		                                    (int8_t)(val[0]*4 + 2+0), (int8_t)(val[0]*4 + 3+0),
+		                                    (int8_t)(val[1]*4 + 0+0), (int8_t)(val[1]*4 + 1+0),
+		                                    (int8_t)(val[1]*4 + 2+0), (int8_t)(val[1]*4 + 3+0),
+		                                    (int8_t)(val[0]*4 + 0+8), (int8_t)(val[0]*4 + 1+8),
+		                                    (int8_t)(val[0]*4 + 2+8), (int8_t)(val[0]*4 + 3+8),
+		                                    (int8_t)(val[1]*4 + 0+8), (int8_t)(val[1]*4 + 1+8),
+		                                    (int8_t)(val[1]*4 + 2+8), (int8_t)(val[1]*4 + 3+8)};
+		return mipp::set<int8_t>(val_bis);
+	}
+
+	template <>
+	inline reg cmask2<int16_t>(const uint32_t val[nElReg<int16_t>()/2]) {
+		int8_t val_bis[nElReg<int8_t>()] = {(int8_t)(val[0]*2 + 0+0), (int8_t)(val[0]*2 + 1+0),
+		                                    (int8_t)(val[1]*2 + 0+0), (int8_t)(val[1]*2 + 1+0),
+		                                    (int8_t)(val[2]*2 + 0+0), (int8_t)(val[2]*2 + 1+0),
+		                                    (int8_t)(val[3]*2 + 0+0), (int8_t)(val[3]*2 + 1+0),
+		                                    (int8_t)(val[0]*2 + 0+8), (int8_t)(val[0]*2 + 1+8),
+		                                    (int8_t)(val[1]*2 + 0+8), (int8_t)(val[1]*2 + 1+8),
+		                                    (int8_t)(val[2]*2 + 0+8), (int8_t)(val[2]*2 + 1+8),
+		                                    (int8_t)(val[3]*2 + 0+8), (int8_t)(val[3]*2 + 1+8)};
+		return mipp::set<int8_t>(val_bis);
+	}
+
+	template <>
+	inline reg cmask2<int8_t>(const uint32_t val[nElReg<int8_t>()/2]) {
+		int8_t val_bis[nElReg<int8_t>()] = {(int8_t)(val[ 0]+0), (int8_t)(val[ 1]+0),
+		                                    (int8_t)(val[ 2]+0), (int8_t)(val[ 3]+0),
+		                                    (int8_t)(val[ 4]+0), (int8_t)(val[ 5]+0),
+		                                    (int8_t)(val[ 6]+0), (int8_t)(val[ 7]+0),
+		                                    (int8_t)(val[ 0]+8), (int8_t)(val[ 1]+8),
+		                                    (int8_t)(val[ 2]+8), (int8_t)(val[ 3]+8),
+		                                    (int8_t)(val[ 4]+8), (int8_t)(val[ 5]+8),
+		                                    (int8_t)(val[ 6]+8), (int8_t)(val[ 7]+8)};
+		return mipp::set<int8_t>(val_bis);
+	}
+#endif
+
+	// --------------------------------------------------------------------------------------------------------- cmask4
+#ifdef __SSE2__
+	template <>
+	inline reg cmask4<float>(const uint32_t val[nElReg<float>()/4]) {
+		int8_t val_bis[nElReg<int8_t>()] = {(int8_t)(val[0]*4 + 0+ 0), (int8_t)(val[0]*4 + 1+ 0),
+		                                    (int8_t)(val[0]*4 + 2+ 0), (int8_t)(val[0]*4 + 3+ 0),
+		                                    (int8_t)(val[0]*4 + 0+ 4), (int8_t)(val[0]*4 + 1+ 4),
+		                                    (int8_t)(val[0]*4 + 2+ 4), (int8_t)(val[0]*4 + 3+ 4),
+		                                    (int8_t)(val[0]*4 + 0+ 8), (int8_t)(val[0]*4 + 1+ 8),
+		                                    (int8_t)(val[0]*4 + 2+ 8), (int8_t)(val[0]*4 + 3+ 8),
+		                                    (int8_t)(val[0]*4 + 0+12), (int8_t)(val[0]*4 + 1+12),
+		                                    (int8_t)(val[0]*4 + 2+12), (int8_t)(val[0]*4 + 3+12)};
+		return mipp::set<int8_t>(val_bis);
+	}
+
+	template <>
+	inline reg cmask4<int32_t>(const uint32_t val[nElReg<int32_t>()/4]) {
+		int8_t val_bis[nElReg<int8_t>()] = {(int8_t)(val[0]*4 + 0+ 0), (int8_t)(val[0]*4 + 1+ 0),
+		                                    (int8_t)(val[0]*4 + 2+ 0), (int8_t)(val[0]*4 + 3+ 0),
+		                                    (int8_t)(val[0]*4 + 0+ 4), (int8_t)(val[0]*4 + 1+ 4),
+		                                    (int8_t)(val[0]*4 + 2+ 4), (int8_t)(val[0]*4 + 3+ 4),
+		                                    (int8_t)(val[0]*4 + 0+ 8), (int8_t)(val[0]*4 + 1+ 8),
+		                                    (int8_t)(val[0]*4 + 2+ 8), (int8_t)(val[0]*4 + 3+ 8),
+		                                    (int8_t)(val[0]*4 + 0+12), (int8_t)(val[0]*4 + 1+12),
+		                                    (int8_t)(val[0]*4 + 2+12), (int8_t)(val[0]*4 + 3+12)};
+		return mipp::set<int8_t>(val_bis);
+	}
+
+	template <>
+	inline reg cmask4<int16_t>(const uint32_t val[nElReg<int16_t>()/4]) {
+		int8_t val_bis[nElReg<int8_t>()] = {(int8_t)(val[0]*2 + 0+ 0), (int8_t)(val[0]*2 + 1+ 0),
+		                                    (int8_t)(val[1]*2 + 0+ 0), (int8_t)(val[1]*2 + 1+ 0),
+		                                    (int8_t)(val[0]*2 + 0+ 4), (int8_t)(val[0]*2 + 1+ 4),
+		                                    (int8_t)(val[1]*2 + 0+ 4), (int8_t)(val[1]*2 + 1+ 4),
+		                                    (int8_t)(val[0]*2 + 0+ 8), (int8_t)(val[0]*2 + 1+ 8),
+		                                    (int8_t)(val[1]*2 + 0+ 8), (int8_t)(val[1]*2 + 1+ 8),
+		                                    (int8_t)(val[0]*2 + 0+12), (int8_t)(val[0]*2 + 1+12),
+		                                    (int8_t)(val[1]*2 + 0+12), (int8_t)(val[1]*2 + 1+12)};
+		return mipp::set<int8_t>(val_bis);
+	}
+
+	template <>
+	inline reg cmask4<int8_t>(const uint32_t val[nElReg<int8_t>()/4]) {
+		int8_t val_bis[nElReg<int8_t>()] = {(int8_t)(val[ 0]+ 0), (int8_t)(val[ 1]+ 0),
+		                                    (int8_t)(val[ 2]+ 0), (int8_t)(val[ 3]+ 0),
+		                                    (int8_t)(val[ 0]+ 4), (int8_t)(val[ 1]+ 4),
+		                                    (int8_t)(val[ 2]+ 4), (int8_t)(val[ 3]+ 4),
+		                                    (int8_t)(val[ 0]+ 8), (int8_t)(val[ 1]+ 8),
+		                                    (int8_t)(val[ 2]+ 8), (int8_t)(val[ 3]+ 8),
+		                                    (int8_t)(val[ 0]+12), (int8_t)(val[ 1]+12),
+		                                    (int8_t)(val[ 2]+12), (int8_t)(val[ 3]+12)};
+		return mipp::set<int8_t>(val_bis);
+	}
+#endif
+
+	// ---------------------------------------------------------------------------------------------------------- shuff
+#ifdef __SSSE3__
+	template <>
+	inline reg shuff<double>(const reg v, const reg cm) {
+		return _mm_castsi128_ps(_mm_shuffle_epi8(_mm_castps_si128(v), _mm_castps_si128(cm)));
+	}
+
+	template <>
+	inline reg shuff<float>(const reg v, const reg cm) {
+		return _mm_castsi128_ps(_mm_shuffle_epi8(_mm_castps_si128(v), _mm_castps_si128(cm)));
+	}
+
+	template <>
+	inline reg shuff<int64_t>(const reg v, const reg cm) {
+		return _mm_castsi128_ps(_mm_shuffle_epi8(_mm_castps_si128(v), _mm_castps_si128(cm)));
+	}
+
+	template <>
+	inline reg shuff<int32_t>(const reg v, const reg cm) {
+		return _mm_castsi128_ps(_mm_shuffle_epi8(_mm_castps_si128(v), _mm_castps_si128(cm)));
+	}
+
+	template <>
+	inline reg shuff<int16_t>(const reg v, const reg cm) {
+		return _mm_castsi128_ps(_mm_shuffle_epi8(_mm_castps_si128(v), _mm_castps_si128(cm)));
+	}
+
+	template <>
+	inline reg shuff<int8_t>(const reg v, const reg cm) {
+		return _mm_castsi128_ps(_mm_shuffle_epi8(_mm_castps_si128(v), _mm_castps_si128(cm)));
+	}
+#endif
+
+	// --------------------------------------------------------------------------------------------------------- shuff2
+#ifdef __SSSE3__
+	template <>
+	inline reg shuff2<double>(const reg v, const reg cm) {
+		return mipp::shuff<double>(v, cm);
+	}
+
+	template <>
+	inline reg shuff2<float>(const reg v, const reg cm) {
+		return mipp::shuff<float>(v, cm);
+	}
+
+	template <>
+	inline reg shuff2<int64_t>(const reg v, const reg cm) {
+		return mipp::shuff<int64_t>(v, cm);
+	}
+
+	template <>
+	inline reg shuff2<int32_t>(const reg v, const reg cm) {
+		return mipp::shuff<int32_t>(v, cm);
+	}
+
+	template <>
+	inline reg shuff2<int16_t>(const reg v, const reg cm) {
+		return mipp::shuff<int16_t>(v, cm);
+	}
+
+	template <>
+	inline reg shuff2<int8_t>(const reg v, const reg cm) {
+		return mipp::shuff<int8_t>(v, cm);
+	}
+#endif
+
+	// --------------------------------------------------------------------------------------------------------- shuff4
+#ifdef __SSSE3__
+	template <>
+	inline reg shuff4<float>(const reg v, const reg cm) {
+		return mipp::shuff<float>(v, cm);
+	}
+
+	template <>
+	inline reg shuff4<int64_t>(const reg v, const reg cm) {
+		return mipp::shuff<int64_t>(v, cm);
+	}
+
+	template <>
+	inline reg shuff4<int32_t>(const reg v, const reg cm) {
+		return mipp::shuff<int32_t>(v, cm);
+	}
+
+	template <>
+	inline reg shuff4<int16_t>(const reg v, const reg cm) {
+		return mipp::shuff<int16_t>(v, cm);
+	}
+
+	template <>
+	inline reg shuff4<int8_t>(const reg v, const reg cm) {
+		return mipp::shuff<int8_t>(v, cm);
+	}
+#endif
+
+	// --------------------------------------------------------------------------------------------------- interleavelo
+#ifdef __SSE2__
+	template <>
+	inline reg interleavelo<double>(const reg v1, const reg v2) {
+		return _mm_castsi128_ps(_mm_unpacklo_epi64(_mm_castps_si128(v1), _mm_castps_si128(v2)));
+	}
+
+	template <>
+	inline reg interleavelo<int64_t>(const reg v1, const reg v2) {
+		return _mm_castsi128_ps(_mm_unpacklo_epi64(_mm_castps_si128(v1), _mm_castps_si128(v2)));
+	}
+
+	template <>
+	inline reg interleavelo<float>(const reg v1, const reg v2) {
+		// v1  = [a0, b0, c0, d0], v2 = [a1, b1, c1, d1]
+		// res = [a0, a1, b0, b1]
+		return _mm_castsi128_ps(_mm_unpacklo_epi32(_mm_castps_si128(v1), _mm_castps_si128(v2)));
+	}
+
+	template <>
+	inline reg interleavelo<int32_t>(const reg v1, const reg v2) {
+		// v1  = [a0, b0, c0, d0], v2 = [a1, b1, c1, d1]
+		// res = [a0, a1, b0, b1]
+		return _mm_castsi128_ps(_mm_unpacklo_epi32(_mm_castps_si128(v1), _mm_castps_si128(v2)));
+	}
+
+	template <>
+	inline reg interleavelo<int16_t>(const reg v1, const reg v2) {
+		return _mm_castsi128_ps(_mm_unpacklo_epi16(_mm_castps_si128(v1), _mm_castps_si128(v2)));
+	}
+
+	template <>
+	inline reg interleavelo<int8_t>(const reg v1, const reg v2) {
+		return _mm_castsi128_ps(_mm_unpacklo_epi8(_mm_castps_si128(v1), _mm_castps_si128(v2)));
+	}
+#endif
+
+	// --------------------------------------------------------------------------------------------------- interleavehi
+#ifdef __SSE2__
+	template <>
+	inline reg interleavehi<double>(const reg v1, const reg v2) {
+		return _mm_castsi128_ps(_mm_unpackhi_epi64(_mm_castps_si128(v1), _mm_castps_si128(v2)));
+	}
+
+	template <>
+	inline reg interleavehi<int64_t>(const reg v1, const reg v2) {
+		return _mm_castsi128_ps(_mm_unpackhi_epi64(_mm_castps_si128(v1), _mm_castps_si128(v2)));
+	}
+
+	template <>
+	inline reg interleavehi<float>(const reg v1, const reg v2) {
+		// v1  = [a0, b0, c0, d0], v2 = [a1, b1, c1, d1]
+		// res = [c0, c1, d0, d1]
+		return _mm_castsi128_ps(_mm_unpackhi_epi32(_mm_castps_si128(v1), _mm_castps_si128(v2)));
+	}
+
+	template <>
+	inline reg interleavehi<int32_t>(const reg v1, const reg v2) {
+		// v1  = [a0, b0, c0, d0], v2 = [a1, b1, c1, d1]
+		// res = [c0, c1, d0, d1]
+		return _mm_castsi128_ps(_mm_unpackhi_epi32(_mm_castps_si128(v1), _mm_castps_si128(v2)));
+	}
+
+	template <>
+	inline reg interleavehi<int16_t>(const reg v1, const reg v2) {
+		return _mm_castsi128_ps(_mm_unpackhi_epi16(_mm_castps_si128(v1), _mm_castps_si128(v2)));
+	}
+
+	template <>
+	inline reg interleavehi<int8_t>(const reg v1, const reg v2) {
+		return _mm_castsi128_ps(_mm_unpackhi_epi8(_mm_castps_si128(v1), _mm_castps_si128(v2)));
+	}
+#endif
+
+	// -------------------------------------------------------------------------------------------------- interleavelo2
+#ifdef __SSE2__
+	template <>
+	inline reg interleavelo2<float>(const reg v1, const reg v2) {
+		// v1  = [a0, b0, c0, d0], v2 = [a1, b1, c1, d1]
+		// res = [a0, a1, c0, c1]
+		auto res_lo     = _mm_unpacklo_epi32(_mm_castps_si128(v1), _mm_castps_si128(v2));
+		auto res_hi     = _mm_unpackhi_epi32(_mm_castps_si128(v1), _mm_castps_si128(v2));
+		auto res_hi_shu = _mm_shuffle_epi32 (res_hi, _MM_SHUFFLE(1,0,3,2));
+
+#ifdef __SSE4_1__
+		return _mm_blend_ps(_mm_castsi128_ps(res_lo), _mm_castsi128_ps(res_hi_shu), _MM_SHUFFLE(0,0,3,0));
+#else
+		uint32_t mask[4] = {0xFFFFFFFF, 0xFFFFFFFF, 0, 0};
+		return blend<float>(_mm_castsi128_ps(res_lo),
+		                    _mm_castsi128_ps(res_hi_shu),
+		                    _mm_castps_si128(set<int32_t>((int32_t*)mask)));
+#endif
+	}
+
+	template <>
+	inline reg interleavelo2<int32_t>(const reg v1, const reg v2) {
+		// v1  = [a0, b0, c0, d0], v2 = [a1, b1, c1, d1]
+		// res = [a0, a1, c0, c1]
+		auto res_lo     = _mm_unpacklo_epi32(_mm_castps_si128(v1), _mm_castps_si128(v2));
+		auto res_hi     = _mm_unpackhi_epi32(_mm_castps_si128(v1), _mm_castps_si128(v2));
+		auto res_hi_shu = _mm_shuffle_epi32 (res_hi, _MM_SHUFFLE(1,0,3,2));
+
+#ifdef __SSE4_1__
+		return _mm_blend_ps(_mm_castsi128_ps(res_lo), _mm_castsi128_ps(res_hi_shu), _MM_SHUFFLE(0,0,3,0));
+#else
+		uint32_t mask[4] = {0xFFFFFFFF, 0xFFFFFFFF, 0, 0};
+		return blend<float>(_mm_castsi128_ps(res_lo),
+		                    _mm_castsi128_ps(res_hi_shu),
+		                    _mm_castps_si128(set<int32_t>((int32_t*)mask)));
+#endif
+	}
+
+	template <>
+	inline reg interleavelo2<int16_t>(const reg v1, const reg v2) {
+		// v1  = [a0, b0, c0, d0,| e0, f0, g0, h0], v2 = [a1, b1, c1, d1,| e1, f1, g1, h1]
+		// res = [a0, a1, b0, b1,| e0, e1, f0, f1]
+
+		// res_lo = [a0, a1, b0, b1,| c0, c1, d0, d1]
+		// res_hi = [e0, e1, f0, f1,| g0, g1, h0, h1]
+		auto res_lo     = _mm_unpacklo_epi16(_mm_castps_si128(v1), _mm_castps_si128(v2));
+		auto res_hi     = _mm_unpackhi_epi16(_mm_castps_si128(v1), _mm_castps_si128(v2));
+		auto res_hi_shu = _mm_shuffle_epi32 (res_hi, _MM_SHUFFLE(1,0,3,2));
+
+#ifdef __SSE4_1__
+		return _mm_blend_ps(_mm_castsi128_ps(res_lo), _mm_castsi128_ps(res_hi_shu), _MM_SHUFFLE(0,0,3,0));
+#else
+		uint32_t mask[4] = {0xFFFFFFFF, 0xFFFFFFFF, 0, 0};
+		return blend<float>(_mm_castsi128_ps(res_lo),
+		                    _mm_castsi128_ps(res_hi_shu),
+		                    _mm_castps_si128(set<int32_t>((int32_t*)mask)));
+#endif
+	}
+
+	template <>
+	inline reg interleavelo2<int8_t>(const reg v1, const reg v2) {
+		auto res_lo     = _mm_unpacklo_epi8(_mm_castps_si128(v1), _mm_castps_si128(v2));
+		auto res_hi     = _mm_unpackhi_epi8(_mm_castps_si128(v1), _mm_castps_si128(v2));
+		auto res_hi_shu = _mm_shuffle_epi32(res_hi, _MM_SHUFFLE(1,0,3,2));
+
+#ifdef __SSE4_1__
+		return _mm_blend_ps(_mm_castsi128_ps(res_lo), _mm_castsi128_ps(res_hi_shu), _MM_SHUFFLE(0,0,3,0));
+#else
+		uint32_t mask[4] = {0xFFFFFFFF, 0xFFFFFFFF, 0, 0};
+		return blend<float>(_mm_castsi128_ps(res_lo),
+		                    _mm_castsi128_ps(res_hi_shu),
+		                    _mm_castps_si128(set<int32_t>((int32_t*)mask)));
+#endif
+	}
+#endif
+
+	// -------------------------------------------------------------------------------------------------- interleavehi2
+#ifdef __SSE2__
+	template <>
+	inline reg interleavehi2<float>(const reg v1, const reg v2) {
+		// v1  = [a0, b0, c0, d0], v2 = [a1, b1, c1, d1]
+		// res = [b0, b1, d0, d1]
+		auto res_lo     = _mm_unpacklo_epi32(_mm_castps_si128(v1), _mm_castps_si128(v2));
+		auto res_hi     = _mm_unpackhi_epi32(_mm_castps_si128(v1), _mm_castps_si128(v2));
+		auto res_lo_shu = _mm_shuffle_epi32 (res_lo, _MM_SHUFFLE(1,0,3,2));
+
+#ifdef __SSE4_1__
+		return _mm_blend_ps(_mm_castsi128_ps(res_lo_shu), _mm_castsi128_ps(res_hi), _MM_SHUFFLE(0,0,3,0));
+#else
+		uint32_t mask[4] = {0xFFFFFFFF, 0xFFFFFFFF, 0, 0};
+		return blend<float>(_mm_castsi128_ps(res_lo_shu),
+		                    _mm_castsi128_ps(res_hi),
+		                    _mm_castps_si128(set<int32_t>((int32_t*)mask)));
+#endif
+	}
+
+	template <>
+	inline reg interleavehi2<int32_t>(const reg v1, const reg v2) {
+		// v1  = [a0, b0, c0, d0], v2 = [a1, b1, c1, d1]
+		// res = [c0, c1, d0, d1]
+		auto res_lo     = _mm_unpacklo_epi32(_mm_castps_si128(v1), _mm_castps_si128(v2));
+		auto res_hi     = _mm_unpackhi_epi32(_mm_castps_si128(v1), _mm_castps_si128(v2));
+		auto res_lo_shu = _mm_shuffle_epi32 (res_lo, _MM_SHUFFLE(1,0,3,2));
+
+#ifdef __SSE4_1__
+		return _mm_blend_ps(_mm_castsi128_ps(res_lo_shu), _mm_castsi128_ps(res_hi), _MM_SHUFFLE(0,0,3,0));
+#else
+		uint32_t mask[4] = {0xFFFFFFFF, 0xFFFFFFFF, 0, 0};
+		return blend<float>(_mm_castsi128_ps(res_lo_shu),
+		                    _mm_castsi128_ps(res_hi),
+		                    _mm_castps_si128(set<int32_t>((int32_t*)mask)));
+#endif
+	}
+
+	template <>
+	inline reg interleavehi2<int16_t>(const reg v1, const reg v2) {
+		// v1  = [a0, b0, c0, d0,| e0, f0, g0, h0], v2 = [a1, b1, c1, d1,| e1, f1, g1, h1]
+		// res = [a0, a1, b0, b1,| e0, e1, f0, f1]
+
+		// res_lo = [a0, a1, b0, b1,| c0, c1, d0, d1]
+		// res_hi = [e0, e1, f0, f1,| g0, g1, h0, h1]
+		auto res_lo     = _mm_unpacklo_epi16(_mm_castps_si128(v1), _mm_castps_si128(v2));
+		auto res_hi     = _mm_unpackhi_epi16(_mm_castps_si128(v1), _mm_castps_si128(v2));
+		auto res_lo_shu = _mm_shuffle_epi32 (res_lo, _MM_SHUFFLE(1,0,3,2));
+
+#ifdef __SSE4_1__
+		return _mm_blend_ps(_mm_castsi128_ps(res_lo_shu), _mm_castsi128_ps(res_hi), _MM_SHUFFLE(0,0,3,0));
+#else
+		uint32_t mask[4] = {0xFFFFFFFF, 0xFFFFFFFF, 0, 0};
+		return blend<float>(_mm_castsi128_ps(res_lo_shu),
+		                    _mm_castsi128_ps(res_hi),
+		                    _mm_castps_si128(set<int32_t>((int32_t*)mask)));
+#endif
+	}
+
+	template <>
+	inline reg interleavehi2<int8_t>(const reg v1, const reg v2) {
+		auto res_lo     = _mm_unpacklo_epi8(_mm_castps_si128(v1), _mm_castps_si128(v2));
+		auto res_hi     = _mm_unpackhi_epi8(_mm_castps_si128(v1), _mm_castps_si128(v2));
+		auto res_lo_shu = _mm_shuffle_epi32(res_lo, _MM_SHUFFLE(1,0,3,2));
+
+#ifdef __SSE4_1__
+		return _mm_blend_ps(_mm_castsi128_ps(res_lo_shu), _mm_castsi128_ps(res_hi), _MM_SHUFFLE(0,0,3,0));
+#else
+		uint32_t mask[4] = {0xFFFFFFFF, 0xFFFFFFFF, 0, 0};
+		return blend<float>(_mm_castsi128_ps(res_lo_shu),
+		                    _mm_castsi128_ps(res_hi),
+		                    _mm_castps_si128(set<int32_t>((int32_t*)mask)));
+#endif
+	}
+#endif
+
+	// ----------------------------------------------------------------------------------------------------- interleave
+#ifdef __SSE2__
+	template <>
+	inline regx2 interleave<double>(const reg v1, const reg v2) {
+		return {{_mm_castsi128_ps(_mm_unpacklo_epi64(_mm_castps_si128(v1), _mm_castps_si128(v2))),
+		         _mm_castsi128_ps(_mm_unpackhi_epi64(_mm_castps_si128(v1), _mm_castps_si128(v2)))}};
+	}
+
+	template <>
+	inline regx2 interleave<int64_t>(const reg v1, const reg v2) {
+		return {{_mm_castsi128_ps(_mm_unpacklo_epi64(_mm_castps_si128(v1), _mm_castps_si128(v2))),
+		         _mm_castsi128_ps(_mm_unpackhi_epi64(_mm_castps_si128(v1), _mm_castps_si128(v2)))}};
+	}
+
+	template <>
+	inline regx2 interleave<float>(const reg v1, const reg v2) {
+		// v1         = [a0, b0, c0, d0], v2         = [a1, b1, c1, d1]
+		// res.val[0] = [a0, a1, b0, b1], res.val[1] = [c0, c1, d0, d1]
+		return {{_mm_castsi128_ps(_mm_unpacklo_epi32(_mm_castps_si128(v1), _mm_castps_si128(v2))),
+		         _mm_castsi128_ps(_mm_unpackhi_epi32(_mm_castps_si128(v1), _mm_castps_si128(v2)))}};
+	}
+
+	template <>
+	inline regx2 interleave<int32_t>(const reg v1, const reg v2) {
+		// v1         = [a0, b0, c0, d0], v2         = [a1, b1, c1, d1]
+		// res.val[0] = [a0, a1, b0, b1], res.val[1] = [c0, c1, d0, d1]
+		return {{_mm_castsi128_ps(_mm_unpacklo_epi32(_mm_castps_si128(v1), _mm_castps_si128(v2))),
+		         _mm_castsi128_ps(_mm_unpackhi_epi32(_mm_castps_si128(v1), _mm_castps_si128(v2)))}};
+	}
+
+	template <>
+	inline regx2 interleave<int16_t>(const reg v1, const reg v2) {
+		return {{_mm_castsi128_ps(_mm_unpacklo_epi16(_mm_castps_si128(v1), _mm_castps_si128(v2))),
+		         _mm_castsi128_ps(_mm_unpackhi_epi16(_mm_castps_si128(v1), _mm_castps_si128(v2)))}};
+	}
+
+	template <>
+	inline regx2 interleave<int8_t>(const reg v1, const reg v2) {
+		return {{_mm_castsi128_ps(_mm_unpacklo_epi8(_mm_castps_si128(v1), _mm_castps_si128(v2))),
+		         _mm_castsi128_ps(_mm_unpackhi_epi8(_mm_castps_si128(v1), _mm_castps_si128(v2)))}};
+	}
+#endif
+
+	// ----------------------------------------------------------------------------------------------------- interleave
+#ifdef __SSE2__
+	template <>
+	inline reg interleave<double>(const reg v) {
+		auto v_rev = _mm_shuffle_epi32(_mm_castps_si128(v), _MM_SHUFFLE(1,0,3,2));
+		auto res = _mm_castsi128_ps(_mm_unpacklo_epi64(_mm_castps_si128(v), v_rev));
+		return res;
+	}
+
+	template <>
+	inline reg interleave<int64_t>(const reg v) {
+		auto v_rev = _mm_shuffle_epi32(_mm_castps_si128(v), _MM_SHUFFLE(1,0,3,2));
+		auto res = _mm_castsi128_ps(_mm_unpacklo_epi64(_mm_castps_si128(v), v_rev));
+		return res;
+	}
+
+	template <>
+	inline reg interleave<float>(const reg v) {
+		auto v_rev = _mm_shuffle_epi32(_mm_castps_si128(v), _MM_SHUFFLE(1,0,3,2));
+		auto res = _mm_castsi128_ps(_mm_unpacklo_epi32(_mm_castps_si128(v), v_rev));
+		return res;
+	}
+
+	template <>
+	inline reg interleave<int32_t>(const reg v) {
+		auto v_rev = _mm_shuffle_epi32(_mm_castps_si128(v), _MM_SHUFFLE(1,0,3,2));
+		auto res = _mm_castsi128_ps(_mm_unpacklo_epi32(_mm_castps_si128(v), v_rev));
+		return res;
+	}
+
+	template <>
+	inline reg interleave<int16_t>(const reg v) {
+		auto v_rev = _mm_shuffle_epi32(_mm_castps_si128(v), _MM_SHUFFLE(1,0,3,2));
+		auto res = _mm_castsi128_ps(_mm_unpacklo_epi16(_mm_castps_si128(v), v_rev));
+		return res;
+	}
+
+	template <>
+	inline reg interleave<int8_t>(const reg v) {
+		auto v_rev = _mm_shuffle_epi32(_mm_castps_si128(v), _MM_SHUFFLE(1,0,3,2));
+		auto res   = _mm_castsi128_ps(_mm_unpacklo_epi8(_mm_castps_si128(v), v_rev));
+		return res;
+	}
+#endif
+
+	// ---------------------------------------------------------------------------------------------------- interleave2
+#ifdef __SSE2__
+	template <>
+	inline regx2 interleave2<float>(const reg v1, const reg v2) {
+		auto res_lo = _mm_unpacklo_epi32(_mm_castps_si128(v1), _mm_castps_si128(v2));
+		auto res_hi = _mm_unpackhi_epi32(_mm_castps_si128(v1), _mm_castps_si128(v2));
+
+		auto res_lo_shu = _mm_shuffle_epi32(res_lo, _MM_SHUFFLE(1,0,3,2));
+		auto res_hi_shu = _mm_shuffle_epi32(res_hi, _MM_SHUFFLE(1,0,3,2));
+
+#ifdef __SSE4_1__
+		regx2 res = {{_mm_blend_ps(_mm_castsi128_ps(res_lo),     _mm_castsi128_ps(res_hi_shu), _MM_SHUFFLE(0,0,3,0)),
+		              _mm_blend_ps(_mm_castsi128_ps(res_lo_shu), _mm_castsi128_ps(res_hi),     _MM_SHUFFLE(0,0,3,0))}};
+#else
+		uint32_t mask[4] = {0xFFFFFFFF, 0xFFFFFFFF, 0, 0};
+		auto r1 = blend<float>(_mm_castsi128_ps(res_lo),
+		                       _mm_castsi128_ps(res_hi_shu),
+		                       _mm_castps_si128(set<int32_t>((int32_t*)mask)));
+
+		auto r2 = blend<float>(_mm_castsi128_ps(res_lo_shu),
+		                       _mm_castsi128_ps(res_hi),
+		                       _mm_castps_si128(set<int32_t>((int32_t*)mask)));
+
+		regx2 res = {{r1, r2}};
+#endif
+
+		return res;
+	}
+
+	template <>
+	inline regx2 interleave2<int32_t>(const reg v1, const reg v2) {
+		auto res_lo = _mm_unpacklo_epi32(_mm_castps_si128(v1), _mm_castps_si128(v2));
+		auto res_hi = _mm_unpackhi_epi32(_mm_castps_si128(v1), _mm_castps_si128(v2));
+
+		auto res_lo_shu = _mm_shuffle_epi32(res_lo, _MM_SHUFFLE(1,0,3,2));
+		auto res_hi_shu = _mm_shuffle_epi32(res_hi, _MM_SHUFFLE(1,0,3,2));
+
+#ifdef __SSE4_1__
+		regx2 res = {{_mm_blend_ps(_mm_castsi128_ps(res_lo),     _mm_castsi128_ps(res_hi_shu), _MM_SHUFFLE(0,0,3,0)),
+		              _mm_blend_ps(_mm_castsi128_ps(res_lo_shu), _mm_castsi128_ps(res_hi),     _MM_SHUFFLE(0,0,3,0))}};
+#else
+		uint32_t mask[4] = {0xFFFFFFFF, 0xFFFFFFFF, 0, 0};
+		auto r1 = blend<float>(_mm_castsi128_ps(res_lo),
+		                       _mm_castsi128_ps(res_hi_shu),
+		                       _mm_castps_si128(set<int32_t>((int32_t*)mask)));
+
+		auto r2 = blend<float>(_mm_castsi128_ps(res_lo_shu),
+		                       _mm_castsi128_ps(res_hi),
+		                       _mm_castps_si128(set<int32_t>((int32_t*)mask)));
+
+		regx2 res = {{r1, r2}};
+#endif
+
+		return res;
+	}
+
+	template <>
+	inline regx2 interleave2<int16_t>(const reg v1, const reg v2) {
+		auto res_lo = _mm_unpacklo_epi16(_mm_castps_si128(v1), _mm_castps_si128(v2));
+		auto res_hi = _mm_unpackhi_epi16(_mm_castps_si128(v1), _mm_castps_si128(v2));
+
+		auto res_lo_shu = _mm_shuffle_epi32(res_lo, _MM_SHUFFLE(1,0,3,2));
+		auto res_hi_shu = _mm_shuffle_epi32(res_hi, _MM_SHUFFLE(1,0,3,2));
+
+#ifdef __SSE4_1__
+		regx2 res = {{_mm_blend_ps(_mm_castsi128_ps(res_lo),     _mm_castsi128_ps(res_hi_shu), _MM_SHUFFLE(0,0,3,0)),
+		              _mm_blend_ps(_mm_castsi128_ps(res_lo_shu), _mm_castsi128_ps(res_hi),     _MM_SHUFFLE(0,0,3,0))}};
+#else
+		uint32_t mask[4] = {0xFFFFFFFF, 0xFFFFFFFF, 0, 0};
+		auto r1 = blend<float>(_mm_castsi128_ps(res_lo),
+		                       _mm_castsi128_ps(res_hi_shu),
+		                       _mm_castps_si128(set<int32_t>((int32_t*)mask)));
+
+		auto r2 = blend<float>(_mm_castsi128_ps(res_lo_shu),
+		                       _mm_castsi128_ps(res_hi),
+		                       _mm_castps_si128(set<int32_t>((int32_t*)mask)));
+
+		regx2 res = {{r1, r2}};
+#endif
+
+		return res;
+	}
+
+	template <>
+	inline regx2 interleave2<int8_t>(const reg v1, const reg v2) {
+		auto res_lo = _mm_unpacklo_epi8(_mm_castps_si128(v1), _mm_castps_si128(v2));
+		auto res_hi = _mm_unpackhi_epi8(_mm_castps_si128(v1), _mm_castps_si128(v2));
+
+		auto res_lo_shu = _mm_shuffle_epi32(res_lo, _MM_SHUFFLE(1,0,3,2));
+		auto res_hi_shu = _mm_shuffle_epi32(res_hi, _MM_SHUFFLE(1,0,3,2));
+
+#ifdef __SSE4_1__
+		regx2 res = {{_mm_blend_ps(_mm_castsi128_ps(res_lo),     _mm_castsi128_ps(res_hi_shu), _MM_SHUFFLE(0,0,3,0)),
+		              _mm_blend_ps(_mm_castsi128_ps(res_lo_shu), _mm_castsi128_ps(res_hi),     _MM_SHUFFLE(0,0,3,0))}};
+#else
+		uint32_t mask[4] = {0xFFFFFFFF, 0xFFFFFFFF, 0, 0};
+		auto r1 = blend<float>(_mm_castsi128_ps(res_lo),
+		                       _mm_castsi128_ps(res_hi_shu),
+		                       _mm_castps_si128(set<int32_t>((int32_t*)mask)));
+
+		auto r2 = blend<float>(_mm_castsi128_ps(res_lo_shu),
+		                       _mm_castsi128_ps(res_hi),
+		                       _mm_castps_si128(set<int32_t>((int32_t*)mask)));
+
+		regx2 res = {{r1, r2}};
+#endif
+
+		return res;
+	}
+#endif
+
+	// --------------------------------------------------------------------------------------------------- interleavex4
+#ifdef __SSE2__
+	template <>
+	inline reg interleavex4<int8_t>(const reg v) {
+		// [a, b, c, d,| e, f, g, h,| i, j, k, l,| m, n, o, p]
+		// =>
+		// [a, b, c, d,| i, j, k, l,| e, f, g, h,| m, n, o, p]
+		return _mm_castsi128_ps(_mm_shuffle_epi32(_mm_castps_si128(v), _MM_SHUFFLE(3,1,2,0)));
+	}
+#endif
+
+	// ---------------------------------------------------------------------------------------------------------- cmpeq
+	template <>
+	inline msk cmpeq<float>(const reg v1, const reg v2) {
+		return _mm_castps_si128(_mm_cmpeq_ps(v1, v2));
+	}
+
+#ifdef __SSE2__
+	template <>
+	inline msk cmpeq<double>(const reg v1, const reg v2) {
+		return _mm_castpd_si128(_mm_cmpeq_pd(_mm_castps_pd(v1), _mm_castps_pd(v2)));
+	}
+
+#ifdef __SSE4_1__
+	template <>
+	inline msk cmpeq<int64_t>(const reg v1, const reg v2) {
+		return _mm_cmpeq_epi64(_mm_castps_si128(v1), _mm_castps_si128(v2));
+	}
+#endif
+
+	template <>
+	inline msk cmpeq<int32_t>(const reg v1, const reg v2) {
+		return _mm_cmpeq_epi32(_mm_castps_si128(v1), _mm_castps_si128(v2));
+	}
+
+	template <>
+	inline msk cmpeq<int16_t>(const reg v1, const reg v2) {
+		return _mm_cmpeq_epi16(_mm_castps_si128(v1), _mm_castps_si128(v2));
+	}
+
+	template <>
+	inline msk cmpeq<int8_t>(const reg v1, const reg v2) {
+		return _mm_cmpeq_epi8(_mm_castps_si128(v1), _mm_castps_si128(v2));
+	}
+#endif
+
+	// --------------------------------------------------------------------------------------------------------- cmpneq
+	template <>
+	inline msk cmpneq<float>(const reg v1, const reg v2) {
+		return _mm_castps_si128(_mm_cmpneq_ps(v1, v2));
+	}
+
+#ifdef __SSE2__
+	template <>
+	inline msk cmpneq<double>(const reg v1, const reg v2) {
+		return _mm_castpd_si128(_mm_cmpneq_pd(_mm_castps_pd(v1), _mm_castps_pd(v2)));
+	}
+
+	template <>
+	inline msk cmpneq<int64_t>(const reg v1, const reg v2) {
+		return notb<N<int64_t>()>(cmpeq<int64_t>(v1, v2));
+	}
+
+	template <>
+	inline msk cmpneq<int32_t>(const reg v1, const reg v2) {
+		return notb<N<int32_t>()>(cmpeq<int32_t>(v1, v2));
+	}
+
+	template <>
+	inline msk cmpneq<int16_t>(const reg v1, const reg v2) {
+		return andnb<N<int16_t>()>(cmpeq<int16_t>(v1, v2), _mm_castps_si128(set1<int16_t>(0xFFFF)));
+	}
+
+	template <>
+	inline msk cmpneq<int8_t>(const reg v1, const reg v2) {
+		return andnb<N<int8_t>()>(cmpeq<int8_t>(v1, v2), _mm_castps_si128(set1<int8_t>(0xFF)));
+	}
+#endif
+
+	// ---------------------------------------------------------------------------------------------------------- cmplt
+	template <>
+	inline msk cmplt<float>(const reg v1, const reg v2) {
+		return _mm_castps_si128(_mm_cmplt_ps(v1, v2));
+	}
+
+#ifdef __SSE2__
+	template <>
+	inline msk cmplt<double>(const reg v1, const reg v2) {
+		return _mm_castpd_si128(_mm_cmplt_pd(_mm_castps_pd(v1), _mm_castps_pd(v2)));
+	}
+
+	template <>
+	inline msk cmplt<int32_t>(const reg v1, const reg v2) {
+		return _mm_cmplt_epi32(_mm_castps_si128(v1), _mm_castps_si128(v2));
+	}
+
+	template <>
+	inline msk cmplt<int16_t>(const reg v1, const reg v2) {
+		return _mm_cmplt_epi16(_mm_castps_si128(v1), _mm_castps_si128(v2));
+	}
+
+	template <>
+	inline msk cmplt<int8_t>(const reg v1, const reg v2) {
+		return _mm_cmplt_epi8(_mm_castps_si128(v1), _mm_castps_si128(v2));
+	}
+#endif
+
+	// ---------------------------------------------------------------------------------------------------------- cmple
+	template <>
+	inline msk cmple<float>(const reg v1, const reg v2) {
+		return _mm_castps_si128(_mm_cmple_ps(v1, v2));
+	}
+
+#ifdef __SSE2__
+	template <>
+	inline msk cmple<double>(const reg v1, const reg v2) {
+		return _mm_castpd_si128(_mm_cmple_pd(_mm_castps_pd(v1), _mm_castps_pd(v2)));
+	}
+#endif
+
+	template <>
+	inline msk cmple<int64_t>(const reg v1, const reg v2) {
+		return mipp::orb<2>(mipp::cmplt<int64_t>(v1, v2), mipp::cmpeq<int64_t>(v1, v2));
+	}
+
+	template <>
+	inline msk cmple<int32_t>(const reg v1, const reg v2) {
+		return mipp::orb<4>(mipp::cmplt<int32_t>(v1, v2), mipp::cmpeq<int32_t>(v1, v2));
+	}
+
+	template <>
+	inline msk cmple<int16_t>(const reg v1, const reg v2) {
+		return mipp::orb<8>(mipp::cmplt<int16_t>(v1, v2), mipp::cmpeq<int16_t>(v1, v2));
+	}
+
+	template <>
+	inline msk cmple<int8_t>(const reg v1, const reg v2) {
+		return mipp::orb<16>(mipp::cmplt<int8_t>(v1, v2), mipp::cmpeq<int8_t>(v1, v2));
+	}
+
+	// ---------------------------------------------------------------------------------------------------------- cmpgt
+	template <>
+	inline msk cmpgt<float>(const reg v1, const reg v2) {
+		return _mm_castps_si128(_mm_cmpgt_ps(v1, v2));
+	}
+
+#ifdef __SSE2__
+	template <>
+	inline msk cmpgt<double>(const reg v1, const reg v2) {
+		return _mm_castpd_si128(_mm_cmpgt_pd(_mm_castps_pd(v1), _mm_castps_pd(v2)));
+	}
+
+	template <>
+	inline msk cmpgt<int32_t>(const reg v1, const reg v2) {
+		return _mm_cmpgt_epi32(_mm_castps_si128(v1), _mm_castps_si128(v2));
+	}
+
+	template <>
+	inline msk cmpgt<int16_t>(const reg v1, const reg v2) {
+		return _mm_cmpgt_epi16(_mm_castps_si128(v1), _mm_castps_si128(v2));
+	}
+
+	template <>
+	inline msk cmpgt<int8_t>(const reg v1, const reg v2) {
+		return _mm_cmpgt_epi8(_mm_castps_si128(v1), _mm_castps_si128(v2));
+	}
+#endif
+
+	// ---------------------------------------------------------------------------------------------------------- cmpge
+	template <>
+	inline msk cmpge<float>(const reg v1, const reg v2) {
+		return _mm_castps_si128(_mm_cmpge_ps(v1, v2));
+	}
+
+#ifdef __SSE2__
+	template <>
+	inline msk cmpge<double>(const reg v1, const reg v2) {
+		return _mm_castpd_si128(_mm_cmpge_pd(_mm_castps_pd(v1), _mm_castps_pd(v2)));
+	}
+#endif
+
+	template <>
+	inline msk cmpge<int64_t>(const reg v1, const reg v2) {
+		return mipp::orb<2>(mipp::cmpgt<int64_t>(v1, v2), mipp::cmpeq<int64_t>(v1, v2));
+	}
+
+	template <>
+	inline msk cmpge<int32_t>(const reg v1, const reg v2) {
+		return mipp::orb<4>(mipp::cmpgt<int32_t>(v1, v2), mipp::cmpeq<int32_t>(v1, v2));
+	}
+
+	template <>
+	inline msk cmpge<int16_t>(const reg v1, const reg v2) {
+		return mipp::orb<8>(mipp::cmpgt<int16_t>(v1, v2), mipp::cmpeq<int16_t>(v1, v2));
+	}
+
+	template <>
+	inline msk cmpge<int8_t>(const reg v1, const reg v2) {
+		return mipp::orb<16>(mipp::cmpgt<int8_t>(v1, v2), mipp::cmpeq<int8_t>(v1, v2));
+	}
+
+	// ------------------------------------------------------------------------------------------------------------ add
+	template <>
+	inline reg add<float>(const reg v1, const reg v2) {
+		return _mm_add_ps(v1, v2);
+	}
+
+#ifdef __SSE2__
+	template <>
+	inline reg add<double>(const reg v1, const reg v2) {
+		return _mm_castpd_ps(_mm_add_pd(_mm_castps_pd(v1), _mm_castps_pd(v2)));
+	}
+
+	template <>
+	inline reg add<int64_t>(const reg v1, const reg v2) {
+		return _mm_castsi128_ps(_mm_add_epi64(_mm_castps_si128(v1), _mm_castps_si128(v2)));
+	}
+
+	template <>
+	inline reg add<int32_t>(const reg v1, const reg v2) {
+		return _mm_castsi128_ps(_mm_add_epi32(_mm_castps_si128(v1), _mm_castps_si128(v2)));
+	}
+
+	template <>
+	inline reg add<int16_t>(const reg v1, const reg v2) {
+		return _mm_castsi128_ps(_mm_adds_epi16(_mm_castps_si128(v1), _mm_castps_si128(v2)));
+	}
+
+	template <>
+	inline reg add<int8_t>(const reg v1, const reg v2) {
+		return _mm_castsi128_ps(_mm_adds_epi8(_mm_castps_si128(v1), _mm_castps_si128(v2)));
+	}
+#endif
+
+	// ------------------------------------------------------------------------------------------------------------ sub
+	template <>
+	inline reg sub<float>(const reg v1, const reg v2) {
+		return _mm_sub_ps(v1, v2);
+	}
+
+#ifdef __SSE2__
+	template <>
+	inline reg sub<double>(const reg v1, const reg v2) {
+		return _mm_castpd_ps(_mm_sub_pd(_mm_castps_pd(v1), _mm_castps_pd(v2)));
+	}
+
+	template <>
+	inline reg sub<int64_t>(const reg v1, const reg v2) {
+		return _mm_castsi128_ps(_mm_sub_epi64(_mm_castps_si128(v1), _mm_castps_si128(v2)));
+	}
+
+	template <>
+	inline reg sub<int32_t>(const reg v1, const reg v2) {
+		return _mm_castsi128_ps(_mm_sub_epi32(_mm_castps_si128(v1), _mm_castps_si128(v2)));
+	}
+
+	template <>
+	inline reg sub<int16_t>(const reg v1, const reg v2) {
+		return _mm_castsi128_ps(_mm_subs_epi16(_mm_castps_si128(v1), _mm_castps_si128(v2)));
+	}
+
+	template <>
+	inline reg sub<int8_t>(const reg v1, const reg v2) {
+		return _mm_castsi128_ps(_mm_subs_epi8(_mm_castps_si128(v1), _mm_castps_si128(v2)));
+	}
+#endif
+
+	// ------------------------------------------------------------------------------------------------------------ mul
+	template <>
+	inline reg mul<float>(const reg v1, const reg v2) {
+		return _mm_mul_ps(v1, v2);
+	}
+
+#ifdef __SSE2__
+	template <>
+	inline reg mul<double>(const reg v1, const reg v2) {
+		return _mm_castpd_ps(_mm_mul_pd(_mm_castps_pd(v1), _mm_castps_pd(v2)));
+	}
+#endif
+
+#ifdef __SSE4_1__
+	template <>
+	inline reg mul<int32_t>(const reg v1, const reg v2) {
+		return _mm_castsi128_ps(_mm_mullo_epi32(_mm_castps_si128(v1), _mm_castps_si128(v2)));
+	}
+#endif
+
+#ifdef __SSE2__
+	template <>
+	inline reg mul<int16_t>(const reg v1, const reg v2) {
+		return _mm_castsi128_ps(_mm_mullo_epi16(_mm_castps_si128(v1), _mm_castps_si128(v2)));
+	}
+#endif
+
+	// ------------------------------------------------------------------------------------------------------------ div
+	template <>
+	inline reg div<float>(const reg v1, const reg v2) {
+		return _mm_div_ps(v1, v2);
+	}
+
+#ifdef __SSE2__
+	template <>
+	inline reg div<double>(const reg v1, const reg v2) {
+		return _mm_castpd_ps(_mm_div_pd(_mm_castps_pd(v1), _mm_castps_pd(v2)));
+	}
+#endif
+
+	// ------------------------------------------------------------------------------------------------------------ min
+	template <>
+	inline reg min<float>(const reg v1, const reg v2) {
+		return _mm_min_ps(v1, v2);
+	}
+
+#ifdef __SSE2__
+	template <>
+	inline reg min<double>(const reg v1, const reg v2) {
+		return _mm_castpd_ps(_mm_min_pd(_mm_castps_pd(v1), _mm_castps_pd(v2)));
+	}
+
+#ifdef __SSE4_1__
+	template <>
+	inline reg min<int32_t>(const reg v1, const reg v2) {
+		return _mm_castsi128_ps(_mm_min_epi32(_mm_castps_si128(v1), _mm_castps_si128(v2)));
+	}
+#endif
+
+	template <>
+	inline reg min<int16_t>(const reg v1, const reg v2) {
+		return _mm_castsi128_ps(_mm_min_epi16(_mm_castps_si128(v1), _mm_castps_si128(v2)));
+	}
+
+#ifdef __SSE4_1__
+	template <>
+	inline reg min<int8_t>(const reg v1, const reg v2) {
+		return _mm_castsi128_ps(_mm_min_epi8(_mm_castps_si128(v1), _mm_castps_si128(v2)));
+	}
+#endif
+#endif
+
+	// ------------------------------------------------------------------------------------------------------------ max
+	template <>
+	inline reg max<float>(const reg v1, const reg v2) {
+		return _mm_max_ps(v1, v2);
+	}
+
+#ifdef __SSE2__
+	template <>
+	inline reg max<double>(const reg v1, const reg v2) {
+		return _mm_castpd_ps(_mm_max_pd(_mm_castps_pd(v1), _mm_castps_pd(v2)));
+	}
+
+#ifdef __SSE4_1__
+	template <>
+	inline reg max<int32_t>(const reg v1, const reg v2) {
+		return _mm_castsi128_ps(_mm_max_epi32(_mm_castps_si128(v1), _mm_castps_si128(v2)));
+	}
+#endif
+
+	template <>
+	inline reg max<int16_t>(const reg v1, const reg v2) {
+		return _mm_castsi128_ps(_mm_max_epi16(_mm_castps_si128(v1), _mm_castps_si128(v2)));
+	}
+
+#ifdef __SSE4_1__
+	template <>
+	inline reg max<int8_t>(const reg v1, const reg v2) {
+		return _mm_castsi128_ps(_mm_max_epi8(_mm_castps_si128(v1), _mm_castps_si128(v2)));
+	}
+#endif
+#endif
+
+	// ------------------------------------------------------------------------------------------------------------ msb
+	template <>
+	inline reg msb<float>(const reg v1) {
+		// msb_mask = 10000000000000000000000000000000 // 32 bits
+		const reg msb_mask = set1<int32_t>(0x80000000);
+
+		// indices = 31 30 29 28 27 26 25 24 23 22 21 20 19 18 17 16 15 14 13 12 11 10  9  8  7  6  5  4  3  2  1  0
+		// mask    =  1  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0
+		// v1      =  ù  €  è  é  à  &  z  y  x  w  v  u  t  s  r  q  p  o  n  m  l  k  j  i  h  g  f  e  d  c  b  a
+		// res     =  ù  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0
+		return andb<float>(v1, msb_mask);
+	}
+
+	template <>
+	inline reg msb<float>(const reg v1, const reg v2) {
+		reg msb_v1_v2 = xorb<float>(v1, v2);
+		    msb_v1_v2 = msb<float>(msb_v1_v2);
+		return msb_v1_v2;
+	}
+
+	template <>
+	inline reg msb<double>(const reg v1) {
+		// msb_mask = 1000000000000000000000000000000000000000000000000000000000000000 // 64 bits
+		const reg msb_mask = set1<int64_t>(0x8000000000000000);
+
+		// indices = 63 62 61 60 59 58 57 56 55 54 53 52 51 50 49 48 47 46 45 44 43 42 41 40 39 38 37 36 35 34 33 32...
+		// mask    =  1  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0...
+		// v1      =  ù  €  è  é  à  &  z  y  x  w  v  u  t  s  r  q  p  o  n  m  l  k  j  i  h  g  f  e  d  c  b  a...
+		// res     =  ù  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0...
+		return andb<double>(v1, msb_mask);
+	}
+
+	template <>
+	inline reg msb<double>(const reg v1, const reg v2) {
+		reg msb_v1_v2 = xorb<double>(v1, v2);
+		    msb_v1_v2 = msb<double>(msb_v1_v2);
+		return msb_v1_v2;
+	}
+
+	template <>
+	inline reg msb<int32_t>(const reg v1) {
+		// msb_mask = 10000000000000000000000000000000 // 32 bits
+		const reg msb_mask = set1<int32_t>(0x80000000);
+
+		// indices = 31 30 29 28 27 26 25 24 23 22 21 20 19 18 17 16 15 14 13 12 11 10  9  8  7  6  5  4  3  2  1  0
+		// mask    =  1  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0
+		// v1      =  ù  €  è  é  à  &  z  y  x  w  v  u  t  s  r  q  p  o  n  m  l  k  j  i  h  g  f  e  d  c  b  a
+		// res     =  ù  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0
+		return andb<int32_t>(v1, msb_mask);
+	}
+
+	template <>
+	inline reg msb<int32_t>(const reg v1, const reg v2) {
+		reg msb_v1_v2 = xorb<int32_t>(v1, v2);
+		    msb_v1_v2 = msb<int32_t>(msb_v1_v2);
+		return msb_v1_v2;
+	}
+
+	template <>
+	inline reg msb<int16_t>(const reg v1) {
+#ifdef _MSC_VER
+#pragma warning( disable : 4309 )
+#endif
+		const reg msb_mask = set1<int16_t>(0x8000);
+#ifdef _MSC_VER
+#pragma warning( default : 4309 )
+#endif
+		return andb<int16_t>(v1, msb_mask);
+	}
+
+	template <>
+	inline reg msb<int16_t>(const reg v1, const reg v2) {
+		reg msb_v1_v2 = xorb<int16_t>(v1, v2);
+		    msb_v1_v2 = msb<int16_t>(msb_v1_v2);
+		return msb_v1_v2;
+	}
+
+	template <>
+	inline reg msb<int8_t>(const reg v1) {
+		// msb_mask = 10000000 // 8 bits
+#ifdef _MSC_VER
+#pragma warning( disable : 4309 )
+#endif
+		const reg msb_mask = set1<int8_t>(0x80);
+#ifdef _MSC_VER
+#pragma warning( default : 4309 )
+#endif
+
+		// indices = 7  6  5  4  3  2  1  0
+		// mask    = 1  0  0  0  0  0  0  0
+		// v1      = h  g  f  e  d  c  b  a
+		// res     = h  0  0  0  0  0  0  0
+		return andb<int8_t>(v1, msb_mask);
+	}
+
+	template <>
+	inline reg msb<int8_t>(const reg v1, const reg v2) {
+		reg msb_v1_v2 = xorb<int8_t>(v1, v2);
+		    msb_v1_v2 = msb<int8_t>(msb_v1_v2);
+		return msb_v1_v2;
+	}
+
+	// ----------------------------------------------------------------------------------------------------------- sign
+	template <>
+	inline msk sign<double>(const reg v1) {
+		return cmplt<double>(v1, set0<double>());
+	}
+
+	template <>
+	inline msk sign<float>(const reg v1) {
+		return cmplt<float>(v1, set0<float>());
+	}
+
+	template <>
+	inline msk sign<int64_t>(const reg v1) {
+		return cmplt<int64_t>(v1, set0<int64_t>());
+	}
+
+	template <>
+	inline msk sign<int32_t>(const reg v1) {
+		return cmplt<int32_t>(v1, set0<int32_t>());
+	}
+
+	template <>
+	inline msk sign<int16_t>(const reg v1) {
+		return cmplt<int16_t>(v1, set0<int16_t>());
+	}
+
+	template <>
+	inline msk sign<int8_t>(const reg v1) {
+		return cmplt<int8_t>(v1, set0<int8_t>());
+	}
+
+	// ------------------------------------------------------------------------------------------------------------ neg
+	template <>
+	inline reg neg<float>(const reg v1, const reg v2) {
+		return xorb<float>(v1, msb<float>(v2));
+	}
+
+	template <>
+	inline reg neg<float>(const reg v1, const msk v2) {
+		return neg<float>(v1, toreg<4>(v2));
+	}
+
+#ifdef __SSE2__
+	template <>
+	inline reg neg<double>(const reg v1, const reg v2) {
+		return xorb<double>(v1, msb<double>(v2));
+	}
+
+	template <>
+	inline reg neg<double>(const reg v1, const msk v2) {
+		return neg<double>(v1, toreg<2>(v2));
+	}
+#endif
+
+#ifdef __SSSE3__
+	template <>
+	inline reg neg<int32_t>(const reg v1, const reg v2) {
+		reg v2_2 = orb<int32_t>(v2, set1<int32_t>(1)); // hack to avoid -0 case
+		return _mm_castsi128_ps(_mm_sign_epi32(_mm_castps_si128(v1), _mm_castps_si128(v2_2)));
+	}
+
+	template <>
+	inline reg neg<int32_t>(const reg v1, const msk v2) {
+		return neg<int32_t>(v1, toreg<4>(v2));
+	}
+
+	template <>
+	inline reg neg<int16_t>(const reg v1, const reg v2) {
+		reg v2_2 = orb<int16_t>(v2, set1<int16_t>(1)); // hack to avoid -0 case
+		return _mm_castsi128_ps(_mm_sign_epi16(_mm_castps_si128(v1), _mm_castps_si128(v2_2)));
+	}
+
+	template <>
+	inline reg neg<int16_t>(const reg v1, const msk v2) {
+		return neg<int16_t>(v1, toreg<8>(v2));
+	}
+
+	template <>
+	inline reg neg<int8_t>(const reg v1, const reg v2) {
+		reg v2_2 = orb<int8_t>(v2, set1<int8_t>(1)); // hack to avoid -0 case
+		return _mm_castsi128_ps(_mm_sign_epi8(_mm_castps_si128(v1), _mm_castps_si128(v2_2)));
+	}
+
+	template <>
+	inline reg neg<int8_t>(const reg v1, const msk v2) {
+		return neg<int8_t>(v1, toreg<16>(v2));
+	}
+#endif
+
+	// ------------------------------------------------------------------------------------------------------------ abs
+	template <>
+	inline reg abs<float>(const reg v1) {
+		// abs_mask = 01111111111111111111111111111111 // 32 bits
+		const reg abs_mask = set1<int32_t>(0x7FFFFFFF);
+
+		// indices = 31 30 29 28 27 26 25 24 23 22 21 20 19 18 17 16 15 14 13 12 11 10  9  8  7  6  5  4  3  2  1  0
+		// mask    =  0  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1
+		// v1      =  ù  €  è  é  à  &  z  y  x  w  v  u  t  s  r  q  p  o  n  m  l  k  j  i  h  g  f  e  d  c  b  a
+		// v1      =  0  €  è  é  à  &  z  y  x  w  v  u  t  s  r  q  p  o  n  m  l  k  j  i  h  g  f  e  d  c  b  a
+		// res is the sign because the first bit is the sign bit (0 = positive, 1 = negative)
+		return andb<float>(v1, abs_mask);
+	}
+
+	template <>
+	inline reg abs<double>(const reg v1) {
+		// abs_mask = 0111111111111111111111111111111111111111111111111111111111111111 // 64 bits
+		const reg abs_mask = set1<int64_t>(0x7FFFFFFFFFFFFFFF);
+
+		// indices = 63 62 61 60 59 58 57 56 55 54 53 52 51 50 49 48 47 46 45 44 43 42 41 40 39 38 37 36 35 34 33 32...
+		// mask    =  0  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1...
+		// v1      =  ù  €  è  é  à  &  z  y  x  w  v  u  t  s  r  q  p  o  n  m  l  k  j  i  h  g  f  e  d  c  b  a...
+		// v1      =  0  €  è  é  à  &  z  y  x  w  v  u  t  s  r  q  p  o  n  m  l  k  j  i  h  g  f  e  d  c  b  a...
+		// res is the sign because the first bit is the sign bit (0 = positive, 1 = negative)
+		return andb<double>(v1, abs_mask);
+	}
+
+#ifdef __SSSE3__
+	template <>
+	inline reg abs<int32_t>(const reg v1) {
+		return _mm_castsi128_ps(_mm_abs_epi32(_mm_castps_si128(v1)));
+	}
+
+	template <>
+	inline reg abs<int16_t>(const reg v1) {
+		return _mm_castsi128_ps(_mm_abs_epi16(_mm_castps_si128(v1)));
+	}
+
+	template <>
+	inline reg abs<int8_t>(const reg v1) {
+		return _mm_castsi128_ps(_mm_abs_epi8(_mm_castps_si128(v1)));
+	}
+#endif
+
+	// ----------------------------------------------------------------------------------------------------------- sqrt
+	template <>
+	inline reg sqrt<float>(const reg v1) {
+		return _mm_sqrt_ps(v1);
+	}
+
+#ifdef __SSE2__
+	template <>
+	inline reg sqrt<double>(const reg v1) {
+		return _mm_castpd_ps(_mm_sqrt_pd(_mm_castps_pd(v1)));
+	}
+#endif
+
+	// ---------------------------------------------------------------------------------------------------------- rsqrt
+	template <>
+	inline reg rsqrt<float>(const reg v1) {
+		return _mm_rsqrt_ps(v1);
+	}
+
+	template <>
+	inline reg rsqrt<double>(const reg v1) {
+		return div<double>(set1<double>(1.0), sqrt<double>(v1));
+	}
+
+	// ------------------------------------------------------------------------------------------------------------ log
+#if defined(__INTEL_COMPILER) || defined(__ICL) || defined(__ICC)
+	template <>
+	inline reg log<float>(const reg v) {
+		return _mm_log_ps(v);
+	}
+
+	template <>
+	inline reg log<double>(const reg v) {
+		return _mm_castpd_ps(_mm_log_pd(_mm_castps_pd(v)));
+	}
+#else
+	template <>
+	inline reg log<float>(const reg v) {
+		auto v_bis = v;
+		return log_ps(v_bis);
+	}
+#endif
+
+	// ------------------------------------------------------------------------------------------------------------ exp
+#if defined(__INTEL_COMPILER) || defined(__ICL) || defined(__ICC)
+	template <>
+	inline reg exp<float>(const reg v) {
+		return _mm_exp_ps(v);
+	}
+
+	template <>
+	inline reg exp<double>(const reg v) {
+		return _mm_castpd_ps(_mm_exp_pd(_mm_castps_pd(v)));
+	}
+#else
+	template <>
+	inline reg exp<float>(const reg v) {
+		auto v_bis = v;
+		return exp_ps(v_bis);
+	}
+#endif
+
+	// ------------------------------------------------------------------------------------------------------------ sin
+#if defined(__INTEL_COMPILER) || defined(__ICL) || defined(__ICC)
+	template <>
+	inline reg sin<float>(const reg v) {
+		return _mm_sin_ps(v);
+	}
+
+	template <>
+	inline reg sin<double>(const reg v) {
+		return _mm_castpd_ps(_mm_sin_pd(_mm_castps_pd(v)));
+	}
+#else
+	template <>
+	inline reg sin<float>(const reg v) {
+		auto v_bis = v;
+		return sin_ps(v_bis);
+	}
+#endif
+
+	// ------------------------------------------------------------------------------------------------------------ cos
+#if defined(__INTEL_COMPILER) || defined(__ICL) || defined(__ICC)
+	template <>
+	inline reg cos<float>(const reg v) {
+		return _mm_cos_ps(v);
+	}
+
+	template <>
+	inline reg cos<double>(const reg v) {
+		return _mm_castpd_ps(_mm_cos_pd(_mm_castps_pd(v)));
+	}
+#else
+	template <>
+	inline reg cos<float>(const reg v) {
+		auto v_bis = v;
+		return cos_ps(v_bis);
+	}
+#endif
+
+	// --------------------------------------------------------------------------------------------------------- sincos
+#if defined(__INTEL_COMPILER) || defined(__ICL) || defined(__ICC)
+	template <>
+	inline void sincos<float>(const reg x, reg &s, reg &c) {
+		s = _mm_sincos_ps(&c, x);
+	}
+
+	template <>
+	inline void sincos<double>(const reg x, reg &s, reg &c) {
+		s = _mm_castpd_ps(_mm_sincos_pd((__m128d*) &c, (__m128d)x));
+	}
+#else
+	template <>
+	inline void sincos<float>(const reg x, reg &s, reg &c) {
+		sincos_ps(x, &s, &c);
+	}
+#endif
+
+	// ---------------------------------------------------------------------------------------------------------- fmadd
+	template <>
+	inline reg fmadd<float>(const reg v1, const reg v2, const reg v3) {
+		return add<float>(v3, mul<float>(v1, v2));
+	}
+
+	template <>
+	inline reg fmadd<double>(const reg v1, const reg v2, const reg v3) {
+		return add<double>(v3, mul<double>(v1, v2));
+	}
+
+	// --------------------------------------------------------------------------------------------------------- fnmadd
+	template <>
+	inline reg fnmadd<float>(const reg v1, const reg v2, const reg v3) {
+		return sub<float>(v3, mul<float>(v1, v2));
+	}
+
+	template <>
+	inline reg fnmadd<double>(const reg v1, const reg v2, const reg v3) {
+		return sub<double>(v3, mul<double>(v1, v2));
+	}
+
+	// ---------------------------------------------------------------------------------------------------------- fmsub
+	template <>
+	inline reg fmsub<float>(const reg v1, const reg v2, const reg v3) {
+		return sub<float>(mul<float>(v1, v2), v3);
+	}
+
+	template <>
+	inline reg fmsub<double>(const reg v1, const reg v2, const reg v3) {
+		return sub<double>(mul<double>(v1, v2), v3);
+	}
+
+	// --------------------------------------------------------------------------------------------------------- fnmsub
+	template <>
+	inline reg fnmsub<float>(const reg v1, const reg v2, const reg v3) {
+		return sub<float>(sub<float>(set0<float>(), mul<float>(v1, v2)), v3);
+	}
+
+	template <>
+	inline reg fnmsub<double>(const reg v1, const reg v2, const reg v3) {
+		return sub<double>(sub<double>(set0<double>(), mul<double>(v1, v2)), v3);
+	}
+
+	// ----------------------------------------------------------------------------------------------------------- lrot
+#ifdef __SSE2__
+	template <>
+	inline reg lrot<double>(const reg v1) {
+		// make a rotation in:[1, 0] => out:[0, 1]
+		return _mm_castsi128_ps(_mm_shuffle_epi32(_mm_castps_si128(v1), _MM_SHUFFLE(1, 0, 3, 2)));
+	}
+
+	template <>
+	inline reg lrot<float>(const reg v1) {
+		// make a rotation in:[3, 2 , 1, 0] => out:[0, 3, 2, 1]
+		return _mm_castsi128_ps(_mm_shuffle_epi32(_mm_castps_si128(v1), _MM_SHUFFLE(0, 3, 2, 1)));
+	}
+
+	template <>
+	inline reg lrot<int64_t>(const reg v1) {
+		// make a rotation in:[1, 0] => out:[0, 1]
+		return _mm_castsi128_ps(_mm_shuffle_epi32(_mm_castps_si128(v1), _MM_SHUFFLE(1, 0, 3, 2)));
+	}
+
+	template <>
+	inline reg lrot<int32_t>(const reg v1) {
+		// make a rotation in:[3, 2 , 1, 0] => out:[0, 3, 2, 1]
+		return _mm_castsi128_ps(_mm_shuffle_epi32(_mm_castps_si128(v1), _MM_SHUFFLE(0, 3, 2, 1)));
+	}
+#endif
+
+#ifdef __SSSE3__
+	template <>
+	inline reg lrot<int16_t>(const reg v1) {
+//		// make a rotation in:[0, 1, 2, 3, 4, 5, 6, 7] => out:[7, 0, 1, 2, 3, 4, 5, 6]
+//		return _mm_castsi128_ps(_mm_shuffle_epi8(_mm_castps_si128(v1), _mm_set_epi8(13,12,11,10,9,8,7,6,5,4,3,2,1,0,15,14)));
+
+		// make a rotation in:[0, 1, 2, 3, 4, 5, 6, 7] => out:[1, 2, 3, 4, 5, 6, 7, 0]
+		return _mm_castsi128_ps(_mm_shuffle_epi8(_mm_castps_si128(v1), _mm_set_epi8(1,0,15,14,13,12,11,10,9,8,7,6,5,4,3,2)));
+	}
+
+	template <>
+	inline reg lrot<int8_t>(const reg v1) {
+		return _mm_castsi128_ps(_mm_shuffle_epi8(_mm_castps_si128(v1), _mm_set_epi8(0,15,14,13,12,11,10,9,8,7,6,5,4,3,2,1)));
+	}
+#endif
+
+	// ----------------------------------------------------------------------------------------------------------- rrot
+#ifdef __SSE2__
+	template <>
+	inline reg rrot<double>(const reg v1) {
+		// make a rotation in:[1, 0] => out:[0, 1]
+		return _mm_castsi128_ps(_mm_shuffle_epi32(_mm_castps_si128(v1), _MM_SHUFFLE(1, 0, 3, 2)));
+	}
+
+	template <>
+	inline reg rrot<float>(const reg v1) {
+		// make a rotation in:[3, 2 , 1, 0] => out:[0, 3, 2, 1]
+		return _mm_castsi128_ps(_mm_shuffle_epi32(_mm_castps_si128(v1), _MM_SHUFFLE(2, 1, 0, 3)));
+	}
+
+	template <>
+	inline reg rrot<int64_t>(const reg v1) {
+		// make a rotation in:[1, 0] => out:[0, 1]
+		return _mm_castsi128_ps(_mm_shuffle_epi32(_mm_castps_si128(v1), _MM_SHUFFLE(1, 0, 3, 2)));
+	}
+
+	template <>
+	inline reg rrot<int32_t>(const reg v1) {
+		// make a rotation in:[3, 2 , 1, 0] => out:[0, 3, 2, 1]
+		return _mm_castsi128_ps(_mm_shuffle_epi32(_mm_castps_si128(v1), _MM_SHUFFLE(2, 1, 0, 3)));
+	}
+#endif
+
+#ifdef __SSSE3__
+	template <>
+	inline reg rrot<int16_t>(const reg v1) {
+		// make a rotation in:[0, 1, 2, 3, 4, 5, 6, 7] => out:[7, 0, 1, 2, 3, 4, 5, 6]
+		return _mm_castsi128_ps(_mm_shuffle_epi8(_mm_castps_si128(v1), _mm_set_epi8(13,12,11,10,9,8,7,6,5,4,3,2,1,0,15,14)));
+	}
+
+	template <>
+	inline reg rrot<int8_t>(const reg v1) {
+		return _mm_castsi128_ps(_mm_shuffle_epi8(_mm_castps_si128(v1), _mm_set_epi8(14,13,12,11,10,9,8,7,6,5,4,3,2,1,0,15)));
+	}
+#endif
+
+	// ----------------------------------------------------------------------------------------------------------- div2
+	template <>
+	inline reg div2<float>(const reg v1) {
+		return mul<float>(v1, set1<float>(0.5f));
+	}
+
+	template <>
+	inline reg div2<double>(const reg v1) {
+		return mul<double>(v1, set1<double>(0.5));
+	}
+
+#ifdef __SSE2__
+	template <>
+	inline reg div2<int32_t>(const reg v1) {
+//		return _mm_castsi128_ps(_mm_srai_epi32(_mm_castps_si128(v1), 1)); // seems to do not work
+		reg abs_v1 = abs<int32_t>(v1);
+		reg sh = rshift<int32_t>(abs_v1, 1);
+		sh = neg<int32_t>(sh, v1);
+		return sh;
+	}
+
+	template <>
+	inline reg div2<int16_t>(const reg v1) {
+//		return _mm_castsi128_ps(_mm_srai_epi16(_mm_castps_si128(v1), 1)); // seems to do not work
+		reg abs_v1 = abs<int16_t>(v1);
+		reg sh = rshift<int16_t>(abs_v1, 1);
+		sh = neg<int16_t>(sh, v1);
+		return sh;
+	}
+
+	template <>
+	inline reg div2<int8_t>(const reg v1) {
+		reg abs_v1 = abs<int8_t>(v1);
+		reg sh16 = rshift<int16_t>(abs_v1, 1);
+#ifdef _MSC_VER
+#pragma warning( disable : 4309 )
+#endif
+		sh16 = andnb<int8_t>(set1<int8_t>(0x80), sh16);
+#ifdef _MSC_VER
+#pragma warning( default : 4309 )
+#endif
+		reg sh8 = neg<int8_t>(sh16, v1);
+		return sh8;
+	}
+#endif
+
+	// ----------------------------------------------------------------------------------------------------------- div4
+	template <>
+	inline reg div4<float>(const reg v1) {
+		return mul<float>(v1, set1<float>(0.25f));
+	}
+
+	template <>
+	inline reg div4<double>(const reg v1) {
+		return mul<double>(v1, set1<double>(0.25));
+	}
+
+#ifdef __SSE2__
+	template <>
+	inline reg div4<int32_t>(const reg v1) {
+//		return _mm_castsi128_ps(_mm_srai_epi32(_mm_castps_si128(v1), 2)); // seems to do not work
+		reg abs_v1 = abs<int32_t>(v1);
+		reg sh = rshift<int32_t>(abs_v1, 2);
+		sh = neg<int32_t>(sh, v1);
+		return sh;
+	}
+
+	template <>
+	inline reg div4<int16_t>(const reg v1) {
+//		return _mm_castsi128_ps(_mm_srai_epi16(_mm_castps_si128(v1), 2)); // seems to do not work
+		reg abs_v1 = abs<int16_t>(v1);
+		reg sh = rshift<int16_t>(abs_v1, 2);
+		sh = neg<int16_t>(sh, v1);
+		return sh;
+	}
+
+	template <>
+	inline reg div4<int8_t>(const reg v1) {
+		reg abs_v1 = abs<int8_t>(v1);
+		reg sh16 = rshift<int16_t>(abs_v1, 2);
+#ifdef _MSC_VER
+#pragma warning( disable : 4309 )
+#endif
+		sh16 = andnb<int8_t>(set1<int8_t>(0xc0), sh16);
+#ifdef _MSC_VER
+#pragma warning( default : 4309 )
+#endif
+		reg sh8 = neg<int8_t>(sh16, v1);
+		return sh8;
+	}
+#endif
+
+	// ------------------------------------------------------------------------------------------------------------ sat
+	template <>
+	inline reg sat<float>(const reg v1, float min, float max) {
+		return mipp::min<float>(mipp::max<float>(v1, set1<float>(min)), set1<float>(max));
+	}
+
+	template <>
+	inline reg sat<double>(const reg v1, double min, double max) {
+		return mipp::min<double>(mipp::max<double>(v1, set1<double>(min)), set1<double>(max));
+	}
+
+	template <>
+	inline reg sat<int32_t>(const reg v1, int32_t min, int32_t max) {
+		return mipp::min<int32_t>(mipp::max<int32_t>(v1, set1<int32_t>(min)), set1<int32_t>(max));
+	}
+
+	template <>
+	inline reg sat<int16_t>(const reg v1, int16_t min, int16_t max) {
+		return mipp::min<int16_t>(mipp::max<int16_t>(v1, set1<int16_t>(min)), set1<int16_t>(max));
+	}
+
+	template <>
+	inline reg sat<int8_t>(const reg v1, int8_t min, int8_t max) {
+		return mipp::min<int8_t>(mipp::max<int8_t>(v1, set1<int8_t>(min)), set1<int8_t>(max));
+	}
+
+	// ---------------------------------------------------------------------------------------------------------- round
+#ifdef __SSE4_1__
+	template <>
+	inline reg round<float>(const reg v) {
+		return _mm_round_ps(v, _MM_FROUND_TO_NEAREST_INT |_MM_FROUND_NO_EXC);
+	}
+
+	template <>
+	inline reg round<double>(const reg v) {
+		return _mm_castpd_ps(_mm_round_pd(_mm_castps_pd(v), _MM_FROUND_TO_NEAREST_INT |_MM_FROUND_NO_EXC));
+	}
+#endif
+
+	// ------------------------------------------------------------------------------------------------------------ cvt
+#ifdef __SSE2__
+	template <>
+	inline reg cvt<float,int32_t>(const reg v) {
+		return _mm_castsi128_ps(_mm_cvtps_epi32(v));
+	}
+
+	template <>
+	inline reg cvt<int32_t,float>(const reg v) {
+		return _mm_cvtepi32_ps(_mm_castps_si128(v));
+	}
+#endif
+
+#ifdef __SSE4_1__
+	template <>
+	inline reg cvt<int8_t,int16_t>(const reg_2 v) {
+		return _mm_castsi128_ps(_mm_cvtepi8_epi16(_mm_castpd_si128(v)));
+	}
+
+	template <>
+	inline reg cvt<int16_t,int32_t>(const reg_2 v) {
+		return _mm_castsi128_ps(_mm_cvtepi16_epi32(_mm_castpd_si128(v)));
+	}
+
+	template <>
+	inline reg cvt<int32_t,int64_t>(const reg_2 v) {
+		return _mm_castsi128_ps(_mm_cvtepi32_epi64(_mm_castpd_si128(v)));
+	}
+#endif
+
+	// ----------------------------------------------------------------------------------------------------------- pack
+#ifdef __SSE2__
+	template <>
+	inline reg pack<int32_t,int16_t>(const reg v1, const reg v2) {
+		return _mm_castsi128_ps(_mm_packs_epi32(_mm_castps_si128(v1), _mm_castps_si128(v2)));
+	}
+
+	template <>
+	inline reg pack<int16_t,int8_t>(const reg v1, const reg v2) {
+		return _mm_castsi128_ps(_mm_packs_epi16(_mm_castps_si128(v1), _mm_castps_si128(v2)));
+	}
+#endif
+
+	// ------------------------------------------------------------------------------------------------------ reduction
+	template <red_op<double> OP>
+	struct _reduction<double,OP>
+	{
+		static reg apply(const reg v1) {
+			auto val = v1;
+			val = OP(val, _mm_shuffle_ps(val, val, _MM_SHUFFLE(1, 0, 3, 2)));
+			return val;
+		}
+	};
+
+	template <Red_op<double> OP>
+	struct _Reduction<double,OP>
+	{
+		static Reg<double> apply(const Reg<double> v1) {
+			auto val = v1;
+			val = OP(val, Reg<double>(_mm_shuffle_ps(val.r, val.r, _MM_SHUFFLE(1, 0, 3, 2))));
+			return val;
+		}
+	};
+
+	template <red_op<float> OP>
+	struct _reduction<float,OP>
+	{
+		static reg apply(const reg v1) {
+			auto val = v1;
+			val = OP(val, _mm_shuffle_ps(val, val, _MM_SHUFFLE(1, 0, 3, 2)));
+			val = OP(val, _mm_shuffle_ps(val, val, _MM_SHUFFLE(2, 3, 0, 1)));
+			return val;
+		}
+	};
+
+	template <Red_op<float> OP>
+	struct _Reduction<float,OP>
+	{
+		static Reg<float> apply(const Reg<float> v1) {
+			auto val = v1;
+			val = OP(val, Reg<float>(_mm_shuffle_ps(val.r, val.r, _MM_SHUFFLE(1, 0, 3, 2))));
+			val = OP(val, Reg<float>(_mm_shuffle_ps(val.r, val.r, _MM_SHUFFLE(2, 3, 0, 1))));
+			return val;
+		}
+	};
+
+	template <red_op<int64_t> OP>
+	struct _reduction<int64_t,OP>
+	{
+		static reg apply(const reg v1) {
+			auto val = v1;
+			val = OP(val, _mm_shuffle_ps(val, val, _MM_SHUFFLE(1, 0, 3, 2)));
+			return val;
+		}
+	};
+
+	template <Red_op<int64_t> OP>
+	struct _Reduction<int64_t,OP>
+	{
+		static Reg<int64_t> apply(const Reg<int64_t> v1) {
+			auto val = v1;
+			val = OP(val, Reg<int64_t>(_mm_shuffle_ps(val.r, val.r, _MM_SHUFFLE(1, 0, 3, 2))));
+			return val;
+		}
+	};
+
+	template <red_op<int32_t> OP>
+	struct _reduction<int32_t,OP>
+	{
+		static reg apply(const reg v1) {
+			auto val = v1;
+			val = OP(val, _mm_shuffle_ps(val, val, _MM_SHUFFLE(1, 0, 3, 2)));
+			val = OP(val, _mm_shuffle_ps(val, val, _MM_SHUFFLE(2, 3, 0, 1)));
+			return val;
+		}
+	};
+
+	template <Red_op<int32_t> OP>
+	struct _Reduction<int32_t,OP>
+	{
+		static Reg<int32_t> apply(const Reg<int32_t> v1) {
+			auto val = v1;
+			val = OP(val, Reg<int32_t>(_mm_shuffle_ps(val.r, val.r, _MM_SHUFFLE(1, 0, 3, 2))));
+			val = OP(val, Reg<int32_t>(_mm_shuffle_ps(val.r, val.r, _MM_SHUFFLE(2, 3, 0, 1))));
+			return val;
+		}
+	};
+
+#ifdef __SSSE3__
+	template <red_op<int16_t> OP>
+	struct _reduction<int16_t,OP>
+	{
+		static reg apply(const reg v1) {
+			__m128i mask_16 = _mm_set_epi8(13, 12, 15, 14, 9, 8, 11, 10, 5, 4, 7, 6, 1, 0, 3, 2);
+
+			auto val = v1;
+			val = OP(val, _mm_castsi128_ps(_mm_shuffle_epi32(_mm_castps_si128(val), _MM_SHUFFLE(1, 0, 3, 2))));
+			val = OP(val, _mm_castsi128_ps(_mm_shuffle_epi32(_mm_castps_si128(val), _MM_SHUFFLE(2, 3, 0, 1))));
+			val = OP(val, _mm_castsi128_ps(_mm_shuffle_epi8 (_mm_castps_si128(val), mask_16)));
+			return val;
+		}
+	};
+
+	template <Red_op<int16_t> OP>
+	struct _Reduction<int16_t,OP>
+	{
+		static Reg<int16_t> apply(const Reg<int16_t> v1) {
+			__m128i mask_16 = _mm_set_epi8(13, 12, 15, 14, 9, 8, 11, 10, 5, 4, 7, 6, 1, 0, 3, 2);
+
+			auto val = v1;
+			val = OP(val, Reg<int16_t>(_mm_castsi128_ps(_mm_shuffle_epi32(_mm_castps_si128(val.r), _MM_SHUFFLE(1, 0, 3, 2)))));
+			val = OP(val, Reg<int16_t>(_mm_castsi128_ps(_mm_shuffle_epi32(_mm_castps_si128(val.r), _MM_SHUFFLE(2, 3, 0, 1)))));
+			val = OP(val, Reg<int16_t>(_mm_castsi128_ps(_mm_shuffle_epi8 (_mm_castps_si128(val.r), mask_16))));
+			return val;
+		}
+	};
+#endif
+
+#ifdef __SSSE3__
+	template <red_op<int8_t> OP>
+	struct _reduction<int8_t,OP>
+	{
+		static reg apply(const reg v1) {
+			__m128i mask_16 = _mm_set_epi8(13, 12, 15, 14, 9, 8, 11, 10, 5, 4, 7, 6, 1, 0, 3, 2);
+			__m128i mask_8  = _mm_set_epi8(14, 15, 12, 13, 10, 11, 8, 9, 6, 7, 4, 5, 2, 3, 0, 1);
+
+			auto val = v1;
+			val = OP(val, _mm_castsi128_ps(_mm_shuffle_epi32(_mm_castps_si128(val), _MM_SHUFFLE(1, 0, 3, 2))));
+			val = OP(val, _mm_castsi128_ps(_mm_shuffle_epi32(_mm_castps_si128(val), _MM_SHUFFLE(2, 3, 0, 1))));
+			val = OP(val, _mm_castsi128_ps(_mm_shuffle_epi8 (_mm_castps_si128(val), mask_16)));
+			val = OP(val, _mm_castsi128_ps(_mm_shuffle_epi8 (_mm_castps_si128(val), mask_8)));
+			return val;
+		}
+	};
+
+	template <Red_op<int8_t> OP>
+	struct _Reduction<int8_t,OP>
+	{
+		static Reg<int8_t> apply(const Reg<int8_t> v1) {
+			__m128i mask_16 = _mm_set_epi8(13, 12, 15, 14, 9, 8, 11, 10, 5, 4, 7, 6, 1, 0, 3, 2);
+			__m128i mask_8  = _mm_set_epi8(14, 15, 12, 13, 10, 11, 8, 9, 6, 7, 4, 5, 2, 3, 0, 1);
+
+			auto val = v1;
+			val = OP(val, Reg<int8_t>(_mm_castsi128_ps(_mm_shuffle_epi32(_mm_castps_si128(val.r), _MM_SHUFFLE(1, 0, 3, 2)))));
+			val = OP(val, Reg<int8_t>(_mm_castsi128_ps(_mm_shuffle_epi32(_mm_castps_si128(val.r), _MM_SHUFFLE(2, 3, 0, 1)))));
+			val = OP(val, Reg<int8_t>(_mm_castsi128_ps(_mm_shuffle_epi8 (_mm_castps_si128(val.r), mask_16))));
+			val = OP(val, Reg<int8_t>(_mm_castsi128_ps(_mm_shuffle_epi8 (_mm_castps_si128(val.r), mask_8))));
+			return val;
+		}
+	};
+#endif
+
+	// ---------------------------------------------------------------------------------------------------------- testz
+#ifdef __SSE4_1__
+	template <>
+	inline bool testz<int64_t>(const reg v1, const reg v2) {
+		return _mm_testz_si128(_mm_castps_si128(v1), _mm_castps_si128(v2));
+	}
+
+	template <>
+	inline bool testz<int32_t>(const reg v1, const reg v2) {
+		return _mm_testz_si128(_mm_castps_si128(v1), _mm_castps_si128(v2));
+	}
+
+	template <>
+	inline bool testz<int16_t>(const reg v1, const reg v2) {
+		return _mm_testz_si128(_mm_castps_si128(v1), _mm_castps_si128(v2));
+	}
+
+	template <>
+	inline bool testz<int8_t>(const reg v1, const reg v2) {
+		return _mm_testz_si128(_mm_castps_si128(v1), _mm_castps_si128(v2));
+	}
+
+	template <>
+	inline bool testz<int64_t>(const reg v1) {
+		return testz<int64_t>(v1, mipp::set1<int64_t>(-1));
+	}
+
+	template <>
+	inline bool testz<int32_t>(const reg v1) {
+		return testz<int32_t>(v1, mipp::set1<int32_t>(-1));
+	}
+
+	template <>
+	inline bool testz<int16_t>(const reg v1) {
+		return testz<int16_t>(v1, mipp::set1<int16_t>(-1));
+	}
+
+	template <>
+	inline bool testz<int8_t>(const reg v1) {
+		return testz<int8_t>(v1, mipp::set1<int8_t>(-1));
+	}
+#else
+	template <>
+	inline bool testz<int64_t>(const reg v1, const reg v2) {
+		auto andvec = mipp::andb<int64_t>(v1, v2);
+		return mipp::reduction<int64_t, mipp::orb<int64_t>>::sapply(andvec) == 0;
+	}
+
+	template <>
+	inline bool testz<int32_t>(const reg v1, const reg v2) {
+		auto andvec = mipp::andb<int32_t>(v1, v2);
+		return mipp::reduction<int32_t, mipp::orb<int32_t>>::sapply(andvec) == 0;
+	}
+
+	template <>
+	inline bool testz<int16_t>(const reg v1, const reg v2) {
+		auto andvec = mipp::andb<int16_t>(v1, v2);
+		return mipp::reduction<int16_t, mipp::orb<int16_t>>::sapply(andvec) == 0;
+	}
+
+	template <>
+	inline bool testz<int8_t>(const reg v1, const reg v2) {
+		auto andvec = mipp::andb<int8_t>(v1, v2);
+		return mipp::reduction<int8_t, mipp::orb<int8_t>>::sapply(andvec) == 0;
+	}
+
+	template <>
+	inline bool testz<int64_t>(const reg v1) {
+		return mipp::reduction<int64_t, mipp::orb<int64_t>>::sapply(v1) == 0;
+	}
+
+	template <>
+	inline bool testz<int32_t>(const reg v1) {
+		return mipp::reduction<int32_t, mipp::orb<int32_t>>::sapply(v1) == 0;
+	}
+
+	template <>
+	inline bool testz<int16_t>(const reg v1) {
+		return mipp::reduction<int16_t, mipp::orb<int16_t>>::sapply(v1) == 0;
+	}
+
+	template <>
+	inline bool testz<int8_t>(const reg v1) {
+		return mipp::reduction<int8_t, mipp::orb<int8_t>>::sapply(v1) == 0;
+	}
+#endif
+
+	// --------------------------------------------------------------------------------------------------- testz (mask)
+#ifdef __SSE4_1__
+	template <>
+	inline bool testz<2>(const msk v1, const msk v2) {
+		return _mm_testz_si128(v1, v2);
+	}
+
+	template <>
+	inline bool testz<4>(const msk v1, const msk v2) {
+		return _mm_testz_si128(v1, v2);
+	}
+
+	template <>
+	inline bool testz<8>(const msk v1, const msk v2) {
+		return _mm_testz_si128(v1, v2);
+	}
+
+	template <>
+	inline bool testz<16>(const msk v1, const msk v2) {
+		return _mm_testz_si128(v1, v2);
+	}
+
+	template <>
+	inline bool testz<2>(const msk v1) {
+		return testz<2>(v1, _mm_castps_si128(mipp::set1<int64_t>(-1)));
+	}
+
+	template <>
+	inline bool testz<4>(const msk v1) {
+		return testz<4>(v1, _mm_castps_si128(mipp::set1<int32_t>(-1)));
+	}
+
+	template <>
+	inline bool testz<8>(const msk v1) {
+		return testz<8>(v1, _mm_castps_si128(mipp::set1<int16_t>(-1)));
+	}
+
+	template <>
+	inline bool testz<16>(const msk v1) {
+		return testz<16>(v1, _mm_castps_si128(mipp::set1<int8_t>(-1)));
+	}
+#else
+	template <>
+	inline bool testz<2>(const msk v1, const msk v2) {
+		auto andvec = mipp::andb<2>(v1, v2);
+		return mipp::reduction<int64_t, mipp::orb<int64_t>>::sapply(mipp::toreg<2>(andvec)) == 0;
+	}
+
+	template <>
+	inline bool testz<4>(const msk v1, const msk v2) {
+		auto andvec = mipp::andb<4>(v1, v2);
+		return mipp::reduction<int32_t, mipp::orb<int32_t>>::sapply(mipp::toreg<4>(andvec)) == 0;
+	}
+
+	template <>
+	inline bool testz<8>(const msk v1, const msk v2) {
+		auto andvec = mipp::andb<8>(v1, v2);
+		return mipp::reduction<int16_t, mipp::orb<int16_t>>::sapply(mipp::toreg<8>(andvec)) == 0;
+	}
+
+	template <>
+	inline bool testz<16>(const msk v1, const msk v2) {
+		auto andvec = mipp::andb<16>(v1, v2);
+		return mipp::reduction<int8_t, mipp::orb<int8_t>>::sapply(mipp::toreg<16>(andvec)) == 0;
+	}
+
+	template <>
+	inline bool testz<2>(const msk v1) {
+		return mipp::reduction<int64_t, mipp::orb<int64_t>>::sapply(mipp::toreg<2>(v1)) == 0;
+	}
+
+	template <>
+	inline bool testz<4>(const msk v1) {
+		return mipp::reduction<int32_t, mipp::orb<int32_t>>::sapply(mipp::toreg<4>(v1)) == 0;
+	}
+
+	template <>
+	inline bool testz<8>(const msk v1) {
+		return mipp::reduction<int16_t, mipp::orb<int16_t>>::sapply(mipp::toreg<8>(v1)) == 0;
+	}
+
+	template <>
+	inline bool testz<16>(const msk v1) {
+		return mipp::reduction<int8_t, mipp::orb<int8_t>>::sapply(mipp::toreg<16>(v1)) == 0;
+	}
+#endif
+
+	// ------------------------------------------------------------------------------------------------------ transpose
+	template <>
+	inline void transpose<int16_t>(reg tab[nElReg<int16_t>()]) {
+		// Transpose the 2x 8x8 matrix:
+		// -------------------------
+		// tab[0] = [a0, a1, a2, a3, a4, a5, a6, a7]        tab[0] = [a0, b0, c0, d0, e0, f0, g0, h0]
+		// tab[1] = [b0, b1, b2, b3, b4, b5, b6, b7]        tab[1] = [a1, b1, c1, d1, e1, f1, g1, h1]
+		// tab[2] = [c0, c1, c2, c3, c4, c5, c6, c7]        tab[2] = [a2, b2, c2, d2, e2, f2, g2, h2]
+		// tab[3] = [d0, d1, d2, d3, d4, d5, d6, d7]        tab[3] = [a3, b3, c3, d3, e3, f3, g3, h3]
+		// tab[4] = [e0, e1, e2, e3, e4, e5, e6, e7]   =>   tab[4] = [a4, b4, c4, d4, e4, f4, g4, h4]
+		// tab[5] = [f0, f1, f2, f3, f4, f5, f6, f7]        tab[5] = [a5, b5, c5, d5, e5, f5, g5, h5]
+		// tab[6] = [g0, g1, g2, g3, g4, g5, g6, g7]        tab[6] = [a6, b6, c6, d6, e6, f6, g6, h6]
+		// tab[7] = [h0, h1, h2, h3, h4, h5, h6, h7]        tab[7] = [a7, b7, c7, d7, e7, f7, g7, h7]
+
+		// auto a03b03 = mipp::interleavelo<int16_t>(tab[0], tab[1]);
+		// auto c03d03 = mipp::interleavelo<int16_t>(tab[2], tab[3]);
+		// auto e03f03 = mipp::interleavelo<int16_t>(tab[4], tab[5]);
+		// auto g03h03 = mipp::interleavelo<int16_t>(tab[6], tab[7]);
+		// auto a47b47 = mipp::interleavehi<int16_t>(tab[0], tab[1]);
+		// auto c47d47 = mipp::interleavehi<int16_t>(tab[2], tab[3]);
+		// auto e47f47 = mipp::interleavehi<int16_t>(tab[4], tab[5]);
+		// auto g47h47 = mipp::interleavehi<int16_t>(tab[6], tab[7]);
+
+		// auto a01b01c01d01 = mipp::interleavelo<int32_t>(a03b03, c03d03);
+		// auto a23b23c23d23 = mipp::interleavehi<int32_t>(a03b03, c03d03);
+		// auto e01f01g01h01 = mipp::interleavelo<int32_t>(e03f03, g03h03);
+		// auto e23f23g23h23 = mipp::interleavehi<int32_t>(e03f03, g03h03);
+		// auto a45b45c45d45 = mipp::interleavelo<int32_t>(a47b47, c47d47);
+		// auto a67b67c67d67 = mipp::interleavehi<int32_t>(a47b47, c47d47);
+		// auto e45f45g45h45 = mipp::interleavelo<int32_t>(e47f47, g47h47);
+		// auto e67f67g67h67 = mipp::interleavehi<int32_t>(e47f47, g47h47);
+
+		// auto a0b0c0d0e0f0g0h0 = mipp::interleavelo<int64_t>(a01b01c01d01, e01f01g01h01);
+		// auto a1b1c1d1e1f1g1h1 = mipp::interleavehi<int64_t>(a01b01c01d01, e01f01g01h01);
+		// auto a2b2c2d2e2f2g2h2 = mipp::interleavelo<int64_t>(a23b23c23d23, e23f23g23h23);
+		// auto a3b3c3d3e3f3g3h3 = mipp::interleavehi<int64_t>(a23b23c23d23, e23f23g23h23);
+		// auto a4b4c4d4e4f4g4h4 = mipp::interleavelo<int64_t>(a45b45c45d45, e45f45g45h45);
+		// auto a5b5c5d5e5f5g5h5 = mipp::interleavehi<int64_t>(a45b45c45d45, e45f45g45h45);
+		// auto a6b6c6d6e6f6g6h6 = mipp::interleavelo<int64_t>(a67b67c67d67, e67f67g67h67);
+		// auto a7b7c7d7e7f7g7h7 = mipp::interleavehi<int64_t>(a67b67c67d67, e67f67g67h67);
+
+		// tab[0] = (reg)a0b0c0d0e0f0g0h0;
+		// tab[1] = (reg)a1b1c1d1e1f1g1h1;
+		// tab[2] = (reg)a2b2c2d2e2f2g2h2;
+		// tab[3] = (reg)a3b3c3d3e3f3g3h3;
+		// tab[4] = (reg)a4b4c4d4e4f4g4h4;
+		// tab[5] = (reg)a5b5c5d5e5f5g5h5;
+		// tab[6] = (reg)a6b6c6d6e6f6g6h6;
+		// tab[7] = (reg)a7b7c7d7e7f7g7h7;
+
+		auto ab = mipp::interleave<int16_t>(tab[0], tab[1]);
+		auto cd = mipp::interleave<int16_t>(tab[2], tab[3]);
+		auto ef = mipp::interleave<int16_t>(tab[4], tab[5]);
+		auto gh = mipp::interleave<int16_t>(tab[6], tab[7]);
+
+		auto a03b03 = ab.val[0];
+		auto c03d03 = cd.val[0];
+		auto e03f03 = ef.val[0];
+		auto g03h03 = gh.val[0];
+		auto a47b47 = ab.val[1];
+		auto c47d47 = cd.val[1];
+		auto e47f47 = ef.val[1];
+		auto g47h47 = gh.val[1];
+
+		auto a03b03c03d03 = mipp::interleave<int32_t>(a03b03, c03d03);
+		auto e03f03g03h03 = mipp::interleave<int32_t>(e03f03, g03h03);
+		auto a47b47c47d47 = mipp::interleave<int32_t>(a47b47, c47d47);
+		auto e47f47g47h47 = mipp::interleave<int32_t>(e47f47, g47h47);
+
+		auto a01b01c01d01 = a03b03c03d03.val[0];
+		auto a23b23c23d23 = a03b03c03d03.val[1];
+		auto e01f01g01h01 = e03f03g03h03.val[0];
+		auto e23f23g23h23 = e03f03g03h03.val[1];
+		auto a45b45c45d45 = a47b47c47d47.val[0];
+		auto a67b67c67d67 = a47b47c47d47.val[1];
+		auto e45f45g45h45 = e47f47g47h47.val[0];
+		auto e67f67g67h67 = e47f47g47h47.val[1];
+
+		auto a01b01c01d01e01f01g01h01 = mipp::interleave<int64_t>(a01b01c01d01, e01f01g01h01);
+		auto a23b23c23d23e23f23g23h23 = mipp::interleave<int64_t>(a23b23c23d23, e23f23g23h23);
+		auto a45b45c45d45e45f45g45h45 = mipp::interleave<int64_t>(a45b45c45d45, e45f45g45h45);
+		auto a67b67c67d67e67f67g67h67 = mipp::interleave<int64_t>(a67b67c67d67, e67f67g67h67);
+
+		auto a0b0c0d0e0f0g0h0 = a01b01c01d01e01f01g01h01.val[0];
+		auto a1b1c1d1e1f1g1h1 = a01b01c01d01e01f01g01h01.val[1];
+		auto a2b2c2d2e2f2g2h2 = a23b23c23d23e23f23g23h23.val[0];
+		auto a3b3c3d3e3f3g3h3 = a23b23c23d23e23f23g23h23.val[1];
+		auto a4b4c4d4e4f4g4h4 = a45b45c45d45e45f45g45h45.val[0];
+		auto a5b5c5d5e5f5g5h5 = a45b45c45d45e45f45g45h45.val[1];
+		auto a6b6c6d6e6f6g6h6 = a67b67c67d67e67f67g67h67.val[0];
+		auto a7b7c7d7e7f7g7h7 = a67b67c67d67e67f67g67h67.val[1];
+
+		tab[0] = (reg)a0b0c0d0e0f0g0h0;
+		tab[1] = (reg)a1b1c1d1e1f1g1h1;
+		tab[2] = (reg)a2b2c2d2e2f2g2h2;
+		tab[3] = (reg)a3b3c3d3e3f3g3h3;
+		tab[4] = (reg)a4b4c4d4e4f4g4h4;
+		tab[5] = (reg)a5b5c5d5e5f5g5h5;
+		tab[6] = (reg)a6b6c6d6e6f6g6h6;
+		tab[7] = (reg)a7b7c7d7e7f7g7h7;
+	}
+
+	// --------------------------------------------------------------------------------------------------- transpose8x8
+	template <>
+	inline void transpose8x8<int8_t>(reg tab[8]) {
+		mipp::transpose<int16_t>(tab);
+	}
+
+	// ----------------------------------------------------------------------------------------------------- transpose2
+	template <>
+	inline void transpose2<int8_t>(reg tab[nElReg<int8_t>()/2]) {
+		// Transpose the 2x 8x8 matrix:
+		// -------------------------
+		//
+		// Input:
+		// ------
+		// tab[0] = [a0, a1, a2, a3, a4, a5, a6, a7,  A0, A1, A2, A3, A4, A5, A6, A7]
+		// tab[1] = [b0, b1, b2, b3, b4, b5, b6, b7,  B0, B1, B2, B3, B4, B5, B6, B7]
+		// tab[2] = [c0, c1, c2, c3, c4, c5, c6, c7,  C0, C1, C2, C3, C4, C5, C6, C7]
+		// tab[3] = [d0, d1, d2, d3, d4, d5, d6, d7,  D0, D1, D2, D3, D4, D5, D6, D7]
+		// tab[4] = [e0, e1, e2, e3, e4, e5, e6, e7,  E0, E1, E2, E3, E4, E5, E6, E7]
+		// tab[5] = [f0, f1, f2, f3, f4, f5, f6, f7,  F0, F1, F2, F3, F4, F5, F6, F7]
+		// tab[6] = [g0, g1, g2, g3, g4, g5, g6, g7,  G0, G1, G2, G3, G4, G5, G6, G7]
+		// tab[7] = [h0, h1, h2, h3, h4, h5, h6, h7,  H0, H1, H2, H3, H4, H5, H6, H7]
+		//
+		// Output:
+		// -------
+		// tab[0] = [a0, b0, c0, d0, e0, f0, g0, h0,  A0, B0, C0, D0, E0, F0, G0, H0]
+		// tab[1] = [a1, b1, c1, d1, e1, f1, g1, h1,  A1, B1, C1, D1, E1, F1, G1, H1]
+		// tab[2] = [a2, b2, c2, d2, e2, f2, g2, h2,  A2, B2, C2, D2, E2, F2, G2, H2]
+		// tab[3] = [a3, b3, c3, d3, e3, f3, g3, h3,  A3, B3, C3, D3, E3, F3, G3, H3]
+		// tab[4] = [a4, b4, c4, d4, e4, f4, g4, h4,  A4, B4, C4, D4, E4, F4, G4, H4]
+		// tab[5] = [a5, b5, c5, d5, e5, f5, g5, h5,  A5, B5, C5, D5, E5, F5, G5, H5]
+		// tab[6] = [a6, b6, c6, d6, e6, f6, g6, h6,  A6, B6, C6, D6, E6, F6, G6, H6]
+		// tab[7] = [a7, b7, c7, d7, e7, f7, g7, h7,  A7, B7, C7, D7, E7, F7, G7, H7]
+
+		// auto a03b03 = mipp::interleavelo2<int8_t>(tab[0], tab[1]);
+		// auto c03d03 = mipp::interleavelo2<int8_t>(tab[2], tab[3]);
+		// auto e03f03 = mipp::interleavelo2<int8_t>(tab[4], tab[5]);
+		// auto g03h03 = mipp::interleavelo2<int8_t>(tab[6], tab[7]);
+		// auto a47b47 = mipp::interleavehi2<int8_t>(tab[0], tab[1]);
+		// auto c47d47 = mipp::interleavehi2<int8_t>(tab[2], tab[3]);
+		// auto e47f47 = mipp::interleavehi2<int8_t>(tab[4], tab[5]);
+		// auto g47h47 = mipp::interleavehi2<int8_t>(tab[6], tab[7]);
+
+		// auto a01b01c01d01 = mipp::interleavelo2<int16_t>(a03b03, c03d03);
+		// auto a23b23c23d23 = mipp::interleavehi2<int16_t>(a03b03, c03d03);
+		// auto e01f01g01h01 = mipp::interleavelo2<int16_t>(e03f03, g03h03);
+		// auto e23f23g23h23 = mipp::interleavehi2<int16_t>(e03f03, g03h03);
+		// auto a45b45c45d45 = mipp::interleavelo2<int16_t>(a47b47, c47d47);
+		// auto a67b67c67d67 = mipp::interleavehi2<int16_t>(a47b47, c47d47);
+		// auto e45f45g45h45 = mipp::interleavelo2<int16_t>(e47f47, g47h47);
+		// auto e67f67g67h67 = mipp::interleavehi2<int16_t>(e47f47, g47h47);
+
+		// auto a0b0c0d0e0f0g0h0 = mipp::interleavelo2<int32_t>(a01b01c01d01, e01f01g01h01);
+		// auto a1b1c1d1e1f1g1h1 = mipp::interleavehi2<int32_t>(a01b01c01d01, e01f01g01h01);
+		// auto a2b2c2d2e2f2g2h2 = mipp::interleavelo2<int32_t>(a23b23c23d23, e23f23g23h23);
+		// auto a3b3c3d3e3f3g3h3 = mipp::interleavehi2<int32_t>(a23b23c23d23, e23f23g23h23);
+		// auto a4b4c4d4e4f4g4h4 = mipp::interleavelo2<int32_t>(a45b45c45d45, e45f45g45h45);
+		// auto a5b5c5d5e5f5g5h5 = mipp::interleavehi2<int32_t>(a45b45c45d45, e45f45g45h45);
+		// auto a6b6c6d6e6f6g6h6 = mipp::interleavelo2<int32_t>(a67b67c67d67, e67f67g67h67);
+		// auto a7b7c7d7e7f7g7h7 = mipp::interleavehi2<int32_t>(a67b67c67d67, e67f67g67h67);
+
+		// tab[0] = (reg)a0b0c0d0e0f0g0h0;
+		// tab[1] = (reg)a1b1c1d1e1f1g1h1;
+		// tab[2] = (reg)a2b2c2d2e2f2g2h2;
+		// tab[3] = (reg)a3b3c3d3e3f3g3h3;
+		// tab[4] = (reg)a4b4c4d4e4f4g4h4;
+		// tab[5] = (reg)a5b5c5d5e5f5g5h5;
+		// tab[6] = (reg)a6b6c6d6e6f6g6h6;
+		// tab[7] = (reg)a7b7c7d7e7f7g7h7;
+
+		auto ab = mipp::interleave2<int8_t>(tab[0], tab[1]);
+		auto cd = mipp::interleave2<int8_t>(tab[2], tab[3]);
+		auto ef = mipp::interleave2<int8_t>(tab[4], tab[5]);
+		auto gh = mipp::interleave2<int8_t>(tab[6], tab[7]);
+
+		auto a03b03 = ab.val[0];
+		auto c03d03 = cd.val[0];
+		auto e03f03 = ef.val[0];
+		auto g03h03 = gh.val[0];
+		auto a47b47 = ab.val[1];
+		auto c47d47 = cd.val[1];
+		auto e47f47 = ef.val[1];
+		auto g47h47 = gh.val[1];
+
+		auto a03b03c03d03 = mipp::interleave2<int16_t>(a03b03, c03d03);
+		auto e03f03g03h03 = mipp::interleave2<int16_t>(e03f03, g03h03);
+		auto a47b47c47d47 = mipp::interleave2<int16_t>(a47b47, c47d47);
+		auto e47f47g47h47 = mipp::interleave2<int16_t>(e47f47, g47h47);
+
+		auto a01b01c01d01 = a03b03c03d03.val[0];
+		auto a23b23c23d23 = a03b03c03d03.val[1];
+		auto e01f01g01h01 = e03f03g03h03.val[0];
+		auto e23f23g23h23 = e03f03g03h03.val[1];
+		auto a45b45c45d45 = a47b47c47d47.val[0];
+		auto a67b67c67d67 = a47b47c47d47.val[1];
+		auto e45f45g45h45 = e47f47g47h47.val[0];
+		auto e67f67g67h67 = e47f47g47h47.val[1];
+
+		auto a01b01c01d01e01f01g01h01 = mipp::interleave2<int32_t>(a01b01c01d01, e01f01g01h01);
+		auto a23b23c23d23e23f23g23h23 = mipp::interleave2<int32_t>(a23b23c23d23, e23f23g23h23);
+		auto a45b45c45d45e45f45g45h45 = mipp::interleave2<int32_t>(a45b45c45d45, e45f45g45h45);
+		auto a67b67c67d67e67f67g67h67 = mipp::interleave2<int32_t>(a67b67c67d67, e67f67g67h67);
+
+		auto a0b0c0d0e0f0g0h0 = a01b01c01d01e01f01g01h01.val[0];
+		auto a1b1c1d1e1f1g1h1 = a01b01c01d01e01f01g01h01.val[1];
+		auto a2b2c2d2e2f2g2h2 = a23b23c23d23e23f23g23h23.val[0];
+		auto a3b3c3d3e3f3g3h3 = a23b23c23d23e23f23g23h23.val[1];
+		auto a4b4c4d4e4f4g4h4 = a45b45c45d45e45f45g45h45.val[0];
+		auto a5b5c5d5e5f5g5h5 = a45b45c45d45e45f45g45h45.val[1];
+		auto a6b6c6d6e6f6g6h6 = a67b67c67d67e67f67g67h67.val[0];
+		auto a7b7c7d7e7f7g7h7 = a67b67c67d67e67f67g67h67.val[1];
+
+		tab[0] = (reg)a0b0c0d0e0f0g0h0;
+		tab[1] = (reg)a1b1c1d1e1f1g1h1;
+		tab[2] = (reg)a2b2c2d2e2f2g2h2;
+		tab[3] = (reg)a3b3c3d3e3f3g3h3;
+		tab[4] = (reg)a4b4c4d4e4f4g4h4;
+		tab[5] = (reg)a5b5c5d5e5f5g5h5;
+		tab[6] = (reg)a6b6c6d6e6f6g6h6;
+		tab[7] = (reg)a7b7c7d7e7f7g7h7;
+	}
+#endif
+
+#endif
+#endif
+
+}
+
+#endif /* MY_INTRINSICS_PLUS_PLUS_H_ */
+
+
 // original file: ../src/cartesiantransform.h
 
 // BEGINLICENSE
@@ -314,6 +18070,7 @@ void JacobiCyclicDiagonalization(Real *eigenvalues, Real *eigenvectors, const Re
 
 }  // Namespace helpme
 #endif  // Header guard
+
 // original file: ../src/string_utils.h
 
 // BEGINLICENSE
@@ -389,6 +18146,7 @@ std::string stringify(T *data, size_t size, size_t rowDim, int width = 14, int p
 }  // Namespace helpme
 
 #endif  // Header guard
+
 // original file: ../src/memory.h
 
 // BEGINLICENSE
@@ -479,6 +18237,7 @@ using vector = std::vector<Real, FFTWAllocator<Real>>;
 }  // Namespace helpme
 
 #endif  // Header guard
+
 
 namespace helpme {
 
@@ -1026,6 +18785,7 @@ std::ostream& operator<<(std::ostream& os, Matrix<Real> const& m) {
 }  // Namespace helpme
 #endif  // Header guard
 
+
 #include <vector>
 
 namespace helpme {
@@ -1142,6 +18902,7 @@ Matrix<Real> cartesianTransform(int maxAngularMomentum, bool transformOnlyThisSh
 
 }  // Namespace helpme
 #endif  // Header guard
+
 // original file: ../src/fftw_wrapper.h
 
 // BEGINLICENSE
@@ -1358,6 +19119,7 @@ class FFTWWrapper {
 
 }  // Namespace helpme
 #endif  // Header guard
+
 // original file: ../src/gamma.h
 
 // BEGINLICENSE
@@ -1755,6 +19517,7 @@ Real nonTemplateGammaComputer(int twoS) {
 
 }  // Namespace helpme
 #endif  // Header guard
+
 // original file: ../src/gridsize.h
 
 // BEGINLICENSE
@@ -1827,6 +19590,7 @@ int findGridSize(T inputSize, const std::initializer_list<T> &requiredDivisors) 
 }  // Namespace helpme
 
 #endif  // Header guard
+
 // #include "matrix.h"
 // #include "memory.h"
 #if HAVE_MPI == 1
@@ -2029,6 +19793,7 @@ std::ostream& operator<<(std::ostream& os, const std::unique_ptr<MPIWrapper<Real
 
 }  // Namespace helpme
 #endif  // Header guard
+
 #else
 typedef struct ompi_communicator_t *MPI_Comm;
 #endif
@@ -2107,6 +19872,7 @@ struct raiseNormToIntegerPower {
 }  // Namespace helpme
 
 #endif  // Header guard
+
 // original file: ../src/splines.h
 
 // BEGINLICENSE
@@ -2277,6 +20043,7 @@ class BSpline {
 
 }  // Namespace helpme
 #endif  // Header guard
+
 // #include "string_utils.h"
 // original file: ../src/tensor_utils.h
 
@@ -2294,9 +20061,9 @@ class BSpline {
 #if HAVE_BLAS == 1
 extern "C" {
 extern void dgemm_(char *, char *, int *, int *, int *, double *, double *, int *, double *, int *, double *, double *,
-                  int *);
+                   int *);
 extern void sgemm_(char *, char *, int *, int *, int *, float *, float *, int *, float *, int *, float *, float *,
-                  int *);
+                   int *);
 }
 #endif
 
@@ -2373,8 +20140,8 @@ void contractABxCWithDxC<float>(float const *__restrict__ abcPtr, float const *_
     float alpha = 1;
     float beta = 0;
     sgemm_(&transB, &transA, const_cast<int *>(&dDimension), const_cast<int *>(&abDimension),
-          const_cast<int *>(&cDimension), &alpha, const_cast<float *>(dcPtr), const_cast<int *>(&cDimension),
-          const_cast<float *>(abcPtr), const_cast<int *>(&cDimension), &beta, abdPtr, const_cast<int *>(&dDimension));
+           const_cast<int *>(&cDimension), &alpha, const_cast<float *>(dcPtr), const_cast<int *>(&cDimension),
+           const_cast<float *>(abcPtr), const_cast<int *>(&cDimension), &beta, abdPtr, const_cast<int *>(&dDimension));
 }
 
 template <>
@@ -2388,13 +20155,14 @@ void contractABxCWithDxC<double>(double const *__restrict__ abcPtr, double const
     double alpha = 1;
     double beta = 0;
     dgemm_(&transB, &transA, const_cast<int *>(&dDimension), const_cast<int *>(&abDimension),
-          const_cast<int *>(&cDimension), &alpha, const_cast<double *>(dcPtr), const_cast<int *>(&cDimension),
-          const_cast<double *>(abcPtr), const_cast<int *>(&cDimension), &beta, abdPtr, const_cast<int *>(&dDimension));
+           const_cast<int *>(&cDimension), &alpha, const_cast<double *>(dcPtr), const_cast<int *>(&cDimension),
+           const_cast<double *>(abcPtr), const_cast<int *>(&cDimension), &beta, abdPtr, const_cast<int *>(&dDimension));
 }
 #endif
 
 }  // Namespace helpme
 #endif  // Header guard
+
 
 /*!
  * \file helpme.h
@@ -5313,3 +23081,4 @@ extern void helpme_compute_P_recF(struct PMEInstance *pme, size_t nAtoms, int pa
                                   float *potential);
 #endif  // C++/C
 #endif  // Header guard
+

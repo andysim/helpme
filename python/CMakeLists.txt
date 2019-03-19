@@ -17,7 +17,9 @@ add_custom_target(PythonInstall
 )
 
 include_directories(../src)
+include_directories(${PROJECT_SOURCE_DIR}/external/MIPP/src )
 include_directories(${FFTW_INCLUDES})
+
 link_libraries(${EXTERNAL_LIBRARIES})
 pybind11_add_module(helpmelib pywrappers.cc)
 
