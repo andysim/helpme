@@ -1545,7 +1545,7 @@ class PMEInstance {
                         int gridPointB = maskedGridIteratorB[orderB];
                         size_t gridAddressCB = gridAddressC + std::abs(gridPointB) * myGridDimensionA_;
                         for (int orderA = 0; orderA < splineOrder_; ++orderA) {
-                            size_t gridPointA = maskedGridIteratorA[orderA];
+                            int gridPointA = maskedGridIteratorA[orderA];
                             size_t gridAddressCBA = gridAddressCB + std::abs(gridPointA);
                             bool thisNodeContributes =
                                 static_cast<size_t>(gridPointA >= 0 && gridPointB >= 0 && gridPointC >= 0);
@@ -2345,6 +2345,7 @@ class PMEInstance {
         mipp::vector<Real> gridTempVec(gridTmpRowSize);
 
         const Real *coefficients = newSplineCache_.splineCoefficients_.data();
+        const size_t *metadata = newSplineCache_.splineMetaData_.data();
 #pragma omp parallel num_threads(nThreads_)
 {
 #ifdef _OPENMP
@@ -2352,7 +2353,13 @@ class PMEInstance {
 #else
             int thread = 0;
 #endif
-        Real *resultTmp = resultTmpVec(thread
+        Real *resultTemp = resultTempVec.data() + thread * resultTempRowSize;
+        Real *gridTemp = gridTempVec.data() + thread * gridTempRowSize;
+        const size_t nAtoms = newSplineCache_.atomList_.size();
+#pragma omp for num_threads(nThreads_)
+        for(size_t atom = 0; atom < nAtoms; ++atom){
+
+        }
 }
 
 #else

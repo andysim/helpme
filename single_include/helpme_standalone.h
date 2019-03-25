@@ -20593,8 +20593,8 @@ class PMEInstance {
      * \param parameter the list of parameter associated with the given atom.
      * \param forces a 3 vector of the forces for this atom, ordered in memory as {Fx, Fy, Fz}.
      */
-    void computeForcesImpl(const Real *potentialGrid, const Spline &splineA, const Spline &splineB, const Spline &splineC,
-                       const Real &parameter, Real *forces) const {
+    void computeForcesImpl(const Real *potentialGrid, const Spline &splineA, const Spline &splineB,
+                           const Spline &splineC, const Real &parameter, Real *forces) const {
         const auto &gridIteratorA = gridIteratorA_[splineA.startingGridPoint()];
         const auto &gridIteratorB = gridIteratorB_[splineB.startingGridPoint()];
         const auto &gridIteratorC = gridIteratorC_[splineC.startingGridPoint()];
@@ -20653,7 +20653,7 @@ class PMEInstance {
      * level for the requested potential derivatives.
      */
     void computeForcesImpl(const Real *potentialGrid, const int &nPotentialComponents, const Spline &splineA,
-                       const Spline &splineB, const Spline &splineC, Real *phiPtr) {
+                           const Spline &splineB, const Spline &splineC, Real *phiPtr) {
         const auto &gridIteratorA = gridIteratorA_[splineA.startingGridPoint()];
         const auto &gridIteratorB = gridIteratorB_[splineB.startingGridPoint()];
         const auto &gridIteratorC = gridIteratorC_[splineC.startingGridPoint()];
@@ -20705,9 +20705,9 @@ class PMEInstance {
      * \endcode
      * \param forces a Nx3 matrix of the forces, ordered in memory as {Fx1,Fy1,Fz1,Fx2,Fy2,Fz2,....FxN,FyN,FzN}.
      */
-    void computeForcesImpl(const int &atom, const Real *potentialGrid, const int &nComponents, const int &nForceComponents,
-                       const Spline &splineA, const Spline &splineB, const Spline &splineC, Real *phiPtr,
-                       const RealMat &parameters, Real *forces) {
+    void computeForcesImpl(const int &atom, const Real *potentialGrid, const int &nComponents,
+                           const int &nForceComponents, const Spline &splineA, const Spline &splineB,
+                           const Spline &splineC, Real *phiPtr, const RealMat &parameters, Real *forces) {
         std::fill(phiPtr, phiPtr + nForceComponents, 0);
         computeForcesImpl(potentialGrid, nForceComponents, splineA, splineB, splineC, phiPtr);
 
@@ -21613,7 +21613,7 @@ class PMEInstance {
         // Now we know how many atoms we can allocate the cache
         nAtoms = denseAtomIndex;
         // Make sure that we know the number of atoms that exactly fit an integer number of registers
-        size_t paddedNumAtoms = std::ceil((float) nAtoms / REALVECLEN) * REALVECLEN;
+        size_t paddedNumAtoms = std::ceil((float)nAtoms / REALVECLEN) * REALVECLEN;
         newSplineCache_.paddedNumAtoms_ = paddedNumAtoms;
         newSplineCache_.splineOrder_ = splineOrder_;
         newSplineCache_.splineDerivativeLevel_ = splineDerivativeLevel;
@@ -21646,7 +21646,7 @@ class PMEInstance {
                         int gridPointB = maskedGridIteratorB[orderB];
                         size_t gridAddressCB = gridAddressC + std::abs(gridPointB) * myGridDimensionA_;
                         for (int orderA = 0; orderA < splineOrder_; ++orderA) {
-                            size_t gridPointA = maskedGridIteratorA[orderA];
+                            int gridPointA = maskedGridIteratorA[orderA];
                             size_t gridAddressCBA = gridAddressCB + std::abs(gridPointA);
                             bool thisNodeContributes =
                                 static_cast<size_t>(gridPointA >= 0 && gridPointB >= 0 && gridPointC >= 0);
@@ -22412,7 +22412,6 @@ class PMEInstance {
                               mValsA_.data(), mValsB_.data(), mValsC_.data(), virial, nThreads_);
     }
 
-
     /*!
      * \brief Probes the potential grid to get the forces.  Generally this shouldn't be called;
      *        use the various computeE() methods instead.  This is the faster version that uses
@@ -22447,6 +22446,7 @@ class PMEInstance {
         mipp::vector<Real> gridTempVec(gridTmpRowSize);
 
         const Real *coefficients = newSplineCache_.splineCoefficients_.data();
+        const size_t *metadata = newSplineCache_.splineMetaData_.data();
 #pragma omp parallel num_threads(nThreads_)
 {
 #ifdef _OPENMP
@@ -22454,7 +22454,13 @@ class PMEInstance {
 #else
             int thread = 0;
 #endif
-        Real *resultTmp = resultTmpVec(thread
+        Real *resultTemp = resultTempVec.data() + thread * resultTempRowSize;
+        Real *gridTemp = gridTempVec.data() + thread * gridTempRowSize;
+        const size_t nAtoms = newSplineCache_.atomList_.size();
+# pragma omp for num_threads(nThreads_)
+        for(size_t atom = 0; atom < nAtoms; ++atom){
+
+        }
 }
 
 #else
@@ -22480,8 +22486,8 @@ class PMEInstance {
                 int threadID = 0;
 #endif
                 Real *myScratch = fractionalPhis[threadID % nThreads_];
-                computeForcesImpl(atom, potentialGrid, nComponents, nForceComponents, splineA, splineB, splineC, myScratch,
-                              parameters, forces[atom]);
+                computeForcesImpl(atom, potentialGrid, nComponents, nForceComponents, splineA, splineB, splineC,
+                                  myScratch, parameters, forces[atom]);
             } else {
                 computeForcesImpl(potentialGrid, splineA, splineB, splineC, paramPtr[atom], forces[atom]);
             }
