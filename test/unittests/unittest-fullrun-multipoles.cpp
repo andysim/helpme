@@ -1743,7 +1743,7 @@ TEST_CASE("Full run with a small toy system, comprising two water molecules with
         auto fractionalParams = helpme::cartesianTransform(4, false, scaledRecVecsD, paramsD);
         REQUIRE(fractionalParams.almostEquals(refFractionalParamsD, TOL));
 
-        pmeD->filterAtomsAndBuildSplineCache(5, coordsD);
+        pmeD->filterAtomsAndBuildSplineCache(4, fractionalParams, 5, coordsD);
         auto realGrid = pmeD->spreadParameters(4, fractionalParams);
         helpme::Matrix<double> chargeGrid(realGrid, nfftz * nffty, nfftx);
         REQUIRE(refChargeGridD.almostEquals(chargeGrid, TOL));
@@ -1778,7 +1778,7 @@ TEST_CASE("Full run with a small toy system, comprising two water molecules with
             helpme::cartesianTransform(4, false, scaledRecVecsD.cast<float>(), paramsD.cast<float>());
         REQUIRE(fractionalParams.almostEquals(refFractionalParamsD.cast<float>(), TOL));
 
-        pmeF->filterAtomsAndBuildSplineCache(5, coordsD.cast<float>());
+        pmeF->filterAtomsAndBuildSplineCache(4, fractionalParams, 5, coordsD.cast<float>());
         auto realGrid = pmeF->spreadParameters(4, fractionalParams);
         helpme::Matrix<float> chargeGrid(realGrid, nfftz * nffty, nfftx);
         REQUIRE(refChargeGridD.cast<float>().almostEquals(chargeGrid, TOL));

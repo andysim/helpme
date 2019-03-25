@@ -189,7 +189,7 @@ int main(int argc, char *argv[]) {
 #if TIME_COMPONENTS
                 auto localStart = std::chrono::system_clock::now();
 #endif
-                pme->filterAtomsAndBuildSplineCache(1, coordsF);
+                pme->filterAtomsAndBuildSplineCache(0, paramsF, 1, coordsF);
 #if TIME_COMPONENTS
                 auto localStop = std::chrono::system_clock::now();
                 splineTime += localStop - localStart;
@@ -250,7 +250,7 @@ int main(int argc, char *argv[]) {
 #if TIME_COMPONENTS
                 auto localStart = std::chrono::system_clock::now();
 #endif
-                pme->filterAtomsAndBuildSplineCache(1, coordsF);
+                pme->filterAtomsAndBuildSplineCache(0, paramsF, 1, coordsF);
 #if TIME_COMPONENTS
                 auto localStop = std::chrono::system_clock::now();
                 splineTime += localStop - localStart;
@@ -328,7 +328,7 @@ int main(int argc, char *argv[]) {
 #if TIME_COMPONENTS
                 auto localStart = std::chrono::system_clock::now();
 #endif
-                pme->filterAtomsAndBuildSplineCache(1, coordsD);
+                pme->filterAtomsAndBuildSplineCache(0, paramsD, 1, coordsD);
 #if TIME_COMPONENTS
                 auto localStop = std::chrono::system_clock::now();
                 splineTime += localStop - localStart;
@@ -389,7 +389,7 @@ int main(int argc, char *argv[]) {
 #if TIME_COMPONENTS
                 auto localStart = std::chrono::system_clock::now();
 #endif
-                pme->filterAtomsAndBuildSplineCache(1, coordsD);
+                pme->filterAtomsAndBuildSplineCache(0, paramsD, 1, coordsD);
 #if TIME_COMPONENTS
                 auto localStop = std::chrono::system_clock::now();
                 splineTime += localStop - localStart;

@@ -409,25 +409,27 @@ TEST_CASE("Full run with a small toy system, comprising two water molecules.") {
         auto pmeD = std::unique_ptr<PMEInstanceD>(new PMEInstanceD);
         pmeD->setup(1, 0.3, splineOrder, nfftx, nffty, nfftz, ccelec, 1);
         pmeD->setLatticeVectors(20, 20, 20, 90, 90, 90, PMEInstanceD::LatticeType::XAligned);
-        pmeD->filterAtomsAndBuildSplineCache(1, coordsD);
+        pmeD->filterAtomsAndBuildSplineCache(0, chargesD, 0, coordsD);
         auto realGrid = pmeD->spreadParameters(0, chargesD);
         helpme::Matrix<double> chargeGrid(realGrid, nfftz * nffty, nfftx);
         REQUIRE(refChargeGridD.almostEquals(chargeGrid, TOL));
 
-        // auto gridAddress = pmeD->forwardTransform(realGrid);
-        // helpme::Matrix<std::complex<double>> complexGrid(gridAddress, nffty * (nfftx / 2 + 1), nfftz);
-        // REQUIRE(refTransGridD.almostEquals(complexGrid, TOL));
+        auto gridAddress = pmeD->forwardTransform(realGrid);
+        helpme::Matrix<std::complex<double>> complexGrid(gridAddress, nffty * (nfftx / 2 + 1), nfftz);
+        REQUIRE(refTransGridD.almostEquals(complexGrid, TOL));
 
-        // double energy = pmeD->convolveE(gridAddress);
-        // REQUIRE(refConvolvedGridD.almostEquals(complexGrid, TOL));
+        double energy = pmeD->convolveE(gridAddress);
+        REQUIRE(refConvolvedGridD.almostEquals(complexGrid, TOL));
 
-        // realGrid = pmeD->inverseTransform(gridAddress);
-        // helpme::Matrix<double> potentialGrid(realGrid, nfftz * nffty, nfftx);
-        // REQUIRE(refPotentialGridD.almostEquals(potentialGrid, TOL));
+        realGrid = pmeD->inverseTransform(gridAddress);
+        helpme::Matrix<double> potentialGrid(realGrid, nfftz * nffty, nfftx);
+        REQUIRE(refPotentialGridD.almostEquals(potentialGrid, TOL));
 
-        // pmeD->computeForces(realGrid, 0, chargesD, forcesD);
-        // REQUIRE(refForcesD.almostEquals(forcesD, TOL));
-        // REQUIRE(refRecEnergy == Approx(energy).margin(TOL));
+        pmeD->computeForces(realGrid, 0, chargesD, forcesD);
+        std::cout << refForcesD << std::endl << std::endl;
+        std::cout << forcesD << std::endl;
+        REQUIRE(refForcesD.almostEquals(forcesD, TOL));
+        REQUIRE(refRecEnergy == Approx(energy).margin(TOL));
     }
 
 #if 0
@@ -440,7 +442,6 @@ TEST_CASE("Full run with a small toy system, comprising two water molecules.") {
         auto pmeD = std::unique_ptr<PMEInstanceD>(new PMEInstanceD);
         pmeD->setup(1, 0.3, splineOrder, nfftx, nffty, nfftz, ccelec, 1);
         pmeD->setLatticeVectors(20, 20, 20, 90, 90, 90, PMEInstanceD::LatticeType::XAligned);
-        pmeD->filterAtomsAndBuildSplineCache(1, coordsD);
         auto realGrid = pmeD->spreadParameters(0, chargesD);
         helpme::Matrix<double> chargeGrid(realGrid, nfftz * nffty, nfftx);
         REQUIRE(refChargeGridD.almostEquals(chargeGrid, TOL));
@@ -473,7 +474,6 @@ TEST_CASE("Full run with a small toy system, comprising two water molecules.") {
         pmeF->setup(1, 0.3, splineOrder, nfftx, nffty, nfftz, ccelec, 1);
         pmeF->setLatticeVectors(20, 20, 20, 90, 90, 90, PMEInstanceF::LatticeType::XAligned);
 
-        pmeF->filterAtomsAndBuildSplineCache(1, coordsD.cast<float>());
         auto realGrid = pmeF->spreadParameters(0, chargesD.cast<float>());
         helpme::Matrix<float> chargeGrid(realGrid, nfftz * nffty, nfftx);
         REQUIRE(refChargeGridD.cast<float>().almostEquals(chargeGrid, TOL));
@@ -503,7 +503,6 @@ TEST_CASE("Full run with a small toy system, comprising two water molecules.") {
         auto pmeF = std::unique_ptr<PMEInstanceF>(new PMEInstanceF);
         pmeF->setup(1, 0.3, splineOrder, nfftx, nffty, nfftz, ccelec, 1);
         pmeF->setLatticeVectors(20, 20, 20, 90, 90, 90, PMEInstanceF::LatticeType::XAligned);
-        pmeF->filterAtomsAndBuildSplineCache(1, coordsD.cast<float>());
         auto realGrid = pmeF->spreadParameters(0, chargesD.cast<float>());
         helpme::Matrix<float> chargeGrid(realGrid, nfftz * nffty, nfftx);
         REQUIRE(refChargeGridD.cast<float>().almostEquals(chargeGrid, TOL));

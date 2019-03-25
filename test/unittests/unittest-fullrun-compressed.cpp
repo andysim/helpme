@@ -214,7 +214,7 @@ TEST_CASE("Full run with a small toy system, comprising two water molecules.") {
         auto pmeD = std::unique_ptr<PMEInstanceD>(new PMEInstanceD);
         pmeD->setupCompressed(1, 0.3, splineOrder, nfftx, nffty, nfftz, kMaxX, kMaxY, kMaxZ, ccelec, 1);
         pmeD->setLatticeVectors(20, 20, 20, 90, 90, 90, PMEInstanceD::LatticeType::XAligned);
-        pmeD->filterAtomsAndBuildSplineCache(1, coordsD);
+        pmeD->filterAtomsAndBuildSplineCache(0, chargesD, 1, coordsD);
         auto realGrid = pmeD->spreadParameters(0, chargesD);
         helpme::Matrix<double> chargeGrid(realGrid, nfftz * nffty, nfftx);
         REQUIRE(refChargeGridD.almostEquals(chargeGrid, TOL));
@@ -245,7 +245,7 @@ TEST_CASE("Full run with a small toy system, comprising two water molecules.") {
         auto pmeD = std::unique_ptr<PMEInstanceD>(new PMEInstanceD);
         pmeD->setupCompressed(1, 0.3, splineOrder, nfftx, nffty, nfftz, kMaxX, kMaxY, kMaxZ, ccelec, 1);
         pmeD->setLatticeVectors(20, 20, 20, 90, 90, 90, PMEInstanceD::LatticeType::XAligned);
-        pmeD->filterAtomsAndBuildSplineCache(1, coordsD);
+        pmeD->filterAtomsAndBuildSplineCache(0, chargesD, 1, coordsD);
         auto realGrid = pmeD->spreadParameters(0, chargesD);
         helpme::Matrix<double> chargeGrid(realGrid, nfftz * nffty, nfftx);
         REQUIRE(refChargeGridD.almostEquals(chargeGrid, TOL));
@@ -281,7 +281,7 @@ TEST_CASE("Full run with a small toy system, comprising two water molecules.") {
         auto pmeF = std::unique_ptr<PMEInstanceF>(new PMEInstanceF);
         pmeF->setupCompressed(1, 0.3, splineOrder, nfftx, nffty, nfftz, kMaxX, kMaxY, kMaxZ, ccelec, 1);
         pmeF->setLatticeVectors(20, 20, 20, 90, 90, 90, PMEInstanceF::LatticeType::XAligned);
-        pmeF->filterAtomsAndBuildSplineCache(1, coordsD.cast<float>());
+        pmeF->filterAtomsAndBuildSplineCache(0, chargesD.cast<float>(), 1, coordsD.cast<float>());
         auto realGrid = pmeF->spreadParameters(0, chargesD.cast<float>());
         helpme::Matrix<float> chargeGrid(realGrid, nfftz * nffty, nfftx);
         REQUIRE(refChargeGridD.cast<float>().almostEquals(chargeGrid, TOL));
@@ -312,7 +312,7 @@ TEST_CASE("Full run with a small toy system, comprising two water molecules.") {
         auto pmeF = std::unique_ptr<PMEInstanceF>(new PMEInstanceF);
         pmeF->setupCompressed(1, 0.3, splineOrder, nfftx, nffty, nfftz, kMaxX, kMaxY, kMaxZ, ccelec, 1);
         pmeF->setLatticeVectors(20, 20, 20, 90, 90, 90, PMEInstanceF::LatticeType::XAligned);
-        pmeF->filterAtomsAndBuildSplineCache(1, coordsD.cast<float>());
+        pmeF->filterAtomsAndBuildSplineCache(0, chargesD.cast<float>(), 1, coordsD.cast<float>());
         auto realGrid = pmeF->spreadParameters(0, chargesD.cast<float>());
         helpme::Matrix<float> chargeGrid(realGrid, nfftz * nffty, nfftx);
         REQUIRE(refChargeGridD.cast<float>().almostEquals(chargeGrid, TOL));
