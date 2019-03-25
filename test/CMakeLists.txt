@@ -9,7 +9,6 @@ set(SOURCES_HELPME
     helpme.h
     lapack_wrapper.h
     matrix.h
-    memory.h
     mpi_wrapper.h
     powers.h
     splines.h
@@ -60,13 +59,13 @@ MACRO(MAKE_BENCHMARK testname)
     configure_file(data/${lctestname}_coords.txt . COPYONLY)
 ENDMACRO()
 
+    MAKE_BENCHMARK("WaterBox24000")
 # Benchmark examples
 if(HAVE_MPI AND NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
     message(STATUS "${Cyan}Release build detected: building benchmarks${ColourReset}")
     MAKE_BENCHMARK("DHFR")
     MAKE_BENCHMARK("DMPC3x3")
     MAKE_BENCHMARK("WaterBox12288")
-    MAKE_BENCHMARK("WaterBox24000")
     MAKE_BENCHMARK("WaterBox41472")
     MAKE_BENCHMARK("WaterBox65856")
     MAKE_BENCHMARK("WaterBox98304")

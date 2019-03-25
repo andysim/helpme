@@ -16,7 +16,7 @@
 #include <type_traits>
 
 #include <fftw3.h>
-#include "memory.h"
+#include "mipp_wrapper.h"
 
 namespace helpme {
 
@@ -133,9 +133,9 @@ class FFTWWrapper {
                 "Make sure that -DHAVE_FFTWF=1, -DHAVE_FFTWD=1 or -DHAVE_FFTWL=1 is added to the compiler flags"
                 "for single, double and long double precision support, respectively.");
         }
-        helpme::vector<Real> realTemp(fftDimension_);
-        helpme::vector<std::complex<Real>> complexTemp1(fftDimension_);
-        helpme::vector<std::complex<Real>> complexTemp2(fftDimension_);
+        mipp::vector<Real> realTemp(fftDimension_);
+        mipp::vector<std::complex<Real>> complexTemp1(fftDimension_);
+        mipp::vector<std::complex<Real>> complexTemp2(fftDimension_);
         Real *realPtr = realTemp.data();
         Complex *complexPtr1 = reinterpret_cast<Complex *>(complexTemp1.data());
         Complex *complexPtr2 = reinterpret_cast<Complex *>(complexTemp2.data());

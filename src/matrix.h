@@ -23,7 +23,8 @@
 
 #include "lapack_wrapper.h"
 #include "string_utils.h"
-#include "memory.h"
+
+#include "mipp_wrapper.h"
 
 namespace helpme {
 
@@ -63,7 +64,7 @@ class Matrix {
     /// The number of columns in the matrix.
     size_t nCols_;
     /// A vector to conveniently allocate data, if we really need to.
-    helpme::vector<Real> allocatedData_;
+    mipp::vector<Real> allocatedData_;
     /// Pointer to the raw data, whose allocation may not be controlled by us.
     Real* data_;
 
@@ -546,7 +547,7 @@ class Matrix {
         JacobiCyclicDiagonalization<Real>(eigenValues[0], unsortedEigenVectors[0], cbegin(), nRows_);
         unsortedEigenVectors.transposeInPlace();
 
-        std::vector<std::pair<Real, const Real*>> eigenPairs;
+        mipp::vector<std::pair<Real, const Real*>> eigenPairs;
         for (int val = 0; val < nRows_; ++val) eigenPairs.push_back({eigenValues[val][0], unsortedEigenVectors[val]});
         std::sort(eigenPairs.begin(), eigenPairs.end());
         if (order == SortOrder::Descending) std::reverse(eigenPairs.begin(), eigenPairs.end());

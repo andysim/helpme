@@ -29,14 +29,12 @@
 #include <unistd.h>
 #include <vector>
 
-#include "mipp.h"
-
 #include "cartesiantransform.h"
 #include "fftw_wrapper.h"
 #include "gamma.h"
 #include "gridsize.h"
 #include "matrix.h"
-#include "memory.h"
+#include "mipp_wrapper.h"
 #if HAVE_MPI == 1
 #include "mpi_wrapper.h"
 #else
@@ -101,6 +99,26 @@ struct SplineCacheEntry {
           absoluteAtomNumber(-1) {}
 };
 
+template <typename Real>
+struct SplineCache {
+    using GridContributions = mipp::vector<mipp::vector<std::pair<size_t, size_t>>>;
+    /// List of atoms that contribute to this node's grid.
+    mipp::vector<size_t> atomList_;
+    /// Spline coefficients ordered by grid address then atom idx, showing the.
+    mipp::vector<size_t> splineMetaData_;
+    /// The cache of dense spline coefficients stored as derivative level, then grid address, then atom idx fastest
+    /// running.
+    mipp::vector<Real> splineCoefficients_;
+    /// A sparse map showing the address in the dense list (gridAddress, atomAddress) of each contribution to each.
+    mipp::vector<GridContributions> gridContributions_;
+    /// The number of atoms, accounting for padding to a multiple of the vector length.
+    size_t paddedNumAtoms_ = 0;
+    /// The spline order in the cache.
+    size_t splineOrder_ = 0;
+    /// The maximum derivative level of the splines in the cache.
+    size_t splineDerivativeLevel_ = 0;
+};
+
 /*!
  * \class PMEInstance
  * \brief A class to encapsulate information related to a particle mesh Ewald calculation.
@@ -112,11 +130,12 @@ struct SplineCacheEntry {
  */
 template <typename Real, typename std::enable_if<std::is_floating_point<Real>::value, int>::type = 0>
 class PMEInstance {
-    using GridIterator = std::vector<std::vector<std::pair<short, short>>>;
+    using GridIterator = mipp::vector<mipp::vector<std::pair<short, short>>>;
+    using GridContributions = mipp::vector<mipp::vector<std::pair<size_t, size_t>>>;
     using Complex = std::complex<Real>;
     using Spline = BSpline<Real>;
     using RealMat = Matrix<Real>;
-    using RealVec = helpme::vector<Real>;
+    using RealVec = mipp::vector<Real>;
 
    public:
     /*!
@@ -162,12 +181,14 @@ class PMEInstance {
     /// The scaled reciprocal lattice vectors, for transforming forces from scaled fractional coordinates.
     RealMat scaledRecVecs_;
     /// An iterator over angular momentum components.
-    std::vector<std::array<short, 3>> angMomIterator_;
+    mipp::vector<std::array<short, 3>> angMomIterator_;
     /// The number of permutations of each multipole component.
     RealVec permutations_;
     /// From a given starting point on the {A,B,C} edge of the grid, lists all points to be handled, correctly wrapping
     /// around the end.
     GridIterator gridIteratorA_, gridIteratorB_, gridIteratorC_;
+    /// A
+    mipp::vector<mipp::vector<int>> maskedGridIteratorA_, maskedGridIteratorB_, maskedGridIteratorC_;
     /// The (inverse) bspline moduli to normalize the spreading / probing steps; these are folded into the convolution.
     RealVec splineModA_, splineModB_, splineModC_;
     /// The cached influence function involved in the convolution.
@@ -245,17 +266,19 @@ class PMEInstance {
     /// The type of alignment scheme used for the lattice vectors.
     LatticeType latticeType_;
     /// Communication buffers for MPI parallelism.
-    helpme::vector<Complex> workSpace1_, workSpace2_;
+    mipp::vector<Complex> workSpace1_, workSpace2_;
     /// FFTW wrappers to help with transformations in the {A,B,C} dimensions.
     FFTWWrapper<Real> fftHelperA_, fftHelperB_, fftHelperC_;
     /// The list of atoms, and their fractional coordinates, that will contribute to this node.
-    std::vector<std::tuple<int, Real, Real, Real>> atomList_;
+    mipp::vector<std::tuple<int, Real, Real, Real>> atomList_;
     /// The cached list of splines, which is stored as a member to make it persistent.
-    std::vector<SplineCacheEntry<Real>> splineCache_;
+    mipp::vector<SplineCacheEntry<Real>> splineCache_;
     /// The transformation matrices for the compressed PME algorithms, in the {A,B,C} dimensions.
     RealMat compressionCoefficientsA_, compressionCoefficientsB_, compressionCoefficientsC_;
     /// Iterators that define the reciprocal lattice sums over each index, correctly defining -1/2 <= m{A,B,C} < 1/2.
-    std::vector<int> mValsA_, mValsB_, mValsC_;
+    mipp::vector<int> mValsA_, mValsB_, mValsC_;
+    /// The splines for this atom's grid, and associated metadata.
+    SplineCache<Real> newSplineCache_;
 
     /*!
      * \brief A simple helper to compute factorials.
@@ -268,6 +291,51 @@ class PMEInstance {
         return ret;
     }
 
+    /*!
+     * \brief makeMaskedGridIterator makes an iterator over the spline values that contribute to this node's grid
+     *        in a given Cartesian dimension.  The iterator is a simple list of grid points with -1 where no
+     *        contribution is needed.
+     * \param dimension the dimension of the grid in the Cartesian dimension of interest.
+     * \param first the first grid point in the Cartesian dimension to be handled by this node.
+     * \param last the element past the last grid point in the Cartesian dimension to be handled by this node.
+     * \param paddingSize the size of the "halo" region around this grid onto which the charge can be spread
+     *        that really belongs to neighboring nodes.  For compressed PME we assume that each node handles
+     *        only its own atoms and spreads onto an expanded grid to account for this.  In regular PME there
+     *        is no padding because we assume that all halo atoms are present on this node before spreading.
+     * \return the vector of spline iterators for each starting grid point.
+     */
+    mipp::vector<mipp::vector<int>> makeMaskedGridIterator(int dimension, int first, int last, int paddingSize) const {
+        mipp::vector<mipp::vector<int>> gridIterator;
+        if (paddingSize) {
+            // This version assumes that every atom on this node is blindly place on the
+            // grid, requiring that a padding area of size splineOrder-1 be present.
+            for (int gridStart = 0; gridStart < dimension; ++gridStart) {
+                mipp::vector<int> splineIterator(splineOrder_, -1);
+                if (gridStart >= first && gridStart < last - paddingSize) {
+                    for (int splineIndex = 0; splineIndex < splineOrder_; ++splineIndex) {
+                        int gridPoint = (splineIndex + gridStart);
+                        splineIterator[splineIndex] = gridPoint - first;
+                    }
+                }
+                splineIterator.shrink_to_fit();
+                gridIterator.push_back(splineIterator);
+            }
+        } else {
+            // This version assumes that each node has its own atoms, plus "halo" atoms
+            // from neighboring grids that can contribute to this node's grid.
+            for (int gridStart = 0; gridStart < dimension; ++gridStart) {
+                mipp::vector<int> splineIterator(splineOrder_, 0);
+                for (int splineIndex = 0; splineIndex < splineOrder_; ++splineIndex) {
+                    int gridPoint = (splineIndex + gridStart) % dimension;
+                    splineIterator[splineIndex] = (gridPoint >= first && gridPoint < last) ? gridPoint - first : -1;
+                }
+                splineIterator.shrink_to_fit();
+                gridIterator.push_back(splineIterator);
+            }
+        }
+        gridIterator.shrink_to_fit();
+        return gridIterator;
+    }
     /*!
      * \brief makeGridIterator makes an iterator over the spline values that contribute to this node's grid
      *        in a given Cartesian dimension.  The iterator is of the form (grid point, spline index) and is
@@ -287,7 +355,7 @@ class PMEInstance {
             // This version assumes that every atom on this node is blindly place on the
             // grid, requiring that a padding area of size splineOrder-1 be present.
             for (int gridStart = 0; gridStart < dimension; ++gridStart) {
-                std::vector<std::pair<short, short>> splineIterator(splineOrder_);
+                mipp::vector<std::pair<short, short>> splineIterator(splineOrder_);
                 splineIterator.clear();
                 if (gridStart >= first && gridStart < last - paddingSize) {
                     for (int splineIndex = 0; splineIndex < splineOrder_; ++splineIndex) {
@@ -302,7 +370,7 @@ class PMEInstance {
             // This version assumes that each node has its own atoms, plus "halo" atoms
             // from neighboring grids that can contribute to this node's grid.
             for (int gridStart = 0; gridStart < dimension; ++gridStart) {
-                std::vector<std::pair<short, short>> splineIterator(splineOrder_);
+                mipp::vector<std::pair<short, short>> splineIterator(splineOrder_);
                 splineIterator.clear();
                 for (int splineIndex = 0; splineIndex < splineOrder_; ++splineIndex) {
                     int gridPoint = (splineIndex + gridStart) % dimension;
@@ -383,15 +451,15 @@ class PMEInstance {
      */
     void spreadParametersImpl(const int &atom, Real *realGrid, const int &nComponents, const Spline &splineA,
                               const Spline &splineB, const Spline &splineC, const RealMat &parameters) {
-        const auto &aGridIterator = gridIteratorA_[splineA.startingGridPoint()];
-        const auto &bGridIterator = gridIteratorB_[splineB.startingGridPoint()];
-        const auto &cGridIterator = gridIteratorC_[splineC.startingGridPoint()];
-        int numPointsA = static_cast<int>(aGridIterator.size());
-        int numPointsB = static_cast<int>(bGridIterator.size());
-        int numPointsC = static_cast<int>(cGridIterator.size());
-        const auto *iteratorDataA = aGridIterator.data();
-        const auto *iteratorDataB = bGridIterator.data();
-        const auto *iteratorDataC = cGridIterator.data();
+        const auto &gridIteratorA = gridIteratorA_[splineA.startingGridPoint()];
+        const auto &gridIteratorB = gridIteratorB_[splineB.startingGridPoint()];
+        const auto &gridIteratorC = gridIteratorC_[splineC.startingGridPoint()];
+        int numPointsA = static_cast<int>(gridIteratorA.size());
+        int numPointsB = static_cast<int>(gridIteratorB.size());
+        int numPointsC = static_cast<int>(gridIteratorC.size());
+        const auto *iteratorDataA = gridIteratorA.data();
+        const auto *iteratorDataB = gridIteratorB.data();
+        const auto *iteratorDataC = gridIteratorC.data();
         for (int component = 0; component < nComponents; ++component) {
             const auto &quanta = angMomIterator_[component];
             Real param = parameters(atom, component);
@@ -424,19 +492,19 @@ class PMEInstance {
      * \param parameter the list of parameter associated with the given atom.
      * \param forces a 3 vector of the forces for this atom, ordered in memory as {Fx, Fy, Fz}.
      */
-    void probeGridImpl(const Real *potentialGrid, const Spline &splineA, const Spline &splineB, const Spline &splineC,
-                       const Real &parameter, Real *forces) const {
-        const auto &aGridIterator = gridIteratorA_[splineA.startingGridPoint()];
-        const auto &bGridIterator = gridIteratorB_[splineB.startingGridPoint()];
-        const auto &cGridIterator = gridIteratorC_[splineC.startingGridPoint()];
+    void computeForcesImpl(const Real *potentialGrid, const Spline &splineA, const Spline &splineB,
+                           const Spline &splineC, const Real &parameter, Real *forces) const {
+        const auto &gridIteratorA = gridIteratorA_[splineA.startingGridPoint()];
+        const auto &gridIteratorB = gridIteratorB_[splineB.startingGridPoint()];
+        const auto &gridIteratorC = gridIteratorC_[splineC.startingGridPoint()];
         // We unpack the vector to raw pointers, as profiling shows that using range based for loops over vectors
         // causes a signficant penalty in the innermost loop, primarily due to checking the loop stop condition.
-        int numPointsA = static_cast<int>(aGridIterator.size());
-        int numPointsB = static_cast<int>(bGridIterator.size());
-        int numPointsC = static_cast<int>(cGridIterator.size());
-        const auto *iteratorDataA = aGridIterator.data();
-        const auto *iteratorDataB = bGridIterator.data();
-        const auto *iteratorDataC = cGridIterator.data();
+        int numPointsA = static_cast<int>(gridIteratorA.size());
+        int numPointsB = static_cast<int>(gridIteratorB.size());
+        int numPointsC = static_cast<int>(gridIteratorC.size());
+        const auto *iteratorDataA = gridIteratorA.data();
+        const auto *iteratorDataB = gridIteratorB.data();
+        const auto *iteratorDataC = gridIteratorC.data();
         const Real *splineStartA0 = splineA[0];
         const Real *splineStartB0 = splineB[0];
         const Real *splineStartC0 = splineC[0];
@@ -483,19 +551,19 @@ class PMEInstance {
      * N.B. Make sure that updateAngMomIterator() has been called first with the appropriate derivative
      * level for the requested potential derivatives.
      */
-    void probeGridImpl(const Real *potentialGrid, const int &nPotentialComponents, const Spline &splineA,
-                       const Spline &splineB, const Spline &splineC, Real *phiPtr) {
-        const auto &aGridIterator = gridIteratorA_[splineA.startingGridPoint()];
-        const auto &bGridIterator = gridIteratorB_[splineB.startingGridPoint()];
-        const auto &cGridIterator = gridIteratorC_[splineC.startingGridPoint()];
+    void computeForcesImpl(const Real *potentialGrid, const int &nPotentialComponents, const Spline &splineA,
+                           const Spline &splineB, const Spline &splineC, Real *phiPtr) {
+        const auto &gridIteratorA = gridIteratorA_[splineA.startingGridPoint()];
+        const auto &gridIteratorB = gridIteratorB_[splineB.startingGridPoint()];
+        const auto &gridIteratorC = gridIteratorC_[splineC.startingGridPoint()];
         const Real *splineStartA = splineA[0];
         const Real *splineStartB = splineB[0];
         const Real *splineStartC = splineC[0];
-        for (const auto &cPoint : cGridIterator) {
-            for (const auto &bPoint : bGridIterator) {
+        for (const auto &cPoint : gridIteratorC) {
+            for (const auto &bPoint : gridIteratorB) {
                 const Real *cbRow = potentialGrid + cPoint.first * myGridDimensionA_ * myGridDimensionB_ +
                                     bPoint.first * myGridDimensionA_;
-                for (const auto &aPoint : aGridIterator) {
+                for (const auto &aPoint : gridIteratorA) {
                     Real gridVal = cbRow[aPoint.first];
                     for (int component = 0; component < nPotentialComponents; ++component) {
                         const auto &quanta = angMomIterator_[component];
@@ -536,11 +604,11 @@ class PMEInstance {
      * \endcode
      * \param forces a Nx3 matrix of the forces, ordered in memory as {Fx1,Fy1,Fz1,Fx2,Fy2,Fz2,....FxN,FyN,FzN}.
      */
-    void probeGridImpl(const int &atom, const Real *potentialGrid, const int &nComponents, const int &nForceComponents,
-                       const Spline &splineA, const Spline &splineB, const Spline &splineC, Real *phiPtr,
-                       const RealMat &parameters, Real *forces) {
+    void computeForcesImpl(const int &atom, const Real *potentialGrid, const int &nComponents,
+                           const int &nForceComponents, const Spline &splineA, const Spline &splineB,
+                           const Spline &splineC, Real *phiPtr, const RealMat &parameters, Real *forces) {
         std::fill(phiPtr, phiPtr + nForceComponents, 0);
-        probeGridImpl(potentialGrid, nForceComponents, splineA, splineB, splineC, phiPtr);
+        computeForcesImpl(potentialGrid, nForceComponents, splineA, splineB, splineC, phiPtr);
 
         Real fracForce[3] = {0, 0, 0};
         for (int component = 0; component < nComponents; ++component) {
@@ -1159,6 +1227,12 @@ class PMEInstance {
                                               myFirstGridPointB_ + myGridDimensionB_, gridPaddingB);
             gridIteratorC_ = makeGridIterator(gridDimensionC_, myFirstGridPointC_,
                                               myFirstGridPointC_ + myGridDimensionC_, gridPaddingC);
+            maskedGridIteratorA_ = makeMaskedGridIterator(gridDimensionA_, myFirstGridPointA_,
+                                                          myFirstGridPointA_ + myGridDimensionA_, gridPaddingA);
+            maskedGridIteratorB_ = makeMaskedGridIterator(gridDimensionB_, myFirstGridPointB_,
+                                                          myFirstGridPointB_ + myGridDimensionB_, gridPaddingB);
+            maskedGridIteratorC_ = makeMaskedGridIterator(gridDimensionC_, myFirstGridPointC_,
+                                                          myFirstGridPointC_ + myGridDimensionC_, gridPaddingC);
 
             // Assign a large default so that uninitialized values end up generating zeros later on
             mValsA_.resize(myNumKSumTermsA_, 99);
@@ -1289,8 +1363,8 @@ class PMEInstance {
             subsetOfCAlongB_ = myGridDimensionC_ / numNodesB_;
             subsetOfBAlongC_ = myGridDimensionB_ / numNodesC_;
 
-            workSpace1_ = helpme::vector<Complex>(scratchSize);
-            workSpace2_ = helpme::vector<Complex>(scratchSize);
+            workSpace1_ = mipp::vector<Complex>(scratchSize);
+            workSpace2_ = mipp::vector<Complex>(scratchSize);
         }
     }
 
@@ -1345,6 +1419,31 @@ class PMEInstance {
         Real *realGrid = reinterpret_cast<Real *>(workSpace1_.data());
         std::fill(workSpace1_.begin(), workSpace1_.end(), 0);
         updateAngMomIterator(parameterAngMom);
+        size_t gridDimension = myGridDimensionC_ * myGridDimensionB_ * myGridDimensionA_;
+        size_t chunkSize = std::ceil((float)gridDimension / nThreads_);
+#if 1
+        const Real *coefficients = newSplineCache_.splineCoefficients_.data();
+#pragma omp parallel num_threads(nThreads_)
+        {
+#ifdef _OPENMP
+            int thread = omp_get_thread_num();
+#else
+            int thread = 0;
+#endif
+            size_t myStart = thread * chunkSize;
+            auto &thisThreadContributions = newSplineCache_.gridContributions_[thread];
+            const size_t numGridPoints = thisThreadContributions.size();
+            for (size_t threadGridPoint = 0; threadGridPoint < numGridPoints; ++threadGridPoint) {
+                const size_t gridPoint = threadGridPoint + myStart;
+                const auto gridContributionsList = thisThreadContributions[threadGridPoint];
+                for (const auto contribution : gridContributionsList) {
+                    const auto *parameterPtr = parameters[contribution.first];
+                    const auto &cacheAddress = contribution.second;
+                    realGrid[gridPoint] += coefficients[cacheAddress] * parameterPtr[0];
+                }
+            }
+        }
+#else
         size_t nAtoms = atomList_.size();
         int nComponents = nCartesian(parameterAngMom);
         for (size_t relativeAtomNumber = 0; relativeAtomNumber < nAtoms; ++relativeAtomNumber) {
@@ -1355,6 +1454,7 @@ class PMEInstance {
             const auto &splineC = entry.cSpline;
             spreadParametersImpl(atom, realGrid, nComponents, splineA, splineB, splineC, parameters);
         }
+#endif
         return realGrid;
     }
 
@@ -1368,6 +1468,15 @@ class PMEInstance {
 
         atomList_.clear();
         size_t nAtoms = coords.nRows();
+        newSplineCache_.atomList_.clear();
+
+        mipp::vector<Real> distanceFromGridPointA(nAtoms, 0);
+        mipp::vector<Real> distanceFromGridPointB(nAtoms, 0);
+        mipp::vector<Real> distanceFromGridPointC(nAtoms, 0);
+        mipp::vector<size_t> startingGridPointsA(nAtoms, 0);
+        mipp::vector<size_t> startingGridPointsB(nAtoms, 0);
+        mipp::vector<size_t> startingGridPointsC(nAtoms, 0);
+        size_t denseAtomIndex = 0;
         for (int atom = 0; atom < nAtoms; ++atom) {
             const Real *atomCoords = coords[atom];
             constexpr float EPS = 1e-6;
@@ -1384,19 +1493,201 @@ class PMEInstance {
             short aStartingGridPoint = gridDimensionA_ * aCoord;
             short bStartingGridPoint = gridDimensionB_ * bCoord;
             short cStartingGridPoint = gridDimensionC_ * cCoord;
-            const auto &aGridIterator = gridIteratorA_[aStartingGridPoint];
-            const auto &bGridIterator = gridIteratorB_[bStartingGridPoint];
-            const auto &cGridIterator = gridIteratorC_[cStartingGridPoint];
-            if (aGridIterator.size() && bGridIterator.size() && cGridIterator.size()) {
+            const auto &gridIteratorA = gridIteratorA_[aStartingGridPoint];
+            const auto &gridIteratorB = gridIteratorB_[bStartingGridPoint];
+            const auto &gridIteratorC = gridIteratorC_[cStartingGridPoint];
+            if (gridIteratorA.size() && gridIteratorB.size() && gridIteratorC.size()) {
+                // This atom contributes to this node's grid
                 atomList_.emplace_back(atom, aCoord, bCoord, cCoord);
+                newSplineCache_.atomList_.push_back(atom);
+                startingGridPointsA[denseAtomIndex] = aStartingGridPoint;
+                startingGridPointsB[denseAtomIndex] = bStartingGridPoint;
+                startingGridPointsC[denseAtomIndex] = cStartingGridPoint;
+                distanceFromGridPointA[denseAtomIndex] = gridDimensionA_ * aCoord - aStartingGridPoint;
+                distanceFromGridPointB[denseAtomIndex] = gridDimensionB_ * bCoord - bStartingGridPoint;
+                distanceFromGridPointC[denseAtomIndex] = gridDimensionC_ * cCoord - cStartingGridPoint;
+                ++denseAtomIndex;
+            }
+        }
+        // Now we know how many atoms we can allocate the cache
+        nAtoms = denseAtomIndex;
+        // Make sure that we know the number of atoms that exactly fit an integer number of registers
+        size_t paddedNumAtoms = std::ceil((float)nAtoms / REALVECLEN) * REALVECLEN;
+        newSplineCache_.paddedNumAtoms_ = paddedNumAtoms;
+        newSplineCache_.splineOrder_ = splineOrder_;
+        newSplineCache_.splineDerivativeLevel_ = splineDerivativeLevel;
+        size_t splineOrderCubed = std::pow(splineOrder_, 3);
+        size_t cacheDimension = splineOrderCubed * paddedNumAtoms;
+        size_t nAngMomComponents = nCartesian(splineDerivativeLevel);
+        updateAngMomIterator(splineDerivativeLevel);
+        newSplineCache_.splineCoefficients_.resize(nAngMomComponents * cacheDimension, 0);
+        newSplineCache_.splineMetaData_.resize(cacheDimension, 0);
+        std::fill(newSplineCache_.splineMetaData_.begin(), newSplineCache_.splineMetaData_.end(), 0);
+        size_t splinesDim = splineOrder_ * (splineDerivativeLevel + 1);
+        mipp::vector<REALVEC> splinesA(splinesDim);
+        mipp::vector<REALVEC> splinesB(splinesDim);
+        mipp::vector<REALVEC> splinesC(splinesDim);
+        size_t *metaData = newSplineCache_.splineMetaData_.data();
+        std::vector<bool> masks(cacheDimension, false);
+        Real *coefficients = newSplineCache_.splineCoefficients_.data();
+        for (size_t atomChunk = 0; atomChunk < paddedNumAtoms; atomChunk += REALVECLEN) {
+            // Make spline metadata
+            for (size_t atom = atomChunk; atom < atomChunk + REALVECLEN; ++atom) {
+                if (atom >= nAtoms) continue;
+                const auto &maskedGridIteratorA = maskedGridIteratorA_[startingGridPointsA[atom]];
+                const auto &maskedGridIteratorB = maskedGridIteratorB_[startingGridPointsB[atom]];
+                const auto &maskedGridIteratorC = maskedGridIteratorC_[startingGridPointsC[atom]];
+                size_t offsetCBA = 0;
+                for (int orderC = 0; orderC < splineOrder_; ++orderC) {
+                    int gridPointC = maskedGridIteratorC[orderC];
+                    size_t gridAddressC = std::abs(gridPointC) * myGridDimensionB_ * myGridDimensionA_;
+                    for (int orderB = 0; orderB < splineOrder_; ++orderB) {
+                        int gridPointB = maskedGridIteratorB[orderB];
+                        size_t gridAddressCB = gridAddressC + std::abs(gridPointB) * myGridDimensionA_;
+                        for (int orderA = 0; orderA < splineOrder_; ++orderA) {
+                            size_t gridPointA = maskedGridIteratorA[orderA];
+                            size_t gridAddressCBA = gridAddressCB + std::abs(gridPointA);
+                            bool thisNodeContributes =
+                                static_cast<size_t>(gridPointA >= 0 && gridPointB >= 0 && gridPointC >= 0);
+                            metaData[offsetCBA + atom] = thisNodeContributes * gridAddressCBA;
+                            masks[offsetCBA + atom] = thisNodeContributes;
+                            offsetCBA += paddedNumAtoms;
+                        }
+                    }
+                }
+            }
+            // Construct a mask for values that belong on other nodes
+            mipp::vector<mipp::vector<Real>> masksVecA(splineOrder_);
+            mipp::vector<mipp::vector<Real>> masksVecB(splineOrder_);
+            mipp::vector<mipp::vector<Real>> masksVecC(splineOrder_);
+            for (size_t spline = 0; spline < splineOrder_; ++spline) {
+                for (size_t atom = atomChunk; atom < atomChunk + REALVECLEN; ++atom) {
+                    if (atom < nAtoms) {
+                        const int &splineA = maskedGridIteratorA_[startingGridPointsA[atom]][spline];
+                        const int &splineB = maskedGridIteratorB_[startingGridPointsB[atom]][spline];
+                        const int &splineC = maskedGridIteratorC_[startingGridPointsC[atom]][spline];
+                        masksVecA[spline].push_back(static_cast<Real>(splineA >= 0));
+                        masksVecB[spline].push_back(static_cast<Real>(splineB >= 0));
+                        masksVecC[spline].push_back(static_cast<Real>(splineC >= 0));
+                    } else {
+                        masksVecA[spline].push_back(static_cast<Real>(0));
+                        masksVecB[spline].push_back(static_cast<Real>(0));
+                        masksVecC[spline].push_back(static_cast<Real>(0));
+                    }
+                }
+            }
+            mipp::vector<REALVEC> masksA(splineOrder_);
+            mipp::vector<REALVEC> masksB(splineOrder_);
+            mipp::vector<REALVEC> masksC(splineOrder_);
+            for (size_t spline = 0; spline < splineOrder_; ++spline) {
+                masksA[spline] = MAKEVEC((masksVecA[spline][0]));
+                masksB[spline] = MAKEVEC((masksVecB[spline][0]));
+                masksC[spline] = MAKEVEC((masksVecC[spline][0]));
+            }
+            // Make B-Splines and products thereof
+            REALVEC distanceA = MAKEVEC(distanceFromGridPointA[atomChunk]);
+            REALVEC distanceB = MAKEVEC(distanceFromGridPointB[atomChunk]);
+            REALVEC distanceC = MAKEVEC(distanceFromGridPointC[atomChunk]);
+            makeSplines(splinesA, distanceA, splineOrder_, splineDerivativeLevel);
+            makeSplines(splinesB, distanceB, splineOrder_, splineDerivativeLevel);
+            makeSplines(splinesC, distanceC, splineOrder_, splineDerivativeLevel);
+            size_t offsetCBA = 0;
+            for (int orderC = 0; orderC < splineOrder_; ++orderC) {
+                for (int orderB = 0; orderB < splineOrder_; ++orderB) {
+                    for (int orderA = 0; orderA < splineOrder_; ++orderA) {
+                        for (int angMomComponent = 0; angMomComponent < nAngMomComponents; ++angMomComponent) {
+                            const auto &quanta = angMomIterator_[angMomComponent];
+                            const auto splineA = masksA[orderA] * splinesA[quanta[0] * splineOrder_ + orderA];
+                            const auto splineB = masksB[orderB] * splinesB[quanta[1] * splineOrder_ + orderB];
+                            const auto splineC = masksC[orderC] * splinesC[quanta[2] * splineOrder_ + orderC];
+                            // Order is splineC,splineB,splineA,atomChunk,AngMom
+                            const size_t address =
+                                offsetCBA + atomChunk * nAngMomComponents + angMomComponent * REALVECLEN;
+                            STOREVEC(splineC * splineB * splineA, coefficients[address]);
+                        }
+                        offsetCBA += paddedNumAtoms * nAngMomComponents;
+                    }
+                }
+            }
+        }
+        // Make information needed to use the transpose of the coefficients in a thread
+        // safe way; this is necessary for spreading the parameters onto the grid.
+        // We divide the grid up among the threads to avoid race conditions
+        size_t gridDimension = myGridDimensionC_ * myGridDimensionB_ * myGridDimensionA_;
+        size_t chunkSize = std::ceil((float)gridDimension / nThreads_);
+        // Start by computing the maximum number of atoms that contribution to any grid point
+        mipp::vector<unsigned short> counts(gridDimension, 0);
+        size_t maxAtomContributions = 0;
+#pragma omp parallel num_threads(nThreads_) reduction(max : maxAtomContributions)
+        {
+#ifdef _OPENMP
+            int thread = omp_get_thread_num();
+#else
+            int thread = 0;
+#endif
+            size_t myStart = thread * chunkSize;
+            size_t myEnd = std::min((thread + 1) * chunkSize, gridDimension);
+            size_t offsetCBA = 0;
+            for (int splines = 0; splines < splineOrderCubed; ++splines) {
+                for (int atom = 0; atom < nAtoms; ++atom) {
+                    const auto &gridAddress = metaData[offsetCBA + atom];
+                    if (gridAddress >= myStart && gridAddress < myEnd && masks[offsetCBA + atom]) {
+                        counts[gridAddress]++;
+                    }
+                }
+                offsetCBA += paddedNumAtoms;
+            }
+            maxAtomContributions = *std::max_element(&counts[myStart], &counts[myEnd]);
+        }
+
+        // Allocate space to store info about contributions to each grid point
+        newSplineCache_.gridContributions_.resize(nThreads_);
+        newSplineCache_.gridContributions_.clear();
+        for (int thread = 0; thread < nThreads_; ++thread) {
+            size_t myStart = thread * chunkSize;
+            size_t myEnd = std::min((thread + 1) * chunkSize, gridDimension);
+            auto &thisThreadContributions = newSplineCache_.gridContributions_[thread];
+            for (size_t entry = myStart; entry < myEnd; ++entry) {
+                // Allocate with just enough space for the maximum, then clear
+                thisThreadContributions.emplace_back(mipp::vector<std::pair<size_t, size_t>>(maxAtomContributions));
+                thisThreadContributions.back().clear();
             }
         }
 
-        // Now we know how many atoms we loop over the dense list, redefining nAtoms accordingly.
-        // The first stage above is to get the number of atoms, so we can avoid calling push_back
-        // and thus avoid the many memory allocations.  If the cache is too small, grow it by a
-        // certain scale factor to try and minimize allocations in a not-too-wasteful manner.
-        nAtoms = atomList_.size();
+        // Now fill in the metadata; for each grid point it's a list of the
+        // (atomNumber, splineCache address)
+        const auto &atomMap = newSplineCache_.atomList_.data();
+#pragma omp parallel num_threads(nThreads_)
+        {
+#ifdef _OPENMP
+            int thread = omp_get_thread_num();
+#else
+            int thread = 0;
+#endif
+            size_t myStart = thread * chunkSize;
+            size_t myEnd = std::min((thread + 1) * chunkSize, gridDimension);
+            auto &thisThreadContributions = newSplineCache_.gridContributions_[thread];
+            size_t offsetCBA = 0;
+            for (int splines = 0; splines < splineOrderCubed; ++splines) {
+                for (int atomChunk = 0; atomChunk < paddedNumAtoms; atomChunk += REALVECLEN) {
+                    for (size_t atom = atomChunk; atom < atomChunk + REALVECLEN; ++atom) {
+                        if (atom >= nAtoms) continue;
+                        const auto &gridAddress = metaData[splines * paddedNumAtoms + atom];
+                        if (gridAddress >= myStart && gridAddress < myEnd && masks[splines * paddedNumAtoms + atom]) {
+                            thisThreadContributions[gridAddress - myStart].emplace_back(
+                                std::make_pair(atomMap[atom], offsetCBA + atom - atomChunk));
+                        }
+                    }
+                    offsetCBA += nAngMomComponents * REALVECLEN;
+                }
+            }
+        }
+
+        //
+        //
+        // ACS to be deleted when the new machinery is tested
+        //
+        //
         if (splineCache_.size() < nAtoms) {
             size_t newSize = static_cast<size_t>(1.2 * nAtoms);
             for (int atom = splineCache_.size(); atom < newSize; ++atom)
@@ -1602,7 +1893,7 @@ class PMEInstance {
         // numNodesA (dimA-1)/2 + numNodesA = complexDimA + numNodesA/2-1 if dimA is odd
         // We just allocate the larger size here, remembering that the final padding values on the last node
         // will all be allocated to zero and will not contribute to the final answer.
-        helpme::vector<Complex> buffer(complexGridDimensionA_ + numNodesA_ - 1);
+        mipp::vector<Complex> buffer(complexGridDimensionA_ + numNodesA_ - 1);
 
         // A transform, with instant sort to CAB ordering for each local block
         auto scratch = buffer.data();
@@ -2043,8 +2334,28 @@ class PMEInstance {
      * \endcode
      * \param forces a Nx3 matrix of the forces, ordered in memory as {Fx1,Fy1,Fz1,Fx2,Fy2,Fz2,....FxN,FyN,FzN}.
      */
-    void probeGrid(const Real *potentialGrid, int parameterAngMom, const RealMat &parameters, RealMat &forces) {
+    void computeForces(const Real *potentialGrid, int parameterAngMom, const RealMat &parameters, RealMat &forces) {
         updateAngMomIterator(parameterAngMom + 1);
+
+#if 0
+        int nForceComponents = nCartesian(parameterAngMom + 1);
+        size_t resultTempRowSize = nthreads_*std::ceil(nForceComponents/ cacheLineSizeInReals_) * cacheLineSizeInReals_;
+        mipp::vector<Real> resultTempVec(resultTempRowSize);
+        size_t gridTempRowSize = nThreads_*std::ceil(std::max(cacheLineSizeInReals_, REALVECLEN) / cacheLineSizeInReals_) * cacheLineSizeInReals_;
+        mipp::vector<Real> gridTempVec(gridTmpRowSize);
+
+        const Real *coefficients = newSplineCache_.splineCoefficients_.data();
+#pragma omp parallel num_threads(nThreads_)
+{
+#ifdef _OPENMP
+            int thread = omp_get_thread_num();
+#else
+            int thread = 0;
+#endif
+        Real *resultTmp = resultTmpVec(thread
+}
+
+#else
         int nComponents = nCartesian(parameterAngMom);
         int nForceComponents = nCartesian(parameterAngMom + 1);
         const Real *paramPtr = parameters[0];
@@ -2067,12 +2378,13 @@ class PMEInstance {
                 int threadID = 0;
 #endif
                 Real *myScratch = fractionalPhis[threadID % nThreads_];
-                probeGridImpl(atom, potentialGrid, nComponents, nForceComponents, splineA, splineB, splineC, myScratch,
-                              parameters, forces[atom]);
+                computeForcesImpl(atom, potentialGrid, nComponents, nForceComponents, splineA, splineB, splineC,
+                                  myScratch, parameters, forces[atom]);
             } else {
-                probeGridImpl(potentialGrid, splineA, splineB, splineC, paramPtr[atom], forces[atom]);
+                computeForcesImpl(potentialGrid, splineA, splineB, splineC, paramPtr[atom], forces[atom]);
             }
         }
+#endif
     }
 
     /*!
@@ -2462,15 +2774,15 @@ class PMEInstance {
             const auto &splineA = std::get<0>(bSplines);
             const auto &splineB = std::get<1>(bSplines);
             const auto &splineC = std::get<2>(bSplines);
-            const auto &aGridIterator = gridIteratorA_[splineA.startingGridPoint()];
-            const auto &bGridIterator = gridIteratorB_[splineB.startingGridPoint()];
-            const auto &cGridIterator = gridIteratorC_[splineC.startingGridPoint()];
-            int numPointsA = static_cast<int>(aGridIterator.size());
-            int numPointsB = static_cast<int>(bGridIterator.size());
-            int numPointsC = static_cast<int>(cGridIterator.size());
-            const auto *iteratorDataA = aGridIterator.data();
-            const auto *iteratorDataB = bGridIterator.data();
-            const auto *iteratorDataC = cGridIterator.data();
+            const auto &gridIteratorA = gridIteratorA_[splineA.startingGridPoint()];
+            const auto &gridIteratorB = gridIteratorB_[splineB.startingGridPoint()];
+            const auto &gridIteratorC = gridIteratorC_[splineC.startingGridPoint()];
+            int numPointsA = static_cast<int>(gridIteratorA.size());
+            int numPointsB = static_cast<int>(gridIteratorB.size());
+            int numPointsC = static_cast<int>(gridIteratorC.size());
+            const auto *iteratorDataA = gridIteratorA.data();
+            const auto *iteratorDataB = gridIteratorB.data();
+            const auto *iteratorDataC = gridIteratorC.data();
             for (int component = 0; component < nComponents; ++component) {
                 const auto &quanta = angMomIterator_[component + cartesianOffset];
                 Real param = fractionalParameters(atom, component);
@@ -2517,17 +2829,17 @@ class PMEInstance {
             auto splineA = std::get<0>(bSplines);
             auto splineB = std::get<1>(bSplines);
             auto splineC = std::get<2>(bSplines);
-            const auto &aGridIterator = gridIteratorA_[splineA.startingGridPoint()];
-            const auto &bGridIterator = gridIteratorB_[splineB.startingGridPoint()];
-            const auto &cGridIterator = gridIteratorC_[splineC.startingGridPoint()];
+            const auto &gridIteratorA = gridIteratorA_[splineA.startingGridPoint()];
+            const auto &gridIteratorB = gridIteratorB_[splineB.startingGridPoint()];
+            const auto &gridIteratorC = gridIteratorC_[splineC.startingGridPoint()];
             const Real *splineStartA = splineA[0];
             const Real *splineStartB = splineB[0];
             const Real *splineStartC = splineC[0];
-            for (const auto &cPoint : cGridIterator) {
-                for (const auto &bPoint : bGridIterator) {
+            for (const auto &cPoint : gridIteratorC) {
+                for (const auto &bPoint : gridIteratorB) {
                     const Real *cbRow = potentialGrid + cPoint.first * myGridDimensionA_ * myGridDimensionB_ +
                                         bPoint.first * myGridDimensionA_;
-                    for (const auto &aPoint : aGridIterator) {
+                    for (const auto &aPoint : gridIteratorA) {
                         Real gridVal = cbRow[aPoint.first];
                         for (int component = 0; component < nPotentialComponents; ++component) {
                             const auto &quanta = angMomIterator_[component + cartesianOffset];
@@ -2615,12 +2927,12 @@ class PMEInstance {
             auto gridAddress = forwardTransform(realGrid);
             energy = convolveE(gridAddress);
             auto potentialGrid = inverseTransform(gridAddress);
-            probeGrid(potentialGrid, parameterAngMom, parameters, forces);
+            computeForces(potentialGrid, parameterAngMom, parameters, forces);
         } else if (algorithmType_ == AlgorithmType::CompressedPME) {
             auto gridAddress = compressedForwardTransform(realGrid);
             energy = convolveE(gridAddress);
             auto potentialGrid = compressedInverseTransform(gridAddress);
-            probeGrid(potentialGrid, parameterAngMom, parameters, forces);
+            computeForces(potentialGrid, parameterAngMom, parameters, forces);
         } else {
             std::logic_error("Unknown algorithm in helpme::computeEFRec");
         }
@@ -2666,13 +2978,13 @@ class PMEInstance {
             auto gridAddress = forwardTransform(realGrid);
             energy = convolveEV(gridAddress, virial);
             auto potentialGrid = inverseTransform(gridAddress);
-            probeGrid(potentialGrid, parameterAngMom, parameters, forces);
+            computeForces(potentialGrid, parameterAngMom, parameters, forces);
         } else if (algorithmType_ == AlgorithmType::CompressedPME) {
             auto gridAddress = compressedForwardTransform(realGrid);
             Real *convolvedGrid;
             energy = convolveEV(gridAddress, convolvedGrid, virial);
             auto potentialGrid = compressedInverseTransform(convolvedGrid);
-            probeGrid(potentialGrid, parameterAngMom, parameters, forces);
+            computeForces(potentialGrid, parameterAngMom, parameters, forces);
         } else {
             std::logic_error("Unknown algorithm in helpme::computeEFRec");
         }

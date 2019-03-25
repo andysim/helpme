@@ -231,7 +231,7 @@ TEST_CASE("Full run with a small toy system, comprising two water molecules.") {
         helpme::Matrix<double> potentialGrid(realGrid, nfftz * nffty, nfftx);
         REQUIRE(refPotentialGridD.almostEquals(potentialGrid, TOL));
 
-        pmeD->probeGrid(realGrid, 0, chargesD, forcesD);
+        pmeD->computeForces(realGrid, 0, chargesD, forcesD);
         REQUIRE(refForcesD.almostEquals(forcesD, TOL));
         REQUIRE(refRecEnergy == Approx(energy).margin(TOL));
     }
@@ -266,7 +266,7 @@ TEST_CASE("Full run with a small toy system, comprising two water molecules.") {
         helpme::Matrix<double> potentialGrid(realGrid, nfftz * nffty, nfftx);
         REQUIRE(refPotentialGridD.almostEquals(potentialGrid, TOL));
 
-        pmeD->probeGrid(realGrid, 0, chargesD, forcesD);
+        pmeD->computeForces(realGrid, 0, chargesD, forcesD);
 
         REQUIRE(refForcesD.almostEquals(forcesD, TOL));
         REQUIRE(refRecEnergy == Approx(energy).margin(TOL));
@@ -298,7 +298,7 @@ TEST_CASE("Full run with a small toy system, comprising two water molecules.") {
         helpme::Matrix<float> potentialGrid(realGrid, nfftz * nffty, nfftx);
         REQUIRE(refPotentialGridD.cast<float>().almostEquals(potentialGrid, TOL));
 
-        pmeF->probeGrid(realGrid, 0, chargesD.cast<float>(), forcesF);
+        pmeF->computeForces(realGrid, 0, chargesD.cast<float>(), forcesF);
         REQUIRE(refForcesD.cast<float>().almostEquals(forcesF, TOL));
         REQUIRE(refRecEnergy == Approx(energy).margin(TOL));
     }
@@ -332,7 +332,7 @@ TEST_CASE("Full run with a small toy system, comprising two water molecules.") {
         helpme::Matrix<float> potentialGrid(realGrid, nfftz * nffty, nfftx);
         REQUIRE(refPotentialGridD.cast<float>().almostEquals(potentialGrid, TOL));
 
-        pmeF->probeGrid(realGrid, 0, chargesD.cast<float>(), forcesF);
+        pmeF->computeForces(realGrid, 0, chargesD.cast<float>(), forcesF);
         REQUIRE(refForcesD.cast<float>().almostEquals(forcesF, TOL));
         REQUIRE(refRecEnergy == Approx(energy).margin(TOL));
     }

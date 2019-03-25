@@ -10,6 +10,9 @@
 #define _HELPME_SPLINES_H_
 
 #include "matrix.h"
+#include "mipp_wrapper.h"
+
+#include <assert.h>
 
 /*!
  * \file splines.h
@@ -113,9 +116,9 @@ class BSpline {
      *        ordered as 0, 1, 2, ..., Kmax, -Kmax+1, -Kmax+2, ..., -2, -1.
      * \return a gridDim long vector containing the inverse of the Fourier space spline moduli.
      */
-    helpme::vector<Real> invSplineModuli(short gridDim, std::vector<int> mValues = {}) {
+    mipp::vector<Real> invSplineModuli(short gridDim, mipp::vector<int> mValues = {}) {
         int nKTerms = mValues.size() ? mValues.size() : gridDim;
-        helpme::vector<Real> splineMods(nKTerms, 0);
+        mipp::vector<Real> splineMods(nKTerms, 0);
         Real prefac = 2 * M_PI / gridDim;
         for (int m = 0; m < nKTerms; ++m) {
             Real real = 0;
@@ -163,6 +166,44 @@ class BSpline {
      */
     const Matrix<Real> &splineData() const { return splines_; }
 };
+
+/// Makes B-Spline array.
+template <typename Real>
+inline void makeSplineInPlace(REALVEC *array, const REALVEC &val, const int &n) {
+    REALVEC denom = REALVEC(1) / (n - 1);
+    array[n - 1] = denom * val * array[n - 2];
+    for (int j = 1; j < n - 1; ++j)
+        array[n - j - 1] = denom * ((val + j) * array[n - j - 2] + (REALVEC(n - j) - val) * array[n - j - 1]);
+    array[0] *= denom * (REALVEC(1) - val);
+}
+
+/// Takes BSpline derivative.
+template <typename Real>
+inline void differentiateSpline(const REALVEC *array, REALVEC *dArray, const short &n) {
+    dArray[0] = array[0] * -1;
+    for (short j = 1; j < n - 1; ++j) dArray[j] = array[j - 1] - array[j];
+    dArray[n - 1] = array[n - 2];
+}
+
+template <typename Real>
+void makeSplines(mipp::vector<REALVEC> &splines, REALVEC value, int splineOrder, int derivativeLevel) {
+    size_t splineArrayDim = splineOrder * (derivativeLevel + 1);
+    assert(splines.size() == splineArrayDim);
+
+    for (auto s : splines) s = 0.0f;
+
+    splines[0] = REALVEC(1) - value;
+    splines[1] = value;
+    for (int m = 1; m < splineOrder - 1; ++m) {
+        makeSplineInPlace(&splines[0], value, m + 2);
+        if (m >= splineOrder - derivativeLevel - 2) {
+            short currentDerivative = splineOrder - m - 2;
+            for (short l = 0; l < currentDerivative; ++l)
+                differentiateSpline(&splines[l * splineOrder], &splines[(l + 1) * splineOrder],
+                                    m + 2 + currentDerivative);
+        }
+    }
+}
 
 }  // Namespace helpme
 #endif  // Header guard

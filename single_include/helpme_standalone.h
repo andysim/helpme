@@ -38,6 +38,381 @@
 #include <unistd.h>
 #include <vector>
 
+// original file: ../src/cartesiantransform.h
+
+// BEGINLICENSE
+//
+// This file is part of helPME, which is distributed under the BSD 3-clause license,
+// as described in the LICENSE file in the top level directory of this project.
+//
+// Author: Andrew C. Simmonett
+//
+// ENDLICENSE
+#ifndef _HELPME_STANDALONE_CARTESIANTRANSFORM_H_
+#define _HELPME_STANDALONE_CARTESIANTRANSFORM_H_
+
+// original file: ../src/matrix.h
+
+// BEGINLICENSE
+//
+// This file is part of helPME, which is distributed under the BSD 3-clause license,
+// as described in the LICENSE file in the top level directory of this project.
+//
+// Author: Andrew C. Simmonett
+//
+// ENDLICENSE
+#ifndef _HELPME_STANDALONE_MATRIX_H_
+#define _HELPME_STANDALONE_MATRIX_H_
+
+#include <functional>
+#include <algorithm>
+#include <complex>
+#include <fstream>
+#include <functional>
+#include <initializer_list>
+#include <iostream>
+#include <iomanip>
+#include <numeric>
+#include <stdexcept>
+#include <tuple>
+
+// original file: ../src/lapack_wrapper.h
+
+// BEGINLICENSE
+//
+// This file is part of helPME, which is distributed under the BSD 3-clause license,
+// as described in the LICENSE file in the top level directory of this project.
+//
+// Author: Andrew C. Simmonett
+//
+// ENDLICENSE
+//
+// The code for Jacobi diagonalization is taken (with minimal modification) from
+//
+// http://www.mymathlib.com/c_source/matrices/eigen/jacobi_cyclic_method.c
+//
+#ifndef _HELPME_STANDALONE_LAPACK_WRAPPER_H_
+#define _HELPME_STANDALONE_LAPACK_WRAPPER_H_
+
+#include <cmath>
+#include <limits>
+
+namespace helpme {
+////////////////////////////////////////////////////////////////////////////////
+//  void Jacobi_Cyclic_Method                                                 //
+//            (Real eigenvalues[], Real *eigenvectors, Real *A, int n)  //
+//                                                                            //
+//  Description:                                                              //
+//     Find the eigenvalues and eigenvectors of a symmetric n x n matrix A    //
+//     using the Jacobi method. Upon return, the input matrix A will have     //
+//     been modified.                                                         //
+//     The Jacobi procedure for finding the eigenvalues and eigenvectors of a //
+//     symmetric matrix A is based on finding a similarity transformation     //
+//     which diagonalizes A.  The similarity transformation is given by a     //
+//     product of a sequence of orthogonal (rotation) matrices each of which  //
+//     annihilates an off-diagonal element and its transpose.  The rotation   //
+//     effects only the rows and columns containing the off-diagonal element  //
+//     and its transpose, i.e. if a[i][j] is an off-diagonal element, then    //
+//     the orthogonal transformation rotates rows a[i][] and a[j][], and      //
+//     equivalently it rotates columns a[][i] and a[][j], so that a[i][j] = 0 //
+//     and a[j][i] = 0.                                                       //
+//     The cyclic Jacobi method considers the off-diagonal elements in the    //
+//     following order: (0,1),(0,2),...,(0,n-1),(1,2),...,(n-2,n-1).  If the  //
+//     the magnitude of the off-diagonal element is greater than a treshold,  //
+//     then a rotation is performed to annihilate that off-diagnonal element. //
+//     The process described above is called a sweep.  After a sweep has been //
+//     completed, the threshold is lowered and another sweep is performed     //
+//     with the new threshold. This process is completed until the final      //
+//     sweep is performed with the final threshold.                           //
+//     The orthogonal transformation which annihilates the matrix element     //
+//     a[k][m], k != m, is Q = q[i][j], where q[i][j] = 0 if i != j, i,j != k //
+//     i,j != m and q[i][j] = 1 if i = j, i,j != k, i,j != m, q[k][k] =       //
+//     q[m][m] = cos(phi), q[k][m] = -sin(phi), and q[m][k] = sin(phi), where //
+//     the angle phi is determined by requiring a[k][m] -> 0.  This condition //
+//     on the angle phi is equivalent to                                      //
+//               cot(2 phi) = 0.5 * (a[k][k] - a[m][m]) / a[k][m]             //
+//     Since tan(2 phi) = 2 tan(phi) / (1 - tan(phi)^2),                      //
+//               tan(phi)^2 + 2cot(2 phi) * tan(phi) - 1 = 0.                 //
+//     Solving for tan(phi), choosing the solution with smallest magnitude,   //
+//       tan(phi) = - cot(2 phi) + sgn(cot(2 phi)) sqrt(cot(2phi)^2 + 1).     //
+//     Then cos(phi)^2 = 1 / (1 + tan(phi)^2) and sin(phi)^2 = 1 - cos(phi)^2 //
+//     Finally by taking the sqrts and assigning the sign to the sin the same //
+//     as that of the tan, the orthogonal transformation Q is determined.     //
+//     Let A" be the matrix obtained from the matrix A by applying the        //
+//     similarity transformation Q, since Q is orthogonal, A" = Q'AQ, where Q'//
+//     is the transpose of Q (which is the same as the inverse of Q).  Then   //
+//         a"[i][j] = Q'[i][p] a[p][q] Q[q][j] = Q[p][i] a[p][q] Q[q][j],     //
+//     where repeated indices are summed over.                                //
+//     If i is not equal to either k or m, then Q[i][j] is the Kronecker      //
+//     delta.   So if both i and j are not equal to either k or m,            //
+//                                a"[i][j] = a[i][j].                         //
+//     If i = k, j = k,                                                       //
+//        a"[k][k] =                                                          //
+//           a[k][k]*cos(phi)^2 + a[k][m]*sin(2 phi) + a[m][m]*sin(phi)^2     //
+//     If i = k, j = m,                                                       //
+//        a"[k][m] = a"[m][k] = 0 =                                           //
+//           a[k][m]*cos(2 phi) + 0.5 * (a[m][m] - a[k][k])*sin(2 phi)        //
+//     If i = k, j != k or m,                                                 //
+//        a"[k][j] = a"[j][k] = a[k][j] * cos(phi) + a[m][j] * sin(phi)       //
+//     If i = m, j = k, a"[m][k] = 0                                          //
+//     If i = m, j = m,                                                       //
+//        a"[m][m] =                                                          //
+//           a[m][m]*cos(phi)^2 - a[k][m]*sin(2 phi) + a[k][k]*sin(phi)^2     //
+//     If i= m, j != k or m,                                                  //
+//        a"[m][j] = a"[j][m] = a[m][j] * cos(phi) - a[k][j] * sin(phi)       //
+//                                                                            //
+//     If X is the matrix of normalized eigenvectors stored so that the ith   //
+//     column corresponds to the ith eigenvalue, then AX = X Lamda, where     //
+//     Lambda is the diagonal matrix with the ith eigenvalue stored at        //
+//     Lambda[i][i], i.e. X'AX = Lambda and X is orthogonal, the eigenvectors //
+//     are normalized and orthogonal.  So, X = Q1 Q2 ... Qs, where Qi is      //
+//     the ith orthogonal matrix,  i.e. X can be recursively approximated by  //
+//     the recursion relation X" = X Q, where Q is the orthogonal matrix and  //
+//     the initial estimate for X is the identity matrix.                     //
+//     If j = k, then x"[i][k] = x[i][k] * cos(phi) + x[i][m] * sin(phi),     //
+//     if j = m, then x"[i][m] = x[i][m] * cos(phi) - x[i][k] * sin(phi), and //
+//     if j != k and j != m, then x"[i][j] = x[i][j].                         //
+//                                                                            //
+//  Arguments:                                                                //
+//     Real  eigenvalues                                                      //
+//        Array of dimension n, which upon return contains the eigenvalues of //
+//        the matrix A.                                                       //
+//     Real* eigenvectors                                                     //
+//        Matrix of eigenvectors, the ith column of which contains an         //
+//        eigenvector corresponding to the ith eigenvalue in the array        //
+//        eigenvalues.                                                        //
+//     Real* A                                                                //
+//        Pointer to the first element of the symmetric n x n matrix A. The   //
+//        input matrix A is modified during the process.                      //
+//     int     n                                                              //
+//        The dimension of the array eigenvalues, number of columns and rows  //
+//        of the matrices eigenvectors and A.                                 //
+//                                                                            //
+//  Return Values:                                                            //
+//     Function is of type void.                                              //
+//                                                                            //
+//  Example:                                                                  //
+//     #define N                                                              //
+//     Real A[N][N], Real eigenvalues[N], Real eigenvectors[N][N]             //
+//                                                                            //
+//     (your code to initialize the matrix A )                                //
+//                                                                            //
+//     JacobiCyclicDiagonalization(eigenvalues, (Real*)eigenvectors,          //
+//                                                          (Real *) A, N);   //
+////////////////////////////////////////////////////////////////////////////////
+
+template <typename Real>
+void JacobiCyclicDiagonalization(Real *eigenvalues, Real *eigenvectors, const Real *A, int n) {
+    int i, j, k, m;
+    Real *pAk, *pAm, *p_r, *p_e;
+    Real threshold_norm;
+    Real threshold;
+    Real tan_phi, sin_phi, cos_phi, tan2_phi, sin2_phi, cos2_phi;
+    Real sin_2phi, cos_2phi, cot_2phi;
+    Real dum1;
+    Real dum2;
+    Real dum3;
+    Real max;
+
+    // Take care of trivial cases
+
+    if (n < 1) return;
+    if (n == 1) {
+        eigenvalues[0] = *A;
+        *eigenvectors = 1;
+        return;
+    }
+
+    // Initialize the eigenvalues to the identity matrix.
+
+    for (p_e = eigenvectors, i = 0; i < n; i++)
+        for (j = 0; j < n; p_e++, j++)
+            if (i == j)
+                *p_e = 1;
+            else
+                *p_e = 0;
+
+    // Calculate the threshold and threshold_norm.
+
+    for (threshold = 0, pAk = const_cast<Real *>(A), i = 0; i < (n - 1); pAk += n, i++)
+        for (j = i + 1; j < n; j++) threshold += *(pAk + j) * *(pAk + j);
+    threshold = sqrt(threshold + threshold);
+    threshold_norm = threshold * std::numeric_limits<Real>::epsilon();
+    max = threshold + 1;
+    while (threshold > threshold_norm) {
+        threshold /= 10;
+        if (max < threshold) continue;
+        max = 0;
+        for (pAk = const_cast<Real *>(A), k = 0; k < (n - 1); pAk += n, k++) {
+            for (pAm = pAk + n, m = k + 1; m < n; pAm += n, m++) {
+                if (std::abs(*(pAk + m)) < threshold) continue;
+
+                // Calculate the sin and cos of the rotation angle which
+                // annihilates A[k][m].
+
+                cot_2phi = 0.5f * (*(pAk + k) - *(pAm + m)) / *(pAk + m);
+                dum1 = sqrt(cot_2phi * cot_2phi + 1);
+                if (cot_2phi < 0) dum1 = -dum1;
+                tan_phi = -cot_2phi + dum1;
+                tan2_phi = tan_phi * tan_phi;
+                sin2_phi = tan2_phi / (1 + tan2_phi);
+                cos2_phi = 1 - sin2_phi;
+                sin_phi = sqrt(sin2_phi);
+                if (tan_phi < 0) sin_phi = -sin_phi;
+                cos_phi = sqrt(cos2_phi);
+                sin_2phi = 2 * sin_phi * cos_phi;
+                cos_2phi = cos2_phi - sin2_phi;
+
+                // Rotate columns k and m for both the matrix A
+                //     and the matrix of eigenvectors.
+
+                p_r = const_cast<Real *>(A);
+                dum1 = *(pAk + k);
+                dum2 = *(pAm + m);
+                dum3 = *(pAk + m);
+                *(pAk + k) = dum1 * cos2_phi + dum2 * sin2_phi + dum3 * sin_2phi;
+                *(pAm + m) = dum1 * sin2_phi + dum2 * cos2_phi - dum3 * sin_2phi;
+                *(pAk + m) = 0;
+                *(pAm + k) = 0;
+                for (i = 0; i < n; p_r += n, i++) {
+                    if ((i == k) || (i == m)) continue;
+                    if (i < k)
+                        dum1 = *(p_r + k);
+                    else
+                        dum1 = *(pAk + i);
+                    if (i < m)
+                        dum2 = *(p_r + m);
+                    else
+                        dum2 = *(pAm + i);
+                    dum3 = dum1 * cos_phi + dum2 * sin_phi;
+                    if (i < k)
+                        *(p_r + k) = dum3;
+                    else
+                        *(pAk + i) = dum3;
+                    dum3 = -dum1 * sin_phi + dum2 * cos_phi;
+                    if (i < m)
+                        *(p_r + m) = dum3;
+                    else
+                        *(pAm + i) = dum3;
+                }
+                for (p_e = eigenvectors, i = 0; i < n; p_e += n, i++) {
+                    dum1 = *(p_e + k);
+                    dum2 = *(p_e + m);
+                    *(p_e + k) = dum1 * cos_phi + dum2 * sin_phi;
+                    *(p_e + m) = -dum1 * sin_phi + dum2 * cos_phi;
+                }
+            }
+            for (i = 0; i < n; i++)
+                if (i == k)
+                    continue;
+                else if (max < std::abs(*(pAk + i)))
+                    max = std::abs(*(pAk + i));
+        }
+    }
+    for (pAk = const_cast<Real *>(A), k = 0; k < n; pAk += n, k++) eigenvalues[k] = *(pAk + k);
+}
+
+}  // Namespace helpme
+#endif  // Header guard
+
+// original file: ../src/string_utils.h
+
+// BEGINLICENSE
+//
+// This file is part of helPME, which is distributed under the BSD 3-clause license,
+// as described in the LICENSE file in the top level directory of this project.
+//
+// Author: Andrew C. Simmonett
+//
+// ENDLICENSE
+#ifndef _HELPME_STANDALONE_STRING_UTIL_H_
+#define _HELPME_STANDALONE_STRING_UTIL_H_
+
+#include <complex>
+#include <iomanip>
+#include <iostream>
+#include <sstream>
+#include <string>
+
+namespace helpme {
+
+/*!
+ * \brief makes a string representation of a floating point number.
+ * \param width the width used to display the number.
+ * \param precision the precision used to display the number.
+ * \return the string representation of the floating point number.
+ */
+template <typename T, typename std::enable_if<std::is_floating_point<T>::value, int>::type = 0>
+std::string formatNumber(const T &number, int width, int precision) {
+    std::stringstream stream;
+    stream.setf(std::ios::fixed, std::ios::floatfield);
+    stream << std::setw(width) << std::setprecision(precision) << number;
+    return stream.str();
+}
+
+/*!
+ * \brief makes a string representation of a complex number.
+ * \param width the width used to display the real and the imaginary components.
+ * \param precision the precision used to display the real and the imaginary components.
+ * \return the string representation of the complex number.
+ */
+template <typename T, typename std::enable_if<!std::is_floating_point<T>::value, int>::type = 0>
+std::string formatNumber(const T &number, int width, int precision) {
+    std::stringstream stream;
+    stream.setf(std::ios::fixed, std::ios::floatfield);
+    stream << "(" << std::setw(width) << std::setprecision(precision) << number.real() << ", " << std::setw(width)
+           << std::setprecision(precision) << number.imag() << ")";
+    return stream.str();
+}
+
+/*!
+ * \brief makes a string representation of a multdimensional tensor, stored in a flat array.
+ * \param data pointer to the start of the array holding the tensor information.
+ * \param size the length of the array holding the tensor information.
+ * \param rowDim the dimension of the fastest running index.
+ * \param width the width of each individual floating point number.
+ * \param precision used to display each floating point number.
+ * \return the string representation of the tensor.
+ */
+template <typename T>
+std::string stringify(T *data, size_t size, size_t rowDim, int width = 14, int precision = 8) {
+    std::stringstream stream;
+    for (size_t ind = 0; ind < size; ++ind) {
+        stream << formatNumber(data[ind], width, precision);
+        if (ind % rowDim == rowDim - 1)
+            stream << std::endl;
+        else
+            stream << "  ";
+    }
+    return stream.str();
+}
+
+}  // Namespace helpme
+
+#endif  // Header guard
+
+
+// original file: ../src/mipp_wrapper.h
+
+#ifndef _HELPME_MIPP_WRAPPER_
+#define _HELPME_MIPP_WRAPPER_
+
+#ifdef NOMIPP
+
+#define MAKEVEC(x) (x)
+#define REALVEC Real
+#define REALVECLEN 1
+#define SIZETVEC size_t
+#define SIZETVECLEN 1
+#define STOREVEC(vec, loc) (loc) = (vec)
+namespace mipp {
+template <typename Real>
+using vector = std::vector<Real>;
+}
+
+#else
+
+#define MIPP_ALIGNED_LOADS
 // original file: ../external/MIPP/src/mipp.h
 
 /*
@@ -17793,448 +18168,14 @@ inline Reg<T2> cast(const Reg<T1> v)
 
 #endif /* MY_INTRINSICS_PLUS_PLUS_H_ */
 
+#define MAKEVEC(x) &(x)
+#define REALVEC mipp::Reg<Real>
+#define REALVECLEN mipp::N<Real>()
+#define SIZETVEC mipp::Reg<size_t>
+#define SIZETVECLEN mipp::N<size_t>()
+#define STOREVEC(vec, loc) (vec).store(&(loc))
 
-// original file: ../src/cartesiantransform.h
-
-// BEGINLICENSE
-//
-// This file is part of helPME, which is distributed under the BSD 3-clause license,
-// as described in the LICENSE file in the top level directory of this project.
-//
-// Author: Andrew C. Simmonett
-//
-// ENDLICENSE
-#ifndef _HELPME_STANDALONE_CARTESIANTRANSFORM_H_
-#define _HELPME_STANDALONE_CARTESIANTRANSFORM_H_
-
-// original file: ../src/matrix.h
-
-// BEGINLICENSE
-//
-// This file is part of helPME, which is distributed under the BSD 3-clause license,
-// as described in the LICENSE file in the top level directory of this project.
-//
-// Author: Andrew C. Simmonett
-//
-// ENDLICENSE
-#ifndef _HELPME_STANDALONE_MATRIX_H_
-#define _HELPME_STANDALONE_MATRIX_H_
-
-#include <functional>
-#include <algorithm>
-#include <complex>
-#include <fstream>
-#include <functional>
-#include <initializer_list>
-#include <iostream>
-#include <iomanip>
-#include <numeric>
-#include <stdexcept>
-#include <tuple>
-
-// original file: ../src/lapack_wrapper.h
-
-// BEGINLICENSE
-//
-// This file is part of helPME, which is distributed under the BSD 3-clause license,
-// as described in the LICENSE file in the top level directory of this project.
-//
-// Author: Andrew C. Simmonett
-//
-// ENDLICENSE
-//
-// The code for Jacobi diagonalization is taken (with minimal modification) from
-//
-// http://www.mymathlib.com/c_source/matrices/eigen/jacobi_cyclic_method.c
-//
-#ifndef _HELPME_STANDALONE_LAPACK_WRAPPER_H_
-#define _HELPME_STANDALONE_LAPACK_WRAPPER_H_
-
-#include <cmath>
-#include <limits>
-
-namespace helpme {
-////////////////////////////////////////////////////////////////////////////////
-//  void Jacobi_Cyclic_Method                                                 //
-//            (Real eigenvalues[], Real *eigenvectors, Real *A, int n)  //
-//                                                                            //
-//  Description:                                                              //
-//     Find the eigenvalues and eigenvectors of a symmetric n x n matrix A    //
-//     using the Jacobi method. Upon return, the input matrix A will have     //
-//     been modified.                                                         //
-//     The Jacobi procedure for finding the eigenvalues and eigenvectors of a //
-//     symmetric matrix A is based on finding a similarity transformation     //
-//     which diagonalizes A.  The similarity transformation is given by a     //
-//     product of a sequence of orthogonal (rotation) matrices each of which  //
-//     annihilates an off-diagonal element and its transpose.  The rotation   //
-//     effects only the rows and columns containing the off-diagonal element  //
-//     and its transpose, i.e. if a[i][j] is an off-diagonal element, then    //
-//     the orthogonal transformation rotates rows a[i][] and a[j][], and      //
-//     equivalently it rotates columns a[][i] and a[][j], so that a[i][j] = 0 //
-//     and a[j][i] = 0.                                                       //
-//     The cyclic Jacobi method considers the off-diagonal elements in the    //
-//     following order: (0,1),(0,2),...,(0,n-1),(1,2),...,(n-2,n-1).  If the  //
-//     the magnitude of the off-diagonal element is greater than a treshold,  //
-//     then a rotation is performed to annihilate that off-diagnonal element. //
-//     The process described above is called a sweep.  After a sweep has been //
-//     completed, the threshold is lowered and another sweep is performed     //
-//     with the new threshold. This process is completed until the final      //
-//     sweep is performed with the final threshold.                           //
-//     The orthogonal transformation which annihilates the matrix element     //
-//     a[k][m], k != m, is Q = q[i][j], where q[i][j] = 0 if i != j, i,j != k //
-//     i,j != m and q[i][j] = 1 if i = j, i,j != k, i,j != m, q[k][k] =       //
-//     q[m][m] = cos(phi), q[k][m] = -sin(phi), and q[m][k] = sin(phi), where //
-//     the angle phi is determined by requiring a[k][m] -> 0.  This condition //
-//     on the angle phi is equivalent to                                      //
-//               cot(2 phi) = 0.5 * (a[k][k] - a[m][m]) / a[k][m]             //
-//     Since tan(2 phi) = 2 tan(phi) / (1 - tan(phi)^2),                      //
-//               tan(phi)^2 + 2cot(2 phi) * tan(phi) - 1 = 0.                 //
-//     Solving for tan(phi), choosing the solution with smallest magnitude,   //
-//       tan(phi) = - cot(2 phi) + sgn(cot(2 phi)) sqrt(cot(2phi)^2 + 1).     //
-//     Then cos(phi)^2 = 1 / (1 + tan(phi)^2) and sin(phi)^2 = 1 - cos(phi)^2 //
-//     Finally by taking the sqrts and assigning the sign to the sin the same //
-//     as that of the tan, the orthogonal transformation Q is determined.     //
-//     Let A" be the matrix obtained from the matrix A by applying the        //
-//     similarity transformation Q, since Q is orthogonal, A" = Q'AQ, where Q'//
-//     is the transpose of Q (which is the same as the inverse of Q).  Then   //
-//         a"[i][j] = Q'[i][p] a[p][q] Q[q][j] = Q[p][i] a[p][q] Q[q][j],     //
-//     where repeated indices are summed over.                                //
-//     If i is not equal to either k or m, then Q[i][j] is the Kronecker      //
-//     delta.   So if both i and j are not equal to either k or m,            //
-//                                a"[i][j] = a[i][j].                         //
-//     If i = k, j = k,                                                       //
-//        a"[k][k] =                                                          //
-//           a[k][k]*cos(phi)^2 + a[k][m]*sin(2 phi) + a[m][m]*sin(phi)^2     //
-//     If i = k, j = m,                                                       //
-//        a"[k][m] = a"[m][k] = 0 =                                           //
-//           a[k][m]*cos(2 phi) + 0.5 * (a[m][m] - a[k][k])*sin(2 phi)        //
-//     If i = k, j != k or m,                                                 //
-//        a"[k][j] = a"[j][k] = a[k][j] * cos(phi) + a[m][j] * sin(phi)       //
-//     If i = m, j = k, a"[m][k] = 0                                          //
-//     If i = m, j = m,                                                       //
-//        a"[m][m] =                                                          //
-//           a[m][m]*cos(phi)^2 - a[k][m]*sin(2 phi) + a[k][k]*sin(phi)^2     //
-//     If i= m, j != k or m,                                                  //
-//        a"[m][j] = a"[j][m] = a[m][j] * cos(phi) - a[k][j] * sin(phi)       //
-//                                                                            //
-//     If X is the matrix of normalized eigenvectors stored so that the ith   //
-//     column corresponds to the ith eigenvalue, then AX = X Lamda, where     //
-//     Lambda is the diagonal matrix with the ith eigenvalue stored at        //
-//     Lambda[i][i], i.e. X'AX = Lambda and X is orthogonal, the eigenvectors //
-//     are normalized and orthogonal.  So, X = Q1 Q2 ... Qs, where Qi is      //
-//     the ith orthogonal matrix,  i.e. X can be recursively approximated by  //
-//     the recursion relation X" = X Q, where Q is the orthogonal matrix and  //
-//     the initial estimate for X is the identity matrix.                     //
-//     If j = k, then x"[i][k] = x[i][k] * cos(phi) + x[i][m] * sin(phi),     //
-//     if j = m, then x"[i][m] = x[i][m] * cos(phi) - x[i][k] * sin(phi), and //
-//     if j != k and j != m, then x"[i][j] = x[i][j].                         //
-//                                                                            //
-//  Arguments:                                                                //
-//     Real  eigenvalues                                                      //
-//        Array of dimension n, which upon return contains the eigenvalues of //
-//        the matrix A.                                                       //
-//     Real* eigenvectors                                                     //
-//        Matrix of eigenvectors, the ith column of which contains an         //
-//        eigenvector corresponding to the ith eigenvalue in the array        //
-//        eigenvalues.                                                        //
-//     Real* A                                                                //
-//        Pointer to the first element of the symmetric n x n matrix A. The   //
-//        input matrix A is modified during the process.                      //
-//     int     n                                                              //
-//        The dimension of the array eigenvalues, number of columns and rows  //
-//        of the matrices eigenvectors and A.                                 //
-//                                                                            //
-//  Return Values:                                                            //
-//     Function is of type void.                                              //
-//                                                                            //
-//  Example:                                                                  //
-//     #define N                                                              //
-//     Real A[N][N], Real eigenvalues[N], Real eigenvectors[N][N]             //
-//                                                                            //
-//     (your code to initialize the matrix A )                                //
-//                                                                            //
-//     JacobiCyclicDiagonalization(eigenvalues, (Real*)eigenvectors,          //
-//                                                          (Real *) A, N);   //
-////////////////////////////////////////////////////////////////////////////////
-
-template <typename Real>
-void JacobiCyclicDiagonalization(Real *eigenvalues, Real *eigenvectors, const Real *A, int n) {
-    int i, j, k, m;
-    Real *pAk, *pAm, *p_r, *p_e;
-    Real threshold_norm;
-    Real threshold;
-    Real tan_phi, sin_phi, cos_phi, tan2_phi, sin2_phi, cos2_phi;
-    Real sin_2phi, cos_2phi, cot_2phi;
-    Real dum1;
-    Real dum2;
-    Real dum3;
-    Real max;
-
-    // Take care of trivial cases
-
-    if (n < 1) return;
-    if (n == 1) {
-        eigenvalues[0] = *A;
-        *eigenvectors = 1;
-        return;
-    }
-
-    // Initialize the eigenvalues to the identity matrix.
-
-    for (p_e = eigenvectors, i = 0; i < n; i++)
-        for (j = 0; j < n; p_e++, j++)
-            if (i == j)
-                *p_e = 1;
-            else
-                *p_e = 0;
-
-    // Calculate the threshold and threshold_norm.
-
-    for (threshold = 0, pAk = const_cast<Real *>(A), i = 0; i < (n - 1); pAk += n, i++)
-        for (j = i + 1; j < n; j++) threshold += *(pAk + j) * *(pAk + j);
-    threshold = sqrt(threshold + threshold);
-    threshold_norm = threshold * std::numeric_limits<Real>::epsilon();
-    max = threshold + 1;
-    while (threshold > threshold_norm) {
-        threshold /= 10;
-        if (max < threshold) continue;
-        max = 0;
-        for (pAk = const_cast<Real *>(A), k = 0; k < (n - 1); pAk += n, k++) {
-            for (pAm = pAk + n, m = k + 1; m < n; pAm += n, m++) {
-                if (std::abs(*(pAk + m)) < threshold) continue;
-
-                // Calculate the sin and cos of the rotation angle which
-                // annihilates A[k][m].
-
-                cot_2phi = 0.5f * (*(pAk + k) - *(pAm + m)) / *(pAk + m);
-                dum1 = sqrt(cot_2phi * cot_2phi + 1);
-                if (cot_2phi < 0) dum1 = -dum1;
-                tan_phi = -cot_2phi + dum1;
-                tan2_phi = tan_phi * tan_phi;
-                sin2_phi = tan2_phi / (1 + tan2_phi);
-                cos2_phi = 1 - sin2_phi;
-                sin_phi = sqrt(sin2_phi);
-                if (tan_phi < 0) sin_phi = -sin_phi;
-                cos_phi = sqrt(cos2_phi);
-                sin_2phi = 2 * sin_phi * cos_phi;
-                cos_2phi = cos2_phi - sin2_phi;
-
-                // Rotate columns k and m for both the matrix A
-                //     and the matrix of eigenvectors.
-
-                p_r = const_cast<Real *>(A);
-                dum1 = *(pAk + k);
-                dum2 = *(pAm + m);
-                dum3 = *(pAk + m);
-                *(pAk + k) = dum1 * cos2_phi + dum2 * sin2_phi + dum3 * sin_2phi;
-                *(pAm + m) = dum1 * sin2_phi + dum2 * cos2_phi - dum3 * sin_2phi;
-                *(pAk + m) = 0;
-                *(pAm + k) = 0;
-                for (i = 0; i < n; p_r += n, i++) {
-                    if ((i == k) || (i == m)) continue;
-                    if (i < k)
-                        dum1 = *(p_r + k);
-                    else
-                        dum1 = *(pAk + i);
-                    if (i < m)
-                        dum2 = *(p_r + m);
-                    else
-                        dum2 = *(pAm + i);
-                    dum3 = dum1 * cos_phi + dum2 * sin_phi;
-                    if (i < k)
-                        *(p_r + k) = dum3;
-                    else
-                        *(pAk + i) = dum3;
-                    dum3 = -dum1 * sin_phi + dum2 * cos_phi;
-                    if (i < m)
-                        *(p_r + m) = dum3;
-                    else
-                        *(pAm + i) = dum3;
-                }
-                for (p_e = eigenvectors, i = 0; i < n; p_e += n, i++) {
-                    dum1 = *(p_e + k);
-                    dum2 = *(p_e + m);
-                    *(p_e + k) = dum1 * cos_phi + dum2 * sin_phi;
-                    *(p_e + m) = -dum1 * sin_phi + dum2 * cos_phi;
-                }
-            }
-            for (i = 0; i < n; i++)
-                if (i == k)
-                    continue;
-                else if (max < std::abs(*(pAk + i)))
-                    max = std::abs(*(pAk + i));
-        }
-    }
-    for (pAk = const_cast<Real *>(A), k = 0; k < n; pAk += n, k++) eigenvalues[k] = *(pAk + k);
-}
-
-}  // Namespace helpme
-#endif  // Header guard
-
-// original file: ../src/string_utils.h
-
-// BEGINLICENSE
-//
-// This file is part of helPME, which is distributed under the BSD 3-clause license,
-// as described in the LICENSE file in the top level directory of this project.
-//
-// Author: Andrew C. Simmonett
-//
-// ENDLICENSE
-#ifndef _HELPME_STANDALONE_STRING_UTIL_H_
-#define _HELPME_STANDALONE_STRING_UTIL_H_
-
-#include <complex>
-#include <iomanip>
-#include <iostream>
-#include <sstream>
-#include <string>
-
-namespace helpme {
-
-/*!
- * \brief makes a string representation of a floating point number.
- * \param width the width used to display the number.
- * \param precision the precision used to display the number.
- * \return the string representation of the floating point number.
- */
-template <typename T, typename std::enable_if<std::is_floating_point<T>::value, int>::type = 0>
-std::string formatNumber(const T &number, int width, int precision) {
-    std::stringstream stream;
-    stream.setf(std::ios::fixed, std::ios::floatfield);
-    stream << std::setw(width) << std::setprecision(precision) << number;
-    return stream.str();
-}
-
-/*!
- * \brief makes a string representation of a complex number.
- * \param width the width used to display the real and the imaginary components.
- * \param precision the precision used to display the real and the imaginary components.
- * \return the string representation of the complex number.
- */
-template <typename T, typename std::enable_if<!std::is_floating_point<T>::value, int>::type = 0>
-std::string formatNumber(const T &number, int width, int precision) {
-    std::stringstream stream;
-    stream.setf(std::ios::fixed, std::ios::floatfield);
-    stream << "(" << std::setw(width) << std::setprecision(precision) << number.real() << ", " << std::setw(width)
-           << std::setprecision(precision) << number.imag() << ")";
-    return stream.str();
-}
-
-/*!
- * \brief makes a string representation of a multdimensional tensor, stored in a flat array.
- * \param data pointer to the start of the array holding the tensor information.
- * \param size the length of the array holding the tensor information.
- * \param rowDim the dimension of the fastest running index.
- * \param width the width of each individual floating point number.
- * \param precision used to display each floating point number.
- * \return the string representation of the tensor.
- */
-template <typename T>
-std::string stringify(T *data, size_t size, size_t rowDim, int width = 14, int precision = 8) {
-    std::stringstream stream;
-    for (size_t ind = 0; ind < size; ++ind) {
-        stream << formatNumber(data[ind], width, precision);
-        if (ind % rowDim == rowDim - 1)
-            stream << std::endl;
-        else
-            stream << "  ";
-    }
-    return stream.str();
-}
-
-}  // Namespace helpme
-
-#endif  // Header guard
-
-// original file: ../src/memory.h
-
-// BEGINLICENSE
-//
-// This file is part of helPME, which is distributed under the BSD 3-clause license,
-// as described in the LICENSE file in the top level directory of this project.
-//
-// Author: Andrew C. Simmonett
-//
-// ENDLICENSE
-#ifndef _HELPME_STANDALONE_MEMORY_H_
-#define _HELPME_STANDALONE_MEMORY_H_
-
-#include <stdexcept>
-#include <vector>
-
-#include <fftw3.h>
-
-namespace helpme {
-
-/*!
- * \brief FFTWAllocator a class to handle aligned allocation of memory using the FFTW libraries.
- *        Code is adapted from http://www.josuttis.com/cppcode/myalloc.hpp.html.
- */
-template <class T>
-class FFTWAllocator {
-   public:
-    // type definitions
-    typedef T value_type;
-    typedef T* pointer;
-    typedef const T* const_pointer;
-    typedef T& reference;
-    typedef const T& const_reference;
-    typedef std::size_t size_type;
-    typedef std::ptrdiff_t difference_type;
-
-    // rebind allocator to type U
-    template <class U>
-    struct rebind {
-        typedef FFTWAllocator<U> other;
-    };
-
-    // return address of values
-    pointer address(reference value) const { return &value; }
-    const_pointer address(const_reference value) const { return &value; }
-
-    /* constructors and destructor
-     * - nothing to do because the allocator has no state
-     */
-    FFTWAllocator() throw() {}
-    FFTWAllocator(const FFTWAllocator&) throw() {}
-    template <class U>
-    FFTWAllocator(const FFTWAllocator<U>&) throw() {}
-    ~FFTWAllocator() throw() {}
-
-    // return maximum number of elements that can be allocated
-    size_type max_size() const throw() { return std::numeric_limits<std::size_t>::max() / sizeof(T); }
-
-    // allocate but don't initialize num elements of type T
-    pointer allocate(size_type num, const void* = 0) { return static_cast<pointer>(fftw_malloc(num * sizeof(T))); }
-
-    // initialize elements of allocated storage p with value value
-    void construct(pointer p, const T& value) {
-        // initialize memory with placement new
-        new ((void*)p) T(value);
-    }
-
-    // destroy elements of initialized storage p
-    void destroy(pointer p) {}
-
-    // deallocate storage p of deleted elements
-    void deallocate(pointer p, size_type num) { fftw_free(static_cast<void*>(p)); }
-};
-
-// return that all specializations of this allocator are interchangeable
-template <class T1, class T2>
-bool operator==(const FFTWAllocator<T1>&, const FFTWAllocator<T2>&) throw() {
-    return true;
-}
-template <class T1, class T2>
-bool operator!=(const FFTWAllocator<T1>&, const FFTWAllocator<T2>&) throw() {
-    return false;
-}
-
-template <typename Real>
-using vector = std::vector<Real, FFTWAllocator<Real>>;
-
-}  // Namespace helpme
+#endif
 
 #endif  // Header guard
 
@@ -18277,7 +18218,7 @@ class Matrix {
     /// The number of columns in the matrix.
     size_t nCols_;
     /// A vector to conveniently allocate data, if we really need to.
-    helpme::vector<Real> allocatedData_;
+    mipp::vector<Real> allocatedData_;
     /// Pointer to the raw data, whose allocation may not be controlled by us.
     Real* data_;
 
@@ -18760,7 +18701,7 @@ class Matrix {
         JacobiCyclicDiagonalization<Real>(eigenValues[0], unsortedEigenVectors[0], cbegin(), nRows_);
         unsortedEigenVectors.transposeInPlace();
 
-        std::vector<std::pair<Real, const Real*>> eigenPairs;
+        mipp::vector<std::pair<Real, const Real*>> eigenPairs;
         for (int val = 0; val < nRows_; ++val) eigenPairs.push_back({eigenValues[val][0], unsortedEigenVectors[val]});
         std::sort(eigenPairs.begin(), eigenPairs.end());
         if (order == SortOrder::Descending) std::reverse(eigenPairs.begin(), eigenPairs.end());
@@ -18923,7 +18864,7 @@ Matrix<Real> cartesianTransform(int maxAngularMomentum, bool transformOnlyThisSh
 #include <type_traits>
 
 #include <fftw3.h>
-// #include "memory.h"
+// #include "mipp_wrapper.h"
 
 namespace helpme {
 
@@ -19040,9 +18981,9 @@ class FFTWWrapper {
                 "Make sure that -DHAVE_FFTWF=1, -DHAVE_FFTWD=1 or -DHAVE_FFTWL=1 is added to the compiler flags"
                 "for single, double and long double precision support, respectively.");
         }
-        helpme::vector<Real> realTemp(fftDimension_);
-        helpme::vector<std::complex<Real>> complexTemp1(fftDimension_);
-        helpme::vector<std::complex<Real>> complexTemp2(fftDimension_);
+        mipp::vector<Real> realTemp(fftDimension_);
+        mipp::vector<std::complex<Real>> complexTemp1(fftDimension_);
+        mipp::vector<std::complex<Real>> complexTemp2(fftDimension_);
         Real *realPtr = realTemp.data();
         Complex *complexPtr1 = reinterpret_cast<Complex *>(complexTemp1.data());
         Complex *complexPtr2 = reinterpret_cast<Complex *>(complexTemp2.data());
@@ -19592,7 +19533,7 @@ int findGridSize(T inputSize, const std::initializer_list<T> &requiredDivisors) 
 #endif  // Header guard
 
 // #include "matrix.h"
-// #include "memory.h"
+// #include "mipp_wrapper.h"
 #if HAVE_MPI == 1
 // original file: ../src/mpi_wrapper.h
 
@@ -19887,6 +19828,9 @@ struct raiseNormToIntegerPower {
 #define _HELPME_STANDALONE_SPLINES_H_
 
 // #include "matrix.h"
+// #include "mipp_wrapper.h"
+
+#include <assert.h>
 
 /*!
  * \file splines.h
@@ -19990,9 +19934,9 @@ class BSpline {
      *        ordered as 0, 1, 2, ..., Kmax, -Kmax+1, -Kmax+2, ..., -2, -1.
      * \return a gridDim long vector containing the inverse of the Fourier space spline moduli.
      */
-    helpme::vector<Real> invSplineModuli(short gridDim, std::vector<int> mValues = {}) {
+    mipp::vector<Real> invSplineModuli(short gridDim, mipp::vector<int> mValues = {}) {
         int nKTerms = mValues.size() ? mValues.size() : gridDim;
-        helpme::vector<Real> splineMods(nKTerms, 0);
+        mipp::vector<Real> splineMods(nKTerms, 0);
         Real prefac = 2 * M_PI / gridDim;
         for (int m = 0; m < nKTerms; ++m) {
             Real real = 0;
@@ -20040,6 +19984,44 @@ class BSpline {
      */
     const Matrix<Real> &splineData() const { return splines_; }
 };
+
+/// Makes B-Spline array.
+template <typename Real>
+inline void makeSplineInPlace(REALVEC *array, const REALVEC &val, const int &n) {
+    REALVEC denom = REALVEC(1) / (n - 1);
+    array[n - 1] = denom * val * array[n - 2];
+    for (int j = 1; j < n - 1; ++j)
+        array[n - j - 1] = denom * ((val + j) * array[n - j - 2] + (REALVEC(n - j) - val) * array[n - j - 1]);
+    array[0] *= denom * (REALVEC(1) - val);
+}
+
+/// Takes BSpline derivative.
+template <typename Real>
+inline void differentiateSpline(const REALVEC *array, REALVEC *dArray, const short &n) {
+    dArray[0] = array[0] * -1;
+    for (short j = 1; j < n - 1; ++j) dArray[j] = array[j - 1] - array[j];
+    dArray[n - 1] = array[n - 2];
+}
+
+template <typename Real>
+void makeSplines(mipp::vector<REALVEC> &splines, REALVEC value, int splineOrder, int derivativeLevel) {
+    size_t splineArrayDim = splineOrder * (derivativeLevel + 1);
+    assert(splines.size() == splineArrayDim);
+
+    for (auto s : splines) s = 0.0f;
+
+    splines[0] = REALVEC(1) - value;
+    splines[1] = value;
+    for (int m = 1; m < splineOrder - 1; ++m) {
+        makeSplineInPlace(&splines[0], value, m + 2);
+        if (m >= splineOrder - derivativeLevel - 2) {
+            short currentDerivative = splineOrder - m - 2;
+            for (short l = 0; l < currentDerivative; ++l)
+                differentiateSpline(&splines[l * splineOrder], &splines[(l + 1) * splineOrder],
+                                    m + 2 + currentDerivative);
+        }
+    }
+}
 
 }  // Namespace helpme
 #endif  // Header guard
@@ -20218,6 +20200,26 @@ struct SplineCacheEntry {
           absoluteAtomNumber(-1) {}
 };
 
+template <typename Real>
+struct SplineCache {
+    using GridContributions = mipp::vector<mipp::vector<std::pair<size_t, size_t>>>;
+    /// List of atoms that contribute to this node's grid.
+    mipp::vector<size_t> atomList_;
+    /// Spline coefficients ordered by grid address then atom idx, showing the.
+    mipp::vector<size_t> splineMetaData_;
+    /// The cache of dense spline coefficients stored as derivative level, then grid address, then atom idx fastest
+    /// running.
+    mipp::vector<Real> splineCoefficients_;
+    /// A sparse map showing the address in the dense list (gridAddress, atomAddress) of each contribution to each.
+    mipp::vector<GridContributions> gridContributions_;
+    /// The number of atoms, accounting for padding to a multiple of the vector length.
+    size_t paddedNumAtoms_ = 0;
+    /// The spline order in the cache.
+    size_t splineOrder_ = 0;
+    /// The maximum derivative level of the splines in the cache.
+    size_t splineDerivativeLevel_ = 0;
+};
+
 /*!
  * \class PMEInstance
  * \brief A class to encapsulate information related to a particle mesh Ewald calculation.
@@ -20229,11 +20231,12 @@ struct SplineCacheEntry {
  */
 template <typename Real, typename std::enable_if<std::is_floating_point<Real>::value, int>::type = 0>
 class PMEInstance {
-    using GridIterator = std::vector<std::vector<std::pair<short, short>>>;
+    using GridIterator = mipp::vector<mipp::vector<std::pair<short, short>>>;
+    using GridContributions = mipp::vector<mipp::vector<std::pair<size_t, size_t>>>;
     using Complex = std::complex<Real>;
     using Spline = BSpline<Real>;
     using RealMat = Matrix<Real>;
-    using RealVec = helpme::vector<Real>;
+    using RealVec = mipp::vector<Real>;
 
    public:
     /*!
@@ -20279,12 +20282,14 @@ class PMEInstance {
     /// The scaled reciprocal lattice vectors, for transforming forces from scaled fractional coordinates.
     RealMat scaledRecVecs_;
     /// An iterator over angular momentum components.
-    std::vector<std::array<short, 3>> angMomIterator_;
+    mipp::vector<std::array<short, 3>> angMomIterator_;
     /// The number of permutations of each multipole component.
     RealVec permutations_;
     /// From a given starting point on the {A,B,C} edge of the grid, lists all points to be handled, correctly wrapping
     /// around the end.
     GridIterator gridIteratorA_, gridIteratorB_, gridIteratorC_;
+    /// A
+    mipp::vector<mipp::vector<int>> maskedGridIteratorA_, maskedGridIteratorB_, maskedGridIteratorC_;
     /// The (inverse) bspline moduli to normalize the spreading / probing steps; these are folded into the convolution.
     RealVec splineModA_, splineModB_, splineModC_;
     /// The cached influence function involved in the convolution.
@@ -20362,17 +20367,19 @@ class PMEInstance {
     /// The type of alignment scheme used for the lattice vectors.
     LatticeType latticeType_;
     /// Communication buffers for MPI parallelism.
-    helpme::vector<Complex> workSpace1_, workSpace2_;
+    mipp::vector<Complex> workSpace1_, workSpace2_;
     /// FFTW wrappers to help with transformations in the {A,B,C} dimensions.
     FFTWWrapper<Real> fftHelperA_, fftHelperB_, fftHelperC_;
     /// The list of atoms, and their fractional coordinates, that will contribute to this node.
-    std::vector<std::tuple<int, Real, Real, Real>> atomList_;
+    mipp::vector<std::tuple<int, Real, Real, Real>> atomList_;
     /// The cached list of splines, which is stored as a member to make it persistent.
-    std::vector<SplineCacheEntry<Real>> splineCache_;
+    mipp::vector<SplineCacheEntry<Real>> splineCache_;
     /// The transformation matrices for the compressed PME algorithms, in the {A,B,C} dimensions.
     RealMat compressionCoefficientsA_, compressionCoefficientsB_, compressionCoefficientsC_;
     /// Iterators that define the reciprocal lattice sums over each index, correctly defining -1/2 <= m{A,B,C} < 1/2.
-    std::vector<int> mValsA_, mValsB_, mValsC_;
+    mipp::vector<int> mValsA_, mValsB_, mValsC_;
+    /// The splines for this atom's grid, and associated metadata.
+    SplineCache<Real> newSplineCache_;
 
     /*!
      * \brief A simple helper to compute factorials.
@@ -20385,6 +20392,51 @@ class PMEInstance {
         return ret;
     }
 
+    /*!
+     * \brief makeMaskedGridIterator makes an iterator over the spline values that contribute to this node's grid
+     *        in a given Cartesian dimension.  The iterator is a simple list of grid points with -1 where no
+     *        contribution is needed.
+     * \param dimension the dimension of the grid in the Cartesian dimension of interest.
+     * \param first the first grid point in the Cartesian dimension to be handled by this node.
+     * \param last the element past the last grid point in the Cartesian dimension to be handled by this node.
+     * \param paddingSize the size of the "halo" region around this grid onto which the charge can be spread
+     *        that really belongs to neighboring nodes.  For compressed PME we assume that each node handles
+     *        only its own atoms and spreads onto an expanded grid to account for this.  In regular PME there
+     *        is no padding because we assume that all halo atoms are present on this node before spreading.
+     * \return the vector of spline iterators for each starting grid point.
+     */
+    mipp::vector<mipp::vector<int>> makeMaskedGridIterator(int dimension, int first, int last, int paddingSize) const {
+        mipp::vector<mipp::vector<int>> gridIterator;
+        if (paddingSize) {
+            // This version assumes that every atom on this node is blindly place on the
+            // grid, requiring that a padding area of size splineOrder-1 be present.
+            for (int gridStart = 0; gridStart < dimension; ++gridStart) {
+                mipp::vector<int> splineIterator(splineOrder_, -1);
+                if (gridStart >= first && gridStart < last - paddingSize) {
+                    for (int splineIndex = 0; splineIndex < splineOrder_; ++splineIndex) {
+                        int gridPoint = (splineIndex + gridStart);
+                        splineIterator[splineIndex] = gridPoint - first;
+                    }
+                }
+                splineIterator.shrink_to_fit();
+                gridIterator.push_back(splineIterator);
+            }
+        } else {
+            // This version assumes that each node has its own atoms, plus "halo" atoms
+            // from neighboring grids that can contribute to this node's grid.
+            for (int gridStart = 0; gridStart < dimension; ++gridStart) {
+                mipp::vector<int> splineIterator(splineOrder_, 0);
+                for (int splineIndex = 0; splineIndex < splineOrder_; ++splineIndex) {
+                    int gridPoint = (splineIndex + gridStart) % dimension;
+                    splineIterator[splineIndex] = (gridPoint >= first && gridPoint < last) ? gridPoint - first : -1;
+                }
+                splineIterator.shrink_to_fit();
+                gridIterator.push_back(splineIterator);
+            }
+        }
+        gridIterator.shrink_to_fit();
+        return gridIterator;
+    }
     /*!
      * \brief makeGridIterator makes an iterator over the spline values that contribute to this node's grid
      *        in a given Cartesian dimension.  The iterator is of the form (grid point, spline index) and is
@@ -20404,7 +20456,7 @@ class PMEInstance {
             // This version assumes that every atom on this node is blindly place on the
             // grid, requiring that a padding area of size splineOrder-1 be present.
             for (int gridStart = 0; gridStart < dimension; ++gridStart) {
-                std::vector<std::pair<short, short>> splineIterator(splineOrder_);
+                mipp::vector<std::pair<short, short>> splineIterator(splineOrder_);
                 splineIterator.clear();
                 if (gridStart >= first && gridStart < last - paddingSize) {
                     for (int splineIndex = 0; splineIndex < splineOrder_; ++splineIndex) {
@@ -20419,7 +20471,7 @@ class PMEInstance {
             // This version assumes that each node has its own atoms, plus "halo" atoms
             // from neighboring grids that can contribute to this node's grid.
             for (int gridStart = 0; gridStart < dimension; ++gridStart) {
-                std::vector<std::pair<short, short>> splineIterator(splineOrder_);
+                mipp::vector<std::pair<short, short>> splineIterator(splineOrder_);
                 splineIterator.clear();
                 for (int splineIndex = 0; splineIndex < splineOrder_; ++splineIndex) {
                     int gridPoint = (splineIndex + gridStart) % dimension;
@@ -20500,15 +20552,15 @@ class PMEInstance {
      */
     void spreadParametersImpl(const int &atom, Real *realGrid, const int &nComponents, const Spline &splineA,
                               const Spline &splineB, const Spline &splineC, const RealMat &parameters) {
-        const auto &aGridIterator = gridIteratorA_[splineA.startingGridPoint()];
-        const auto &bGridIterator = gridIteratorB_[splineB.startingGridPoint()];
-        const auto &cGridIterator = gridIteratorC_[splineC.startingGridPoint()];
-        int numPointsA = static_cast<int>(aGridIterator.size());
-        int numPointsB = static_cast<int>(bGridIterator.size());
-        int numPointsC = static_cast<int>(cGridIterator.size());
-        const auto *iteratorDataA = aGridIterator.data();
-        const auto *iteratorDataB = bGridIterator.data();
-        const auto *iteratorDataC = cGridIterator.data();
+        const auto &gridIteratorA = gridIteratorA_[splineA.startingGridPoint()];
+        const auto &gridIteratorB = gridIteratorB_[splineB.startingGridPoint()];
+        const auto &gridIteratorC = gridIteratorC_[splineC.startingGridPoint()];
+        int numPointsA = static_cast<int>(gridIteratorA.size());
+        int numPointsB = static_cast<int>(gridIteratorB.size());
+        int numPointsC = static_cast<int>(gridIteratorC.size());
+        const auto *iteratorDataA = gridIteratorA.data();
+        const auto *iteratorDataB = gridIteratorB.data();
+        const auto *iteratorDataC = gridIteratorC.data();
         for (int component = 0; component < nComponents; ++component) {
             const auto &quanta = angMomIterator_[component];
             Real param = parameters(atom, component);
@@ -20541,19 +20593,19 @@ class PMEInstance {
      * \param parameter the list of parameter associated with the given atom.
      * \param forces a 3 vector of the forces for this atom, ordered in memory as {Fx, Fy, Fz}.
      */
-    void probeGridImpl(const Real *potentialGrid, const Spline &splineA, const Spline &splineB, const Spline &splineC,
+    void computeForcesImpl(const Real *potentialGrid, const Spline &splineA, const Spline &splineB, const Spline &splineC,
                        const Real &parameter, Real *forces) const {
-        const auto &aGridIterator = gridIteratorA_[splineA.startingGridPoint()];
-        const auto &bGridIterator = gridIteratorB_[splineB.startingGridPoint()];
-        const auto &cGridIterator = gridIteratorC_[splineC.startingGridPoint()];
+        const auto &gridIteratorA = gridIteratorA_[splineA.startingGridPoint()];
+        const auto &gridIteratorB = gridIteratorB_[splineB.startingGridPoint()];
+        const auto &gridIteratorC = gridIteratorC_[splineC.startingGridPoint()];
         // We unpack the vector to raw pointers, as profiling shows that using range based for loops over vectors
         // causes a signficant penalty in the innermost loop, primarily due to checking the loop stop condition.
-        int numPointsA = static_cast<int>(aGridIterator.size());
-        int numPointsB = static_cast<int>(bGridIterator.size());
-        int numPointsC = static_cast<int>(cGridIterator.size());
-        const auto *iteratorDataA = aGridIterator.data();
-        const auto *iteratorDataB = bGridIterator.data();
-        const auto *iteratorDataC = cGridIterator.data();
+        int numPointsA = static_cast<int>(gridIteratorA.size());
+        int numPointsB = static_cast<int>(gridIteratorB.size());
+        int numPointsC = static_cast<int>(gridIteratorC.size());
+        const auto *iteratorDataA = gridIteratorA.data();
+        const auto *iteratorDataB = gridIteratorB.data();
+        const auto *iteratorDataC = gridIteratorC.data();
         const Real *splineStartA0 = splineA[0];
         const Real *splineStartB0 = splineB[0];
         const Real *splineStartC0 = splineC[0];
@@ -20600,19 +20652,19 @@ class PMEInstance {
      * N.B. Make sure that updateAngMomIterator() has been called first with the appropriate derivative
      * level for the requested potential derivatives.
      */
-    void probeGridImpl(const Real *potentialGrid, const int &nPotentialComponents, const Spline &splineA,
+    void computeForcesImpl(const Real *potentialGrid, const int &nPotentialComponents, const Spline &splineA,
                        const Spline &splineB, const Spline &splineC, Real *phiPtr) {
-        const auto &aGridIterator = gridIteratorA_[splineA.startingGridPoint()];
-        const auto &bGridIterator = gridIteratorB_[splineB.startingGridPoint()];
-        const auto &cGridIterator = gridIteratorC_[splineC.startingGridPoint()];
+        const auto &gridIteratorA = gridIteratorA_[splineA.startingGridPoint()];
+        const auto &gridIteratorB = gridIteratorB_[splineB.startingGridPoint()];
+        const auto &gridIteratorC = gridIteratorC_[splineC.startingGridPoint()];
         const Real *splineStartA = splineA[0];
         const Real *splineStartB = splineB[0];
         const Real *splineStartC = splineC[0];
-        for (const auto &cPoint : cGridIterator) {
-            for (const auto &bPoint : bGridIterator) {
+        for (const auto &cPoint : gridIteratorC) {
+            for (const auto &bPoint : gridIteratorB) {
                 const Real *cbRow = potentialGrid + cPoint.first * myGridDimensionA_ * myGridDimensionB_ +
                                     bPoint.first * myGridDimensionA_;
-                for (const auto &aPoint : aGridIterator) {
+                for (const auto &aPoint : gridIteratorA) {
                     Real gridVal = cbRow[aPoint.first];
                     for (int component = 0; component < nPotentialComponents; ++component) {
                         const auto &quanta = angMomIterator_[component];
@@ -20653,11 +20705,11 @@ class PMEInstance {
      * \endcode
      * \param forces a Nx3 matrix of the forces, ordered in memory as {Fx1,Fy1,Fz1,Fx2,Fy2,Fz2,....FxN,FyN,FzN}.
      */
-    void probeGridImpl(const int &atom, const Real *potentialGrid, const int &nComponents, const int &nForceComponents,
+    void computeForcesImpl(const int &atom, const Real *potentialGrid, const int &nComponents, const int &nForceComponents,
                        const Spline &splineA, const Spline &splineB, const Spline &splineC, Real *phiPtr,
                        const RealMat &parameters, Real *forces) {
         std::fill(phiPtr, phiPtr + nForceComponents, 0);
-        probeGridImpl(potentialGrid, nForceComponents, splineA, splineB, splineC, phiPtr);
+        computeForcesImpl(potentialGrid, nForceComponents, splineA, splineB, splineC, phiPtr);
 
         Real fracForce[3] = {0, 0, 0};
         for (int component = 0; component < nComponents; ++component) {
@@ -21276,6 +21328,12 @@ class PMEInstance {
                                               myFirstGridPointB_ + myGridDimensionB_, gridPaddingB);
             gridIteratorC_ = makeGridIterator(gridDimensionC_, myFirstGridPointC_,
                                               myFirstGridPointC_ + myGridDimensionC_, gridPaddingC);
+            maskedGridIteratorA_ = makeMaskedGridIterator(gridDimensionA_, myFirstGridPointA_,
+                                                          myFirstGridPointA_ + myGridDimensionA_, gridPaddingA);
+            maskedGridIteratorB_ = makeMaskedGridIterator(gridDimensionB_, myFirstGridPointB_,
+                                                          myFirstGridPointB_ + myGridDimensionB_, gridPaddingB);
+            maskedGridIteratorC_ = makeMaskedGridIterator(gridDimensionC_, myFirstGridPointC_,
+                                                          myFirstGridPointC_ + myGridDimensionC_, gridPaddingC);
 
             // Assign a large default so that uninitialized values end up generating zeros later on
             mValsA_.resize(myNumKSumTermsA_, 99);
@@ -21406,8 +21464,8 @@ class PMEInstance {
             subsetOfCAlongB_ = myGridDimensionC_ / numNodesB_;
             subsetOfBAlongC_ = myGridDimensionB_ / numNodesC_;
 
-            workSpace1_ = helpme::vector<Complex>(scratchSize);
-            workSpace2_ = helpme::vector<Complex>(scratchSize);
+            workSpace1_ = mipp::vector<Complex>(scratchSize);
+            workSpace2_ = mipp::vector<Complex>(scratchSize);
         }
     }
 
@@ -21462,6 +21520,31 @@ class PMEInstance {
         Real *realGrid = reinterpret_cast<Real *>(workSpace1_.data());
         std::fill(workSpace1_.begin(), workSpace1_.end(), 0);
         updateAngMomIterator(parameterAngMom);
+        size_t gridDimension = myGridDimensionC_ * myGridDimensionB_ * myGridDimensionA_;
+        size_t chunkSize = std::ceil((float)gridDimension / nThreads_);
+#if 1
+        const Real *coefficients = newSplineCache_.splineCoefficients_.data();
+#pragma omp parallel num_threads(nThreads_)
+        {
+#ifdef _OPENMP
+            int thread = omp_get_thread_num();
+#else
+            int thread = 0;
+#endif
+            size_t myStart = thread * chunkSize;
+            auto &thisThreadContributions = newSplineCache_.gridContributions_[thread];
+            const size_t numGridPoints = thisThreadContributions.size();
+            for (size_t threadGridPoint = 0; threadGridPoint < numGridPoints; ++threadGridPoint) {
+                const size_t gridPoint = threadGridPoint + myStart;
+                const auto gridContributionsList = thisThreadContributions[threadGridPoint];
+                for (const auto contribution : gridContributionsList) {
+                    const auto *parameterPtr = parameters[contribution.first];
+                    const auto &cacheAddress = contribution.second;
+                    realGrid[gridPoint] += coefficients[cacheAddress] * parameterPtr[0];
+                }
+            }
+        }
+#else
         size_t nAtoms = atomList_.size();
         int nComponents = nCartesian(parameterAngMom);
         for (size_t relativeAtomNumber = 0; relativeAtomNumber < nAtoms; ++relativeAtomNumber) {
@@ -21472,6 +21555,7 @@ class PMEInstance {
             const auto &splineC = entry.cSpline;
             spreadParametersImpl(atom, realGrid, nComponents, splineA, splineB, splineC, parameters);
         }
+#endif
         return realGrid;
     }
 
@@ -21485,6 +21569,15 @@ class PMEInstance {
 
         atomList_.clear();
         size_t nAtoms = coords.nRows();
+        newSplineCache_.atomList_.clear();
+
+        mipp::vector<Real> distanceFromGridPointA(nAtoms, 0);
+        mipp::vector<Real> distanceFromGridPointB(nAtoms, 0);
+        mipp::vector<Real> distanceFromGridPointC(nAtoms, 0);
+        mipp::vector<size_t> startingGridPointsA(nAtoms, 0);
+        mipp::vector<size_t> startingGridPointsB(nAtoms, 0);
+        mipp::vector<size_t> startingGridPointsC(nAtoms, 0);
+        size_t denseAtomIndex = 0;
         for (int atom = 0; atom < nAtoms; ++atom) {
             const Real *atomCoords = coords[atom];
             constexpr float EPS = 1e-6;
@@ -21501,19 +21594,201 @@ class PMEInstance {
             short aStartingGridPoint = gridDimensionA_ * aCoord;
             short bStartingGridPoint = gridDimensionB_ * bCoord;
             short cStartingGridPoint = gridDimensionC_ * cCoord;
-            const auto &aGridIterator = gridIteratorA_[aStartingGridPoint];
-            const auto &bGridIterator = gridIteratorB_[bStartingGridPoint];
-            const auto &cGridIterator = gridIteratorC_[cStartingGridPoint];
-            if (aGridIterator.size() && bGridIterator.size() && cGridIterator.size()) {
+            const auto &gridIteratorA = gridIteratorA_[aStartingGridPoint];
+            const auto &gridIteratorB = gridIteratorB_[bStartingGridPoint];
+            const auto &gridIteratorC = gridIteratorC_[cStartingGridPoint];
+            if (gridIteratorA.size() && gridIteratorB.size() && gridIteratorC.size()) {
+                // This atom contributes to this node's grid
                 atomList_.emplace_back(atom, aCoord, bCoord, cCoord);
+                newSplineCache_.atomList_.push_back(atom);
+                startingGridPointsA[denseAtomIndex] = aStartingGridPoint;
+                startingGridPointsB[denseAtomIndex] = bStartingGridPoint;
+                startingGridPointsC[denseAtomIndex] = cStartingGridPoint;
+                distanceFromGridPointA[denseAtomIndex] = gridDimensionA_ * aCoord - aStartingGridPoint;
+                distanceFromGridPointB[denseAtomIndex] = gridDimensionB_ * bCoord - bStartingGridPoint;
+                distanceFromGridPointC[denseAtomIndex] = gridDimensionC_ * cCoord - cStartingGridPoint;
+                ++denseAtomIndex;
+            }
+        }
+        // Now we know how many atoms we can allocate the cache
+        nAtoms = denseAtomIndex;
+        // Make sure that we know the number of atoms that exactly fit an integer number of registers
+        size_t paddedNumAtoms = std::ceil((float) nAtoms / REALVECLEN) * REALVECLEN;
+        newSplineCache_.paddedNumAtoms_ = paddedNumAtoms;
+        newSplineCache_.splineOrder_ = splineOrder_;
+        newSplineCache_.splineDerivativeLevel_ = splineDerivativeLevel;
+        size_t splineOrderCubed = std::pow(splineOrder_, 3);
+        size_t cacheDimension = splineOrderCubed * paddedNumAtoms;
+        size_t nAngMomComponents = nCartesian(splineDerivativeLevel);
+        updateAngMomIterator(splineDerivativeLevel);
+        newSplineCache_.splineCoefficients_.resize(nAngMomComponents * cacheDimension, 0);
+        newSplineCache_.splineMetaData_.resize(cacheDimension, 0);
+        std::fill(newSplineCache_.splineMetaData_.begin(), newSplineCache_.splineMetaData_.end(), 0);
+        size_t splinesDim = splineOrder_ * (splineDerivativeLevel + 1);
+        mipp::vector<REALVEC> splinesA(splinesDim);
+        mipp::vector<REALVEC> splinesB(splinesDim);
+        mipp::vector<REALVEC> splinesC(splinesDim);
+        size_t *metaData = newSplineCache_.splineMetaData_.data();
+        std::vector<bool> masks(cacheDimension, false);
+        Real *coefficients = newSplineCache_.splineCoefficients_.data();
+        for (size_t atomChunk = 0; atomChunk < paddedNumAtoms; atomChunk += REALVECLEN) {
+            // Make spline metadata
+            for (size_t atom = atomChunk; atom < atomChunk + REALVECLEN; ++atom) {
+                if (atom >= nAtoms) continue;
+                const auto &maskedGridIteratorA = maskedGridIteratorA_[startingGridPointsA[atom]];
+                const auto &maskedGridIteratorB = maskedGridIteratorB_[startingGridPointsB[atom]];
+                const auto &maskedGridIteratorC = maskedGridIteratorC_[startingGridPointsC[atom]];
+                size_t offsetCBA = 0;
+                for (int orderC = 0; orderC < splineOrder_; ++orderC) {
+                    int gridPointC = maskedGridIteratorC[orderC];
+                    size_t gridAddressC = std::abs(gridPointC) * myGridDimensionB_ * myGridDimensionA_;
+                    for (int orderB = 0; orderB < splineOrder_; ++orderB) {
+                        int gridPointB = maskedGridIteratorB[orderB];
+                        size_t gridAddressCB = gridAddressC + std::abs(gridPointB) * myGridDimensionA_;
+                        for (int orderA = 0; orderA < splineOrder_; ++orderA) {
+                            size_t gridPointA = maskedGridIteratorA[orderA];
+                            size_t gridAddressCBA = gridAddressCB + std::abs(gridPointA);
+                            bool thisNodeContributes =
+                                static_cast<size_t>(gridPointA >= 0 && gridPointB >= 0 && gridPointC >= 0);
+                            metaData[offsetCBA + atom] = thisNodeContributes * gridAddressCBA;
+                            masks[offsetCBA + atom] = thisNodeContributes;
+                            offsetCBA += paddedNumAtoms;
+                        }
+                    }
+                }
+            }
+            // Construct a mask for values that belong on other nodes
+            mipp::vector<mipp::vector<Real>> masksVecA(splineOrder_);
+            mipp::vector<mipp::vector<Real>> masksVecB(splineOrder_);
+            mipp::vector<mipp::vector<Real>> masksVecC(splineOrder_);
+            for (size_t spline = 0; spline < splineOrder_; ++spline) {
+                for (size_t atom = atomChunk; atom < atomChunk + REALVECLEN; ++atom) {
+                    if (atom < nAtoms) {
+                        const int &splineA = maskedGridIteratorA_[startingGridPointsA[atom]][spline];
+                        const int &splineB = maskedGridIteratorB_[startingGridPointsB[atom]][spline];
+                        const int &splineC = maskedGridIteratorC_[startingGridPointsC[atom]][spline];
+                        masksVecA[spline].push_back(static_cast<Real>(splineA >= 0));
+                        masksVecB[spline].push_back(static_cast<Real>(splineB >= 0));
+                        masksVecC[spline].push_back(static_cast<Real>(splineC >= 0));
+                    } else {
+                        masksVecA[spline].push_back(static_cast<Real>(0));
+                        masksVecB[spline].push_back(static_cast<Real>(0));
+                        masksVecC[spline].push_back(static_cast<Real>(0));
+                    }
+                }
+            }
+            mipp::vector<REALVEC> masksA(splineOrder_);
+            mipp::vector<REALVEC> masksB(splineOrder_);
+            mipp::vector<REALVEC> masksC(splineOrder_);
+            for (size_t spline = 0; spline < splineOrder_; ++spline) {
+                masksA[spline] = MAKEVEC((masksVecA[spline][0]));
+                masksB[spline] = MAKEVEC((masksVecB[spline][0]));
+                masksC[spline] = MAKEVEC((masksVecC[spline][0]));
+            }
+            // Make B-Splines and products thereof
+            REALVEC distanceA = MAKEVEC(distanceFromGridPointA[atomChunk]);
+            REALVEC distanceB = MAKEVEC(distanceFromGridPointB[atomChunk]);
+            REALVEC distanceC = MAKEVEC(distanceFromGridPointC[atomChunk]);
+            makeSplines(splinesA, distanceA, splineOrder_, splineDerivativeLevel);
+            makeSplines(splinesB, distanceB, splineOrder_, splineDerivativeLevel);
+            makeSplines(splinesC, distanceC, splineOrder_, splineDerivativeLevel);
+            size_t offsetCBA = 0;
+            for (int orderC = 0; orderC < splineOrder_; ++orderC) {
+                for (int orderB = 0; orderB < splineOrder_; ++orderB) {
+                    for (int orderA = 0; orderA < splineOrder_; ++orderA) {
+                        for (int angMomComponent = 0; angMomComponent < nAngMomComponents; ++angMomComponent) {
+                            const auto &quanta = angMomIterator_[angMomComponent];
+                            const auto splineA = masksA[orderA] * splinesA[quanta[0] * splineOrder_ + orderA];
+                            const auto splineB = masksB[orderB] * splinesB[quanta[1] * splineOrder_ + orderB];
+                            const auto splineC = masksC[orderC] * splinesC[quanta[2] * splineOrder_ + orderC];
+                            // Order is splineC,splineB,splineA,atomChunk,AngMom
+                            const size_t address =
+                                offsetCBA + atomChunk * nAngMomComponents + angMomComponent * REALVECLEN;
+                            STOREVEC(splineC * splineB * splineA, coefficients[address]);
+                        }
+                        offsetCBA += paddedNumAtoms * nAngMomComponents;
+                    }
+                }
+            }
+        }
+        // Make information needed to use the transpose of the coefficients in a thread
+        // safe way; this is necessary for spreading the parameters onto the grid.
+        // We divide the grid up among the threads to avoid race conditions
+        size_t gridDimension = myGridDimensionC_ * myGridDimensionB_ * myGridDimensionA_;
+        size_t chunkSize = std::ceil((float)gridDimension / nThreads_);
+        // Start by computing the maximum number of atoms that contribution to any grid point
+        mipp::vector<unsigned short> counts(gridDimension, 0);
+        size_t maxAtomContributions = 0;
+#pragma omp parallel num_threads(nThreads_) reduction(max : maxAtomContributions)
+        {
+#ifdef _OPENMP
+            int thread = omp_get_thread_num();
+#else
+            int thread = 0;
+#endif
+            size_t myStart = thread * chunkSize;
+            size_t myEnd = std::min((thread + 1) * chunkSize, gridDimension);
+            size_t offsetCBA = 0;
+            for (int splines = 0; splines < splineOrderCubed; ++splines) {
+                for (int atom = 0; atom < nAtoms; ++atom) {
+                    const auto &gridAddress = metaData[offsetCBA + atom];
+                    if (gridAddress >= myStart && gridAddress < myEnd && masks[offsetCBA + atom]) {
+                        counts[gridAddress]++;
+                    }
+                }
+                offsetCBA += paddedNumAtoms;
+            }
+            maxAtomContributions = *std::max_element(&counts[myStart], &counts[myEnd]);
+        }
+
+        // Allocate space to store info about contributions to each grid point
+        newSplineCache_.gridContributions_.resize(nThreads_);
+        newSplineCache_.gridContributions_.clear();
+        for (int thread = 0; thread < nThreads_; ++thread) {
+            size_t myStart = thread * chunkSize;
+            size_t myEnd = std::min((thread + 1) * chunkSize, gridDimension);
+            auto &thisThreadContributions = newSplineCache_.gridContributions_[thread];
+            for (size_t entry = myStart; entry < myEnd; ++entry) {
+                // Allocate with just enough space for the maximum, then clear
+                thisThreadContributions.emplace_back(mipp::vector<std::pair<size_t, size_t>>(maxAtomContributions));
+                thisThreadContributions.back().clear();
             }
         }
 
-        // Now we know how many atoms we loop over the dense list, redefining nAtoms accordingly.
-        // The first stage above is to get the number of atoms, so we can avoid calling push_back
-        // and thus avoid the many memory allocations.  If the cache is too small, grow it by a
-        // certain scale factor to try and minimize allocations in a not-too-wasteful manner.
-        nAtoms = atomList_.size();
+        // Now fill in the metadata; for each grid point it's a list of the
+        // (atomNumber, splineCache address)
+        const auto &atomMap = newSplineCache_.atomList_.data();
+#pragma omp parallel num_threads(nThreads_)
+        {
+#ifdef _OPENMP
+            int thread = omp_get_thread_num();
+#else
+            int thread = 0;
+#endif
+            size_t myStart = thread * chunkSize;
+            size_t myEnd = std::min((thread + 1) * chunkSize, gridDimension);
+            auto &thisThreadContributions = newSplineCache_.gridContributions_[thread];
+            size_t offsetCBA = 0;
+            for (int splines = 0; splines < splineOrderCubed; ++splines) {
+                for (int atomChunk = 0; atomChunk < paddedNumAtoms; atomChunk += REALVECLEN) {
+                    for (size_t atom = atomChunk; atom < atomChunk + REALVECLEN; ++atom) {
+                        if (atom >= nAtoms) continue;
+                        const auto &gridAddress = metaData[splines * paddedNumAtoms + atom];
+                        if (gridAddress >= myStart && gridAddress < myEnd && masks[splines * paddedNumAtoms + atom]) {
+                            thisThreadContributions[gridAddress - myStart].emplace_back(
+                                std::make_pair(atomMap[atom], offsetCBA + atom - atomChunk));
+                        }
+                    }
+                    offsetCBA += nAngMomComponents * REALVECLEN;
+                }
+            }
+        }
+
+        //
+        //
+        // ACS to be deleted when the new machinery is tested
+        //
+        //
         if (splineCache_.size() < nAtoms) {
             size_t newSize = static_cast<size_t>(1.2 * nAtoms);
             for (int atom = splineCache_.size(); atom < newSize; ++atom)
@@ -21719,7 +21994,7 @@ class PMEInstance {
         // numNodesA (dimA-1)/2 + numNodesA = complexDimA + numNodesA/2-1 if dimA is odd
         // We just allocate the larger size here, remembering that the final padding values on the last node
         // will all be allocated to zero and will not contribute to the final answer.
-        helpme::vector<Complex> buffer(complexGridDimensionA_ + numNodesA_ - 1);
+        mipp::vector<Complex> buffer(complexGridDimensionA_ + numNodesA_ - 1);
 
         // A transform, with instant sort to CAB ordering for each local block
         auto scratch = buffer.data();
@@ -22137,6 +22412,7 @@ class PMEInstance {
                               mValsA_.data(), mValsB_.data(), mValsC_.data(), virial, nThreads_);
     }
 
+
     /*!
      * \brief Probes the potential grid to get the forces.  Generally this shouldn't be called;
      *        use the various computeE() methods instead.  This is the faster version that uses
@@ -22160,8 +22436,28 @@ class PMEInstance {
      * \endcode
      * \param forces a Nx3 matrix of the forces, ordered in memory as {Fx1,Fy1,Fz1,Fx2,Fy2,Fz2,....FxN,FyN,FzN}.
      */
-    void probeGrid(const Real *potentialGrid, int parameterAngMom, const RealMat &parameters, RealMat &forces) {
+    void computeForces(const Real *potentialGrid, int parameterAngMom, const RealMat &parameters, RealMat &forces) {
         updateAngMomIterator(parameterAngMom + 1);
+
+#if 0
+        int nForceComponents = nCartesian(parameterAngMom + 1);
+        size_t resultTempRowSize = nthreads_*std::ceil(nForceComponents/ cacheLineSizeInReals_) * cacheLineSizeInReals_;
+        mipp::vector<Real> resultTempVec(resultTempRowSize);
+        size_t gridTempRowSize = nThreads_*std::ceil(std::max(cacheLineSizeInReals_, REALVECLEN) / cacheLineSizeInReals_) * cacheLineSizeInReals_;
+        mipp::vector<Real> gridTempVec(gridTmpRowSize);
+
+        const Real *coefficients = newSplineCache_.splineCoefficients_.data();
+#pragma omp parallel num_threads(nThreads_)
+{
+#ifdef _OPENMP
+            int thread = omp_get_thread_num();
+#else
+            int thread = 0;
+#endif
+        Real *resultTmp = resultTmpVec(thread
+}
+
+#else
         int nComponents = nCartesian(parameterAngMom);
         int nForceComponents = nCartesian(parameterAngMom + 1);
         const Real *paramPtr = parameters[0];
@@ -22184,12 +22480,13 @@ class PMEInstance {
                 int threadID = 0;
 #endif
                 Real *myScratch = fractionalPhis[threadID % nThreads_];
-                probeGridImpl(atom, potentialGrid, nComponents, nForceComponents, splineA, splineB, splineC, myScratch,
+                computeForcesImpl(atom, potentialGrid, nComponents, nForceComponents, splineA, splineB, splineC, myScratch,
                               parameters, forces[atom]);
             } else {
-                probeGridImpl(potentialGrid, splineA, splineB, splineC, paramPtr[atom], forces[atom]);
+                computeForcesImpl(potentialGrid, splineA, splineB, splineC, paramPtr[atom], forces[atom]);
             }
         }
+#endif
     }
 
     /*!
@@ -22579,15 +22876,15 @@ class PMEInstance {
             const auto &splineA = std::get<0>(bSplines);
             const auto &splineB = std::get<1>(bSplines);
             const auto &splineC = std::get<2>(bSplines);
-            const auto &aGridIterator = gridIteratorA_[splineA.startingGridPoint()];
-            const auto &bGridIterator = gridIteratorB_[splineB.startingGridPoint()];
-            const auto &cGridIterator = gridIteratorC_[splineC.startingGridPoint()];
-            int numPointsA = static_cast<int>(aGridIterator.size());
-            int numPointsB = static_cast<int>(bGridIterator.size());
-            int numPointsC = static_cast<int>(cGridIterator.size());
-            const auto *iteratorDataA = aGridIterator.data();
-            const auto *iteratorDataB = bGridIterator.data();
-            const auto *iteratorDataC = cGridIterator.data();
+            const auto &gridIteratorA = gridIteratorA_[splineA.startingGridPoint()];
+            const auto &gridIteratorB = gridIteratorB_[splineB.startingGridPoint()];
+            const auto &gridIteratorC = gridIteratorC_[splineC.startingGridPoint()];
+            int numPointsA = static_cast<int>(gridIteratorA.size());
+            int numPointsB = static_cast<int>(gridIteratorB.size());
+            int numPointsC = static_cast<int>(gridIteratorC.size());
+            const auto *iteratorDataA = gridIteratorA.data();
+            const auto *iteratorDataB = gridIteratorB.data();
+            const auto *iteratorDataC = gridIteratorC.data();
             for (int component = 0; component < nComponents; ++component) {
                 const auto &quanta = angMomIterator_[component + cartesianOffset];
                 Real param = fractionalParameters(atom, component);
@@ -22634,17 +22931,17 @@ class PMEInstance {
             auto splineA = std::get<0>(bSplines);
             auto splineB = std::get<1>(bSplines);
             auto splineC = std::get<2>(bSplines);
-            const auto &aGridIterator = gridIteratorA_[splineA.startingGridPoint()];
-            const auto &bGridIterator = gridIteratorB_[splineB.startingGridPoint()];
-            const auto &cGridIterator = gridIteratorC_[splineC.startingGridPoint()];
+            const auto &gridIteratorA = gridIteratorA_[splineA.startingGridPoint()];
+            const auto &gridIteratorB = gridIteratorB_[splineB.startingGridPoint()];
+            const auto &gridIteratorC = gridIteratorC_[splineC.startingGridPoint()];
             const Real *splineStartA = splineA[0];
             const Real *splineStartB = splineB[0];
             const Real *splineStartC = splineC[0];
-            for (const auto &cPoint : cGridIterator) {
-                for (const auto &bPoint : bGridIterator) {
+            for (const auto &cPoint : gridIteratorC) {
+                for (const auto &bPoint : gridIteratorB) {
                     const Real *cbRow = potentialGrid + cPoint.first * myGridDimensionA_ * myGridDimensionB_ +
                                         bPoint.first * myGridDimensionA_;
-                    for (const auto &aPoint : aGridIterator) {
+                    for (const auto &aPoint : gridIteratorA) {
                         Real gridVal = cbRow[aPoint.first];
                         for (int component = 0; component < nPotentialComponents; ++component) {
                             const auto &quanta = angMomIterator_[component + cartesianOffset];
@@ -22732,12 +23029,12 @@ class PMEInstance {
             auto gridAddress = forwardTransform(realGrid);
             energy = convolveE(gridAddress);
             auto potentialGrid = inverseTransform(gridAddress);
-            probeGrid(potentialGrid, parameterAngMom, parameters, forces);
+            computeForces(potentialGrid, parameterAngMom, parameters, forces);
         } else if (algorithmType_ == AlgorithmType::CompressedPME) {
             auto gridAddress = compressedForwardTransform(realGrid);
             energy = convolveE(gridAddress);
             auto potentialGrid = compressedInverseTransform(gridAddress);
-            probeGrid(potentialGrid, parameterAngMom, parameters, forces);
+            computeForces(potentialGrid, parameterAngMom, parameters, forces);
         } else {
             std::logic_error("Unknown algorithm in helpme::computeEFRec");
         }
@@ -22783,13 +23080,13 @@ class PMEInstance {
             auto gridAddress = forwardTransform(realGrid);
             energy = convolveEV(gridAddress, virial);
             auto potentialGrid = inverseTransform(gridAddress);
-            probeGrid(potentialGrid, parameterAngMom, parameters, forces);
+            computeForces(potentialGrid, parameterAngMom, parameters, forces);
         } else if (algorithmType_ == AlgorithmType::CompressedPME) {
             auto gridAddress = compressedForwardTransform(realGrid);
             Real *convolvedGrid;
             energy = convolveEV(gridAddress, convolvedGrid, virial);
             auto potentialGrid = compressedInverseTransform(convolvedGrid);
-            probeGrid(potentialGrid, parameterAngMom, parameters, forces);
+            computeForces(potentialGrid, parameterAngMom, parameters, forces);
         } else {
             std::logic_error("Unknown algorithm in helpme::computeEFRec");
         }

@@ -1759,7 +1759,7 @@ TEST_CASE("Full run with a small toy system, comprising two water molecules with
         helpme::Matrix<double> potentialGrid(realGrid, nfftz * nffty, nfftx);
         REQUIRE(refPotentialGridD.almostEquals(potentialGrid, TOL));
 
-        pmeD->probeGrid(realGrid, 4, fractionalParams, forcesD);
+        pmeD->computeForces(realGrid, 4, fractionalParams, forcesD);
         REQUIRE(refForcesD.almostEquals(forcesD, TOL));
         REQUIRE(refRecEnergy == Approx(energy).margin(TOL));
     }
@@ -1794,7 +1794,7 @@ TEST_CASE("Full run with a small toy system, comprising two water molecules with
         helpme::Matrix<float> potentialGrid(realGrid, nfftz * nffty, nfftx);
         REQUIRE(refPotentialGridD.cast<float>().almostEquals(potentialGrid, TOL));
 
-        pmeF->probeGrid(realGrid, 4, fractionalParams, forcesF);
+        pmeF->computeForces(realGrid, 4, fractionalParams, forcesF);
         REQUIRE(refForcesD.cast<float>().almostEquals(forcesF, TOL));
         REQUIRE(refRecEnergy == Approx(energy).margin(TOL));
     }

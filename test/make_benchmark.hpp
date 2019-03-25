@@ -235,7 +235,7 @@ int main(int argc, char *argv[]) {
                 transformTime += localStop - localStart;
                 localStart = std::chrono::system_clock::now();
 #endif
-                pme->probeGrid(potentialGrid, 0, paramsF, nodeForces);
+                pme->computeForces(potentialGrid, 0, paramsF, nodeForces);
 #if TIME_COMPONENTS
                 localStop = std::chrono::system_clock::now();
                 probeTime += localStop - localStart;
@@ -295,7 +295,7 @@ int main(int argc, char *argv[]) {
                 transformTime += localStop - localStart;
                 localStart = std::chrono::system_clock::now();
 #endif
-                pme->probeGrid(potentialGrid, 0, paramsF, nodeForces);
+                pme->computeForces(potentialGrid, 0, paramsF, nodeForces);
 #if TIME_COMPONENTS
                 localStop = std::chrono::system_clock::now();
                 probeTime += localStop - localStart;
@@ -374,7 +374,7 @@ int main(int argc, char *argv[]) {
                 transformTime += localStop - localStart;
                 localStart = std::chrono::system_clock::now();
 #endif
-                pme->probeGrid(potentialGrid, 0, paramsD, nodeForces);
+                pme->computeForces(potentialGrid, 0, paramsD, nodeForces);
 #if TIME_COMPONENTS
                 localStop = std::chrono::system_clock::now();
                 probeTime += localStop - localStart;
@@ -434,7 +434,7 @@ int main(int argc, char *argv[]) {
                 transformTime += localStop - localStart;
                 localStart = std::chrono::system_clock::now();
 #endif
-                pme->probeGrid(potentialGrid, 0, paramsD, nodeForces);
+                pme->computeForces(potentialGrid, 0, paramsD, nodeForces);
 #if TIME_COMPONENTS
                 localStop = std::chrono::system_clock::now();
                 probeTime += localStop - localStart;
