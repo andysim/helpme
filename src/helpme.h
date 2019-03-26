@@ -537,7 +537,7 @@ class PMEInstance {
                 }
             }
         }
-
+std::cout << Ex << "  " << Ey << "  " << Ez << std::endl;
         forces[0] -= parameter * (scaledRecVecs_[0][0] * Ex + scaledRecVecs_[0][1] * Ey + scaledRecVecs_[0][2] * Ez);
         forces[1] -= parameter * (scaledRecVecs_[1][0] * Ex + scaledRecVecs_[1][1] * Ey + scaledRecVecs_[1][2] * Ez);
         forces[2] -= parameter * (scaledRecVecs_[2][0] * Ex + scaledRecVecs_[2][1] * Ey + scaledRecVecs_[2][2] * Ez);
@@ -1655,7 +1655,7 @@ class PMEInstance {
                             const auto splineA = masksA[orderA] * splinesA[quanta[0] * splineOrder_ + orderA];
                             const auto splineB = masksB[orderB] * splinesB[quanta[1] * splineOrder_ + orderB];
                             const auto splineC = masksC[orderC] * splinesC[quanta[2] * splineOrder_ + orderC];
-                            // Order is atomchunk,splineC,splineB,splineA,AngMom
+                            // Order is splineC,splineB,splineA,AtomChunk,AngMom
                             const size_t address =
                                 offsetCBA + atomChunk * nAngMomComponents + angMomComponent * REALVECLEN;
                             STOREVEC(splineC * splineB * splineA, coefficients[address]);
@@ -2394,14 +2394,11 @@ class PMEInstance {
     void computeForces(const Real *potentialGrid, int parameterAngMom, const RealMat &parameters, RealMat &forces) {
         updateAngMomIterator(parameterAngMom + 1);
 
-#if 1
-        int nForceComponents = nCartesian(parameterAngMom + 1);
+#if 0
         size_t resultTempRowSize =
-            nThreads_ * std::ceil(nForceComponents / cacheLineSizeInReals_) * cacheLineSizeInReals_;
+            nThreads_ * std::ceil(Real(3) * REALVECLEN  / cacheLineSizeInReals_) * cacheLineSizeInReals_;
         mipp::vector<Real> resultTempVec(resultTempRowSize);
-        size_t gridTempRowSize = nThreads_ *
-                                 std::ceil(std::max(cacheLineSizeInReals_, (Real)REALVECLEN) / cacheLineSizeInReals_) *
-                                 cacheLineSizeInReals_;
+        size_t gridTempRowSize = nThreads_ * std::ceil ((Real)REALVECLEN/cacheLineSizeInReals_) * cacheLineSizeInReals_;
         mipp::vector<Real> gridTempVec(gridTempRowSize);
         size_t splineDerivativeLevel = std::abs(parameterAngMom) + 1;
         size_t nParameterComponents = nCartesian(std::abs(parameterAngMom));
@@ -2424,7 +2421,7 @@ class PMEInstance {
 #endif
             Real *resultTemp = resultTempVec.data() + thread * resultTempRowSize;
             Real *gridTemp = gridTempVec.data() + thread * gridTempRowSize;
-#pragma omp parallel for num_threads(nThreads_)
+#pragma omp for num_threads(nThreads_)
             for (size_t atomChunk = 0; atomChunk < paddedNumAtoms; atomChunk += REALVECLEN) {
                 mipp::vector<REALVEC> fractionalPotentials(nAngMomComponents);
                 for (auto &fractionalPotential : fractionalPotentials) fractionalPotential = 0.0f;
@@ -2454,18 +2451,18 @@ class PMEInstance {
                     Fy += fractionalParams * fractionalPotentials[cartAddress(xDeriv, yDeriv + 1, zDeriv)];
                     Fz += fractionalParams * fractionalPotentials[cartAddress(xDeriv, yDeriv, zDeriv + 1)];
                 }
+                std::cout << Fx << "  " << Fy << "  " << Fz << std::endl;
                 REALVEC cartForceX = Fx * scaledRecVecs_[0][0] + Fy * scaledRecVecs_[0][1] + Fz * scaledRecVecs_[0][2];
                 REALVEC cartForceY = Fx * scaledRecVecs_[1][0] + Fy * scaledRecVecs_[1][1] + Fz * scaledRecVecs_[1][2];
                 REALVEC cartForceZ = Fx * scaledRecVecs_[2][0] + Fy * scaledRecVecs_[2][1] + Fz * scaledRecVecs_[2][2];
-                mipp::vector<Real> tmpForce(3 * REALVECLEN);
-                STOREVEC(cartForceX, tmpForce[0 * REALVECLEN]);
-                STOREVEC(cartForceY, tmpForce[1 * REALVECLEN]);
-                STOREVEC(cartForceZ, tmpForce[2 * REALVECLEN]);
+                STOREVEC(cartForceX, resultTemp[0 * REALVECLEN]);
+                STOREVEC(cartForceY, resultTemp[1 * REALVECLEN]);
+                STOREVEC(cartForceZ, resultTemp[2 * REALVECLEN]);
                 for (size_t atom = 0; atom < REALVECLEN; ++atom) {
                     Real *forcePtr = forces[atomList[atomChunk * REALVECLEN + atom]];
-                    forcePtr[0] -= tmpForce[0 * REALVECLEN];
-                    forcePtr[1] -= tmpForce[1 * REALVECLEN];
-                    forcePtr[2] -= tmpForce[2 * REALVECLEN];
+                    forcePtr[0] -= resultTemp[0 * REALVECLEN + atom];
+                    forcePtr[1] -= resultTemp[1 * REALVECLEN + atom];
+                    forcePtr[2] -= resultTemp[2 * REALVECLEN + atom];
                 }
             }
         }
