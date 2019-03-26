@@ -7,6 +7,7 @@
 
 // original file: ../src/helpme.h
 
+#define NEWCODE 1
 // BEGINLICENSE
 //
 // This file is part of helPME, which is distributed under the BSD 3-clause license,
@@ -397,7 +398,7 @@ std::string stringify(T *data, size_t size, size_t rowDim, int width = 14, int p
 #ifndef _HELPME_MIPP_WRAPPER_
 #define _HELPME_MIPP_WRAPPER_
 
-#ifndef NOMIPP
+#ifdef NOMIPP
 
 #define MAKEVEC(x) (x)
 #define REALVEC Real
@@ -20638,7 +20639,6 @@ class PMEInstance {
                 }
             }
         }
-std::cout << Ex << "  " << Ey << "  " << Ez << std::endl;
         forces[0] -= parameter * (scaledRecVecs_[0][0] * Ex + scaledRecVecs_[0][1] * Ey + scaledRecVecs_[0][2] * Ez);
         forces[1] -= parameter * (scaledRecVecs_[1][0] * Ex + scaledRecVecs_[1][1] * Ey + scaledRecVecs_[1][2] * Ez);
         forces[2] -= parameter * (scaledRecVecs_[2][0] * Ex + scaledRecVecs_[2][1] * Ey + scaledRecVecs_[2][2] * Ez);
@@ -21526,7 +21526,7 @@ std::cout << Ex << "  " << Ey << "  " << Ez << std::endl;
         updateAngMomIterator(parameterAngMom);
         size_t gridDimension = myGridDimensionC_ * myGridDimensionB_ * myGridDimensionA_;
         size_t chunkSize = std::ceil((float)gridDimension / nThreads_);
-#if 1
+#if NEWCODE==1
         size_t nParameterComponents(nCartesian(std::abs(parameterAngMom)));
         if (parameterAngMom < 0) nParameterComponents -= nCartesian(std::abs(parameterAngMom) - 1);
         const Real *coefficients = newSplineCache_.splineCoefficients_.data();
@@ -21588,7 +21588,6 @@ std::cout << Ex << "  " << Ey << "  " << Ez << std::endl;
     void filterAtomsAndBuildSplineCache(int parameterAngMom, const RealMat &parameters, int derivativeLevel,
                                         const RealMat &coords) {
         assertInitialized();
-
         atomList_.clear();
         size_t nAtoms = coords.nRows();
         newSplineCache_.atomList_.clear();
@@ -21634,6 +21633,7 @@ std::cout << Ex << "  " << Ey << "  " << Ez << std::endl;
         }
         // Now we know how many atoms we can allocate the cache
         nAtoms = denseAtomIndex;
+#if NEWCODE==1
         // Make sure that we know the number of atoms that exactly fit an integer number of registers
         size_t paddedNumAtoms = std::ceil((float)nAtoms / REALVECLEN) * REALVECLEN;
         // Pad the atomlist at the end so that we just write 0s to the first element, avoiding memory errors.
@@ -21664,7 +21664,7 @@ std::cout << Ex << "  " << Ey << "  " << Ez << std::endl;
         Real *coefficients = newSplineCache_.splineCoefficients_.data();
         Real *paramPtr = newSplineCache_.fractionalCoordinateParameters_.data();
 
-#pragma omp parallel num_threads(nThreads_)
+#pragma omp parallel for num_threads(nThreads_)
         for (size_t atomChunk = 0; atomChunk < paddedNumAtoms; atomChunk += REALVECLEN) {
             // Transform sparse list of Cartesian coordinate parameters to a dense list
             // of fractional coordinate representation quantities
@@ -21839,7 +21839,7 @@ std::cout << Ex << "  " << Ey << "  " << Ez << std::endl;
                 }
             }
         }
-
+#else
         //
         //
         // ACS to be deleted when the new machinery is tested
@@ -21869,6 +21869,7 @@ std::cout << Ex << "  " << Ey << "  " << Ez << std::endl;
             atomSplines.cSpline.update(cStartingGridPoint, gridDimensionC_ * cCoord - cStartingGridPoint, splineOrder_,
                                        splineDerivativeLevel);
         }
+#endif
     }
     /*!
      * \brief cellVolume Compute the volume of the unit cell.
@@ -22495,12 +22496,11 @@ std::cout << Ex << "  " << Ey << "  " << Ez << std::endl;
     void computeForces(const Real *potentialGrid, int parameterAngMom, const RealMat &parameters, RealMat &forces) {
         updateAngMomIterator(parameterAngMom + 1);
 
-#if 0
-        size_t resultTempRowSize =
-            nThreads_ * std::ceil(Real(3) * REALVECLEN  / cacheLineSizeInReals_) * cacheLineSizeInReals_;
-        mipp::vector<Real> resultTempVec(resultTempRowSize);
-        size_t gridTempRowSize = nThreads_ * std::ceil ((Real)REALVECLEN/cacheLineSizeInReals_) * cacheLineSizeInReals_;
-        mipp::vector<Real> gridTempVec(gridTempRowSize);
+#if NEWCODE==1
+        size_t resultTempRowSize = std::ceil(Real(3) * REALVECLEN  / cacheLineSizeInReals_) * cacheLineSizeInReals_;
+        mipp::vector<Real> resultTempVec(nThreads_ * resultTempRowSize);
+        size_t gridTempRowSize = std::ceil ((Real)REALVECLEN/cacheLineSizeInReals_) * cacheLineSizeInReals_;
+        mipp::vector<Real> gridTempVec(nThreads_ * gridTempRowSize);
         size_t splineDerivativeLevel = std::abs(parameterAngMom) + 1;
         size_t nParameterComponents = nCartesian(std::abs(parameterAngMom));
         if (parameterAngMom < 0) nParameterComponents -= nCartesian(std::abs(parameterAngMom) - 1);
@@ -22522,7 +22522,7 @@ std::cout << Ex << "  " << Ey << "  " << Ez << std::endl;
 #endif
             Real *resultTemp = resultTempVec.data() + thread * resultTempRowSize;
             Real *gridTemp = gridTempVec.data() + thread * gridTempRowSize;
-#pragma omp for num_threads(nThreads_)
+#pragma omp for
             for (size_t atomChunk = 0; atomChunk < paddedNumAtoms; atomChunk += REALVECLEN) {
                 mipp::vector<REALVEC> fractionalPotentials(nAngMomComponents);
                 for (auto &fractionalPotential : fractionalPotentials) fractionalPotential = 0.0f;
@@ -22552,7 +22552,6 @@ std::cout << Ex << "  " << Ey << "  " << Ez << std::endl;
                     Fy += fractionalParams * fractionalPotentials[cartAddress(xDeriv, yDeriv + 1, zDeriv)];
                     Fz += fractionalParams * fractionalPotentials[cartAddress(xDeriv, yDeriv, zDeriv + 1)];
                 }
-                std::cout << Fx << "  " << Fy << "  " << Fz << std::endl;
                 REALVEC cartForceX = Fx * scaledRecVecs_[0][0] + Fy * scaledRecVecs_[0][1] + Fz * scaledRecVecs_[0][2];
                 REALVEC cartForceY = Fx * scaledRecVecs_[1][0] + Fy * scaledRecVecs_[1][1] + Fz * scaledRecVecs_[1][2];
                 REALVEC cartForceZ = Fx * scaledRecVecs_[2][0] + Fy * scaledRecVecs_[2][1] + Fz * scaledRecVecs_[2][2];
@@ -22560,7 +22559,7 @@ std::cout << Ex << "  " << Ey << "  " << Ez << std::endl;
                 STOREVEC(cartForceY, resultTemp[1 * REALVECLEN]);
                 STOREVEC(cartForceZ, resultTemp[2 * REALVECLEN]);
                 for (size_t atom = 0; atom < REALVECLEN; ++atom) {
-                    Real *forcePtr = forces[atomList[atomChunk * REALVECLEN + atom]];
+                    Real *forcePtr = forces[atomList[atomChunk + atom]];
                     forcePtr[0] -= resultTemp[0 * REALVECLEN + atom];
                     forcePtr[1] -= resultTemp[1 * REALVECLEN + atom];
                     forcePtr[2] -= resultTemp[2 * REALVECLEN + atom];

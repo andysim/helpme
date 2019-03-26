@@ -409,7 +409,7 @@ TEST_CASE("Full run with a small toy system, comprising two water molecules.") {
         auto pmeD = std::unique_ptr<PMEInstanceD>(new PMEInstanceD);
         pmeD->setup(1, 0.3, splineOrder, nfftx, nffty, nfftz, ccelec, 1);
         pmeD->setLatticeVectors(20, 20, 20, 90, 90, 90, PMEInstanceD::LatticeType::XAligned);
-        pmeD->filterAtomsAndBuildSplineCache(0, chargesD, 0, coordsD);
+        pmeD->filterAtomsAndBuildSplineCache(0, chargesD, 1, coordsD);
         auto realGrid = pmeD->spreadParameters(0, chargesD);
         helpme::Matrix<double> chargeGrid(realGrid, nfftz * nffty, nfftx);
         REQUIRE(refChargeGridD.almostEquals(chargeGrid, TOL));

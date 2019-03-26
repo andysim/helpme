@@ -1,7 +1,7 @@
 #ifndef _HELPME_MIPP_WRAPPER_
 #define _HELPME_MIPP_WRAPPER_
 
-#ifndef NOMIPP
+#ifdef NOMIPP
 
 #define MAKEVEC(x) (x)
 #define REALVEC Real
