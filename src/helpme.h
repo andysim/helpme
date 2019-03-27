@@ -102,7 +102,6 @@ struct SplineCacheEntry {
 
 template <typename Real>
 struct SplineCache {
-    using GridContributions = mipp::vector<mipp::vector<std::pair<size_t, size_t>>>;
     /// List of atoms that contribute to this node's grid.
     mipp::vector<size_t> atomList_;
     /// Spline coefficients ordered by grid address then atom idx, showing the.
@@ -110,10 +109,10 @@ struct SplineCache {
     /// The cache of dense spline coefficients stored as derivative level, then grid address, then atom idx fastest
     /// running.
     mipp::vector<Real> splineCoefficients_;
+    /// Scratch space used for building threaded grids
+    mipp::vector<mipp::vector<Real>> threadedGridReplicas_;
     /// A dense list of parameters in fractional coordinate representation, ordered in chunks of atoms then angmom.
     mipp::vector<Real> fractionalCoordinateParameters_;
-    /// A sparse map showing the address in the dense list (gridAddress, atomAddress) of each contribution to each.
-    mipp::vector<GridContributions> gridContributions_;
     /// The number of atoms, accounting for padding to a multiple of the vector length.
     size_t paddedNumAtoms_ = 0;
     /// The spline order in the cache.
@@ -136,7 +135,6 @@ struct SplineCache {
 template <typename Real, typename std::enable_if<std::is_floating_point<Real>::value, int>::type = 0>
 class PMEInstance {
     using GridIterator = mipp::vector<mipp::vector<std::pair<short, short>>>;
-    using GridContributions = mipp::vector<mipp::vector<std::pair<size_t, size_t>>>;
     using Complex = std::complex<Real>;
     using Spline = BSpline<Real>;
     using RealMat = Matrix<Real>;
@@ -1420,15 +1418,27 @@ class PMEInstance {
      * \return realGrid the array of discretized parameters (stored in CBA order).
      */
     Real *spreadParameters(int parameterAngMom, const RealMat &parameters) {
-        Real *realGrid = reinterpret_cast<Real *>(workSpace1_.data());
-        std::fill(workSpace1_.begin(), workSpace1_.end(), 0);
         updateAngMomIterator(parameterAngMom);
+
+        Real *realGrid = reinterpret_cast<Real *>(workSpace1_.data());
         size_t gridDimension = myGridDimensionC_ * myGridDimensionB_ * myGridDimensionA_;
-        size_t chunkSize = std::ceil((float)gridDimension / nThreads_);
-#if NEWCODE==1
+        std::fill(realGrid, realGrid + gridDimension, Real(0));
+#if NEWCODE == 1
+        for (auto &gridReplica : newSplineCache_.threadedGridReplicas_)
+            std::fill(gridReplica.begin(), gridReplica.end(), 0);
         size_t nParameterComponents(nCartesian(std::abs(parameterAngMom)));
+        size_t nAngMomComponents(
+            nCartesian(std::abs(parameterAngMom) + newSplineCache_.derivativeLevel_));  // TODO ACS pass deriv level in
         if (parameterAngMom < 0) nParameterComponents -= nCartesian(std::abs(parameterAngMom) - 1);
-        const Real *coefficients = newSplineCache_.splineCoefficients_.data();
+        const const Real *coefficients = newSplineCache_.splineCoefficients_.data();
+        size_t paddedNumAtoms = newSplineCache_.paddedNumAtoms_;
+        const size_t scratchRowLength = std::ceil(REALVECLEN / cacheLineSizeInReals_) * cacheLineSizeInReals_;
+        const size_t splineOrderCubed = std::pow(splineOrder_, 3);
+        size_t angMomBegin = 0;
+        size_t angMomEnd = 1;
+        std::vector<Real> gridScratch(nThreads_ * scratchRowLength);
+        Real *paramPtr = newSplineCache_.fractionalCoordinateParameters_.data();
+        const size_t *metaDataPtr = newSplineCache_.splineMetaData_.data();
 #pragma omp parallel num_threads(nThreads_)
         {
 #ifdef _OPENMP
@@ -1436,18 +1446,33 @@ class PMEInstance {
 #else
             int thread = 0;
 #endif
-            size_t myStart = thread * chunkSize;
-            auto &thisThreadContributions = newSplineCache_.gridContributions_[thread];
-            const size_t numGridPoints = thisThreadContributions.size();
-            for (size_t threadGridPoint = 0; threadGridPoint < numGridPoints; ++threadGridPoint) {
-                const size_t gridPoint = threadGridPoint + myStart;
-                const auto gridContributionsList = thisThreadContributions[threadGridPoint];
-                for (const auto contribution : gridContributionsList) {
-                    const auto *parameterPtr = parameters[contribution.first];
-                    const auto &cacheAddress = contribution.second;
-                    realGrid[gridPoint] += coefficients[cacheAddress] * parameterPtr[0];
+            Real *gridPtr = thread ? newSplineCache_.threadedGridReplicas_[thread - 1].data() : realGrid;
+            Real *scratchPtr = gridScratch.data() + thread * scratchRowLength;
+#pragma omp for
+            for (size_t atomChunk = 0; atomChunk < paddedNumAtoms; atomChunk += REALVECLEN) {
+                const Real *atomCoefficients = coefficients + atomChunk * splineOrderCubed * nAngMomComponents;
+                const Real *atomParams = paramPtr + atomChunk * nParameterComponents;
+                const size_t *atomMetaData = metaDataPtr + atomChunk * splineOrderCubed;
+                for (size_t splines = 0; splines < splineOrderCubed; ++splines) {
+                    const Real *gridPointCoefficients = atomCoefficients + splines * nAngMomComponents * REALVECLEN;
+                    REALVEC gridContribution = 0.0f;
+                    for (size_t angMom = 0; angMom < nParameterComponents; ++angMom) {
+                        REALVEC angMomParams = MAKEVEC(atomParams[angMom * REALVECLEN]);
+                        REALVEC angMomGridPoint = MAKEVEC(gridPointCoefficients[angMom * REALVECLEN]);
+                        gridContribution += angMomParams * angMomGridPoint;
+                    }
+                    const size_t *splineMetaData = atomMetaData + splines * REALVECLEN;
+                    STOREVEC(gridContribution, scratchPtr[0]);
+                    for (size_t atom = 0; atom < REALVECLEN; ++atom) {
+                        gridPtr[splineMetaData[atom]] += scratchPtr[atom];
+                    }
                 }
             }
+        }
+        // Accumulate all the threaded results
+        for (size_t thread = 1; thread < nThreads_; ++thread) {
+            std::transform(realGrid, realGrid + gridDimension, newSplineCache_.threadedGridReplicas_[thread - 1].data(),
+                           realGrid, std::plus<Real>());
         }
 #else
         size_t nAtoms = atomList_.size();
@@ -1532,7 +1557,7 @@ class PMEInstance {
         }
         // Now we know how many atoms we can allocate the cache
         nAtoms = denseAtomIndex;
-#if NEWCODE==1
+#if NEWCODE == 1
         // Make sure that we know the number of atoms that exactly fit an integer number of registers
         size_t paddedNumAtoms = std::ceil((float)nAtoms / REALVECLEN) * REALVECLEN;
         // Pad the atomlist at the end so that we just write 0s to the first element, avoiding memory errors.
@@ -1575,6 +1600,7 @@ class PMEInstance {
                     paramPtr[atomChunk * nParameterComponents + angMom * REALVECLEN + atom] = atomParameters[angMom];
                 }
             }
+            // TODO: ACS build this
             if (std::abs(parameterAngMom)) {
                 // We need to transform the parameters to fractional coordinates
                 std::vector<REALVEC> paramChunks(nParameterComponents);
@@ -1604,9 +1630,10 @@ class PMEInstance {
                             size_t gridAddressCBA = gridAddressCB + std::abs(gridPointA);
                             bool thisNodeContributes =
                                 static_cast<size_t>(gridPointA >= 0 && gridPointB >= 0 && gridPointC >= 0);
-                            metaData[offsetCBA + atom] = thisNodeContributes * gridAddressCBA;
-                            masks[offsetCBA + atom] = thisNodeContributes;
-                            offsetCBA += paddedNumAtoms;
+                            size_t metadataAddress = atomChunk * splineOrderCubed + offsetCBA + atom - atomChunk;
+                            metaData[metadataAddress] = thisNodeContributes * gridAddressCBA;
+                            masks[metadataAddress] = thisNodeContributes;
+                            offsetCBA += REALVECLEN;
                         }
                     }
                 }
@@ -1656,88 +1683,19 @@ class PMEInstance {
                             const auto splineB = masksB[orderB] * splinesB[quanta[1] * splineOrder_ + orderB];
                             const auto splineC = masksC[orderC] * splinesC[quanta[2] * splineOrder_ + orderC];
                             // Order is splineC,splineB,splineA,AtomChunk,AngMom
-                            const size_t address =
-                                offsetCBA + atomChunk * nAngMomComponents + angMomComponent * REALVECLEN;
+                            const size_t address = atomChunk * splineOrderCubed * nAngMomComponents + offsetCBA +
+                                                   REALVECLEN * angMomComponent;
+
                             STOREVEC(splineC * splineB * splineA, coefficients[address]);
                         }
-                        offsetCBA += paddedNumAtoms * nAngMomComponents;
+                        offsetCBA += nAngMomComponents * REALVECLEN;
                     }
                 }
             }
         }
-
-        // Make information needed to use the transpose of the coefficients in a thread
-        // safe way; this is necessary for spreading the parameters onto the grid.
-        // We divide the grid up among the threads to avoid race conditions
-        size_t gridDimension = myGridDimensionC_ * myGridDimensionB_ * myGridDimensionA_;
-        size_t chunkSize = std::ceil((float)gridDimension / nThreads_);
-        // Start by computing the maximum number of atoms that contribution to any grid point
-        mipp::vector<unsigned short> counts(gridDimension, 0);
-        size_t maxAtomContributions = 0;
-#pragma omp parallel num_threads(nThreads_) reduction(max : maxAtomContributions)
-        {
-#ifdef _OPENMP
-            int thread = omp_get_thread_num();
-#else
-            int thread = 0;
-#endif
-            size_t myStart = thread * chunkSize;
-            size_t myEnd = std::min((thread + 1) * chunkSize, gridDimension);
-            size_t offsetCBA = 0;
-            for (int splines = 0; splines < splineOrderCubed; ++splines) {
-                for (int atom = 0; atom < nAtoms; ++atom) {
-                    const auto &gridAddress = metaData[offsetCBA + atom];
-                    if (gridAddress >= myStart && gridAddress < myEnd && masks[offsetCBA + atom]) {
-                        counts[gridAddress]++;
-                    }
-                }
-                offsetCBA += paddedNumAtoms;
-            }
-            maxAtomContributions = *std::max_element(&counts[myStart], &counts[myEnd]);
-        }
-
-        // Allocate space to store info about contributions to each grid point
-        newSplineCache_.gridContributions_.resize(nThreads_);
-        newSplineCache_.gridContributions_.clear();
-        for (int thread = 0; thread < nThreads_; ++thread) {
-            size_t myStart = thread * chunkSize;
-            size_t myEnd = std::min((thread + 1) * chunkSize, gridDimension);
-            auto &thisThreadContributions = newSplineCache_.gridContributions_[thread];
-            for (size_t entry = myStart; entry < myEnd; ++entry) {
-                // Allocate with just enough space for the maximum, then clear
-                thisThreadContributions.emplace_back(mipp::vector<std::pair<size_t, size_t>>(maxAtomContributions));
-                thisThreadContributions.back().clear();
-            }
-        }
-
-        // Now fill in the metadata; for each grid point it's a list of the
-        // (atomNumber, splineCache address)
-        const auto &atomMap = newSplineCache_.atomList_.data();
-#pragma omp parallel num_threads(nThreads_)
-        {
-#ifdef _OPENMP
-            int thread = omp_get_thread_num();
-#else
-            int thread = 0;
-#endif
-            size_t myStart = thread * chunkSize;
-            size_t myEnd = std::min((thread + 1) * chunkSize, gridDimension);
-            auto &thisThreadContributions = newSplineCache_.gridContributions_[thread];
-            size_t offsetCBA = 0;
-            for (int splines = 0; splines < splineOrderCubed; ++splines) {
-                for (int atomChunk = 0; atomChunk < paddedNumAtoms; atomChunk += REALVECLEN) {
-                    for (size_t atom = atomChunk; atom < atomChunk + REALVECLEN; ++atom) {
-                        if (atom >= nAtoms) continue;
-                        const auto &gridAddress = metaData[splines * paddedNumAtoms + atom];
-                        if (gridAddress >= myStart && gridAddress < myEnd && masks[splines * paddedNumAtoms + atom]) {
-                            thisThreadContributions[gridAddress - myStart].emplace_back(
-                                std::make_pair(atomMap[atom], offsetCBA + atom - atomChunk));
-                        }
-                    }
-                    offsetCBA += nAngMomComponents * REALVECLEN;
-                }
-            }
-        }
+        newSplineCache_.threadedGridReplicas_.resize(nThreads_ - 1);
+        for (auto &gridReplica : newSplineCache_.threadedGridReplicas_)
+            gridReplica.resize(myGridDimensionC_ * myGridDimensionB_ * myGridDimensionA_);
 #else
         //
         //
@@ -2395,10 +2353,10 @@ class PMEInstance {
     void computeForces(const Real *potentialGrid, int parameterAngMom, const RealMat &parameters, RealMat &forces) {
         updateAngMomIterator(parameterAngMom + 1);
 
-#if NEWCODE==1
-        size_t resultTempRowSize = std::ceil(Real(3) * REALVECLEN  / cacheLineSizeInReals_) * cacheLineSizeInReals_;
+#if NEWCODE == 1
+        size_t resultTempRowSize = std::ceil(Real(3) * REALVECLEN / cacheLineSizeInReals_) * cacheLineSizeInReals_;
         mipp::vector<Real> resultTempVec(nThreads_ * resultTempRowSize);
-        size_t gridTempRowSize = std::ceil ((Real)REALVECLEN/cacheLineSizeInReals_) * cacheLineSizeInReals_;
+        size_t gridTempRowSize = std::ceil((Real)REALVECLEN / cacheLineSizeInReals_) * cacheLineSizeInReals_;
         mipp::vector<Real> gridTempVec(nThreads_ * gridTempRowSize);
         size_t splineDerivativeLevel = std::abs(parameterAngMom) + 1;
         size_t nParameterComponents = nCartesian(std::abs(parameterAngMom));
@@ -2423,17 +2381,16 @@ class PMEInstance {
             Real *gridTemp = gridTempVec.data() + thread * gridTempRowSize;
 #pragma omp for
             for (size_t atomChunk = 0; atomChunk < paddedNumAtoms; atomChunk += REALVECLEN) {
-                mipp::vector<REALVEC> fractionalPotentials(nAngMomComponents);
-                for (auto &fractionalPotential : fractionalPotentials) fractionalPotential = 0.0f;
+                const Real *atomCoefficients = coefficients + atomChunk * nAngMomComponents * splineOrderCubed;
+                mipp::vector<REALVEC> fractionalPotentials(nAngMomComponents, 0.0f);
                 for (size_t splines = 0; splines < splineOrderCubed; ++splines) {
                     for (int atom = 0; atom < REALVECLEN; ++atom) {
                         gridTemp[atom] = potentialGrid[metadata[splines * paddedNumAtoms + atomChunk + atom]];
                     }
                     REALVEC gridVals = MAKEVEC(gridTemp[0]);
-                    const Real *coefficientPtr =
-                        coefficients + splines * paddedNumAtoms * nAngMomComponents + atomChunk * nAngMomComponents;
+                    const Real *splinesCoefficient = atomCoefficients + splines * nAngMomComponents * REALVECLEN;
                     for (int angMomComponent = angMomStart; angMomComponent < nAngMomComponents; ++angMomComponent) {
-                        REALVEC coefficients = MAKEVEC(coefficientPtr[angMomComponent * REALVECLEN]);
+                        REALVEC coefficients = MAKEVEC(splinesCoefficient[angMomComponent * REALVECLEN]);
                         fractionalPotentials[angMomComponent] += coefficients * gridVals;
                     }
                 }
