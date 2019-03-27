@@ -156,6 +156,7 @@ int main(int argc, char *argv[]) {
     double myBoxDimZ = boxDimZ / numNodesZ;
 
     if (myRank == 0) {
+        std::cout << "Vectorization target: " << TARGETARCHITECTURE << std::endl;
         std::cout << "Algorithm: " << (doCompressed ? "Compressed" : "Conventional") << std::endl;
         std::cout << "Box Size: " << boxDimX << " x " << boxDimY << " x " << boxDimZ << std::endl;
         std::cout << "Number of Atoms " << nAtoms << std::endl;

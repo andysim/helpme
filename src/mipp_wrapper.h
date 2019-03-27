@@ -13,6 +13,7 @@ namespace mipp {
 template <typename Real>
 using vector = std::vector<Real>;
 }
+#define TARGETARCHITECTURE "Compiler optimized without MIPP"
 
 #else
 
@@ -24,6 +25,7 @@ using vector = std::vector<Real>;
 #define SIZETVEC mipp::Reg<size_t>
 #define SIZETVECLEN mipp::N<size_t>()
 #define STOREVEC(vec, loc) (vec).store(&(loc))
+#define TARGETARCHITECTURE mipp::InstructionFullType
 
 #endif
 

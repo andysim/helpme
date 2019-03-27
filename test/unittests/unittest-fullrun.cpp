@@ -426,8 +426,6 @@ TEST_CASE("Full run with a small toy system, comprising two water molecules.") {
         REQUIRE(refPotentialGridD.almostEquals(potentialGrid, TOL));
 
         pmeD->computeForces(realGrid, 0, chargesD, forcesD);
-        std::cout << refForcesD << std::endl << std::endl;
-        std::cout << forcesD << std::endl;
         REQUIRE(refForcesD.almostEquals(forcesD, TOL));
         REQUIRE(refRecEnergy == Approx(energy).margin(TOL));
     }

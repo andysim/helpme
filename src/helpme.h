@@ -1422,10 +1422,12 @@ class PMEInstance {
 
         Real *realGrid = reinterpret_cast<Real *>(workSpace1_.data());
         size_t gridDimension = myGridDimensionC_ * myGridDimensionB_ * myGridDimensionA_;
-        std::fill(realGrid, realGrid + gridDimension, Real(0));
+        std::fill(realGrid, realGrid + gridDimension, 0);
 #if NEWCODE == 1
-        for (auto &gridReplica : newSplineCache_.threadedGridReplicas_)
+        for (auto &gridReplica : newSplineCache_.threadedGridReplicas_) {
+            assert(gridReplica.size() == gridDimension);
             std::fill(gridReplica.begin(), gridReplica.end(), 0);
+        }
         size_t nParameterComponents(nCartesian(std::abs(parameterAngMom)));
         size_t nAngMomComponents(
             nCartesian(std::abs(parameterAngMom) + newSplineCache_.derivativeLevel_));  // TODO ACS pass deriv level in
@@ -1470,9 +1472,8 @@ class PMEInstance {
             }
         }
         // Accumulate all the threaded results
-        for (size_t thread = 1; thread < nThreads_; ++thread) {
-            std::transform(realGrid, realGrid + gridDimension, newSplineCache_.threadedGridReplicas_[thread - 1].data(),
-                           realGrid, std::plus<Real>());
+        for (auto &gridReplica : newSplineCache_.threadedGridReplicas_) {
+            std::transform(realGrid, realGrid + gridDimension, gridReplica.data(), realGrid, std::plus<Real>());
         }
 #else
         size_t nAtoms = atomList_.size();
@@ -1580,115 +1581,147 @@ class PMEInstance {
         newSplineCache_.splineMetaData_.resize(cacheDimension, 0);
         std::fill(newSplineCache_.splineMetaData_.begin(), newSplineCache_.splineMetaData_.end(), 0);
         size_t splinesDim = splineOrder_ * (splineDerivativeLevel + 1);
-        mipp::vector<REALVEC> splinesA(splinesDim);
-        mipp::vector<REALVEC> splinesB(splinesDim);
-        mipp::vector<REALVEC> splinesC(splinesDim);
         size_t *metaData = newSplineCache_.splineMetaData_.data();
-        std::vector<bool> masks(cacheDimension, false);
         Real *coefficients = newSplineCache_.splineCoefficients_.data();
         Real *paramPtr = newSplineCache_.fractionalCoordinateParameters_.data();
+        mipp::vector<mipp::vector<REALVEC>> threadSplineCache(3 * nThreads_);
+        for (size_t thread = 0; thread < 3 * nThreads_; ++thread) {
+            threadSplineCache[thread] = mipp::vector<REALVEC>(splinesDim);
+        }
 
-#pragma omp parallel for num_threads(nThreads_)
-        for (size_t atomChunk = 0; atomChunk < paddedNumAtoms; atomChunk += REALVECLEN) {
-            // Transform sparse list of Cartesian coordinate parameters to a dense list
-            // of fractional coordinate representation quantities
-            for (size_t atom = 0; atom < REALVECLEN; ++atom) {
-                if (atom >= nAtoms) continue;
-                size_t atomID = newSplineCache_.atomList_[atom + atomChunk];
-                const Real *atomParameters = parameters[atomID];
-                for (size_t angMom = 0; angMom < nParameterComponents; ++angMom) {
-                    paramPtr[atomChunk * nParameterComponents + angMom * REALVECLEN + atom] = atomParameters[angMom];
-                }
-            }
-            // TODO: ACS build this
-            if (std::abs(parameterAngMom)) {
-                // We need to transform the parameters to fractional coordinates
-                std::vector<REALVEC> paramChunks(nParameterComponents);
-                for (size_t angMom = 0; angMom < nParameterComponents; ++angMom) {
-                    paramChunks[angMom] = MAKEVEC(paramPtr[atomChunk * nParameterComponents]);
-                }
-                for (size_t angMom = 0; angMom < nParameterComponents; ++angMom) {
-                    STOREVEC(paramChunks[angMom], paramPtr[atomChunk * nParameterComponents + angMom * REALVECLEN]);
-                }
-            }
-
-            // Make spline metadata
-            for (size_t atom = atomChunk; atom < atomChunk + REALVECLEN; ++atom) {
-                if (atom >= nAtoms) continue;
-                const auto &maskedGridIteratorA = maskedGridIteratorA_[startingGridPointsA[atom]];
-                const auto &maskedGridIteratorB = maskedGridIteratorB_[startingGridPointsB[atom]];
-                const auto &maskedGridIteratorC = maskedGridIteratorC_[startingGridPointsC[atom]];
-                size_t offsetCBA = 0;
-                for (int orderC = 0; orderC < splineOrder_; ++orderC) {
-                    int gridPointC = maskedGridIteratorC[orderC];
-                    size_t gridAddressC = std::abs(gridPointC) * myGridDimensionB_ * myGridDimensionA_;
-                    for (int orderB = 0; orderB < splineOrder_; ++orderB) {
-                        int gridPointB = maskedGridIteratorB[orderB];
-                        size_t gridAddressCB = gridAddressC + std::abs(gridPointB) * myGridDimensionA_;
-                        for (int orderA = 0; orderA < splineOrder_; ++orderA) {
-                            int gridPointA = maskedGridIteratorA[orderA];
-                            size_t gridAddressCBA = gridAddressCB + std::abs(gridPointA);
-                            bool thisNodeContributes =
-                                static_cast<size_t>(gridPointA >= 0 && gridPointB >= 0 && gridPointC >= 0);
-                            size_t metadataAddress = atomChunk * splineOrderCubed + offsetCBA + atom - atomChunk;
-                            metaData[metadataAddress] = thisNodeContributes * gridAddressCBA;
-                            masks[metadataAddress] = thisNodeContributes;
-                            offsetCBA += REALVECLEN;
-                        }
+#pragma omp parallel num_threads(nThreads_)
+        {
+#ifdef _OPENMP
+            int thread = omp_get_thread_num();
+#else
+            int thread = 0;
+#endif
+            auto &splinesA = threadSplineCache[3 * thread + 0];
+            auto &splinesB = threadSplineCache[3 * thread + 1];
+            auto &splinesC = threadSplineCache[3 * thread + 2];
+#pragma omp for
+            for (size_t atomChunk = 0; atomChunk < paddedNumAtoms; atomChunk += REALVECLEN) {
+                // Transform sparse list of Cartesian coordinate parameters to a dense list
+                // of fractional coordinate representation quantities
+                for (size_t atom = 0; atom < REALVECLEN; ++atom) {
+                    if (atom >= nAtoms) continue;
+                    size_t atomID = newSplineCache_.atomList_[atom + atomChunk];
+                    const Real *atomParameters = parameters[atomID];
+                    for (size_t angMom = 0; angMom < nParameterComponents; ++angMom) {
+                        paramPtr[atomChunk * nParameterComponents + angMom * REALVECLEN + atom] =
+                            atomParameters[angMom];
                     }
                 }
-            }
-            // Construct a mask for values that belong on other nodes
-            mipp::vector<mipp::vector<Real>> masksVecA(splineOrder_);
-            mipp::vector<mipp::vector<Real>> masksVecB(splineOrder_);
-            mipp::vector<mipp::vector<Real>> masksVecC(splineOrder_);
-            for (size_t spline = 0; spline < splineOrder_; ++spline) {
+                // TODO: ACS build this
+                if (std::abs(parameterAngMom)) {
+                    // We need to transform the parameters to fractional coordinates
+                    std::vector<REALVEC> paramChunks(nParameterComponents);
+                    for (size_t angMom = 0; angMom < nParameterComponents; ++angMom) {
+                        paramChunks[angMom] = MAKEVEC(paramPtr[atomChunk * nParameterComponents]);
+                    }
+                    for (size_t angMom = 0; angMom < nParameterComponents; ++angMom) {
+                        STOREVEC(paramChunks[angMom], paramPtr[atomChunk * nParameterComponents + angMom * REALVECLEN]);
+                    }
+                }
+
+                // Make spline metadata
                 for (size_t atom = atomChunk; atom < atomChunk + REALVECLEN; ++atom) {
-                    if (atom < nAtoms) {
-                        const int &splineA = maskedGridIteratorA_[startingGridPointsA[atom]][spline];
-                        const int &splineB = maskedGridIteratorB_[startingGridPointsB[atom]][spline];
-                        const int &splineC = maskedGridIteratorC_[startingGridPointsC[atom]][spline];
-                        masksVecA[spline].push_back(static_cast<Real>(splineA >= 0));
-                        masksVecB[spline].push_back(static_cast<Real>(splineB >= 0));
-                        masksVecC[spline].push_back(static_cast<Real>(splineC >= 0));
-                    } else {
-                        masksVecA[spline].push_back(static_cast<Real>(0));
-                        masksVecB[spline].push_back(static_cast<Real>(0));
-                        masksVecC[spline].push_back(static_cast<Real>(0));
+                    if (atom >= nAtoms) continue;
+                    const auto &maskedGridIteratorA = maskedGridIteratorA_[startingGridPointsA[atom]];
+                    const auto &maskedGridIteratorB = maskedGridIteratorB_[startingGridPointsB[atom]];
+                    const auto &maskedGridIteratorC = maskedGridIteratorC_[startingGridPointsC[atom]];
+                    size_t offsetCBA = 0;
+                    for (int orderC = 0; orderC < splineOrder_; ++orderC) {
+                        int gridPointC = maskedGridIteratorC[orderC];
+                        size_t gridAddressC = std::abs(gridPointC) * myGridDimensionB_ * myGridDimensionA_;
+                        for (int orderB = 0; orderB < splineOrder_; ++orderB) {
+                            int gridPointB = maskedGridIteratorB[orderB];
+                            size_t gridAddressCB = gridAddressC + std::abs(gridPointB) * myGridDimensionA_;
+                            for (int orderA = 0; orderA < splineOrder_; ++orderA) {
+                                int gridPointA = maskedGridIteratorA[orderA];
+                                size_t gridAddressCBA = gridAddressCB + std::abs(gridPointA);
+                                bool thisNodeContributes =
+                                    static_cast<size_t>(gridPointA >= 0 && gridPointB >= 0 && gridPointC >= 0);
+                                size_t metadataAddress = atomChunk * splineOrderCubed + offsetCBA + atom - atomChunk;
+                                metaData[metadataAddress] = thisNodeContributes * gridAddressCBA;
+                                offsetCBA += REALVECLEN;
+                            }
+                        }
                     }
                 }
-            }
-            mipp::vector<REALVEC> masksA(splineOrder_);
-            mipp::vector<REALVEC> masksB(splineOrder_);
-            mipp::vector<REALVEC> masksC(splineOrder_);
-            for (size_t spline = 0; spline < splineOrder_; ++spline) {
-                masksA[spline] = MAKEVEC((masksVecA[spline][0]));
-                masksB[spline] = MAKEVEC((masksVecB[spline][0]));
-                masksC[spline] = MAKEVEC((masksVecC[spline][0]));
-            }
-            // Make B-Splines and products thereof
-            REALVEC distanceA = MAKEVEC(distanceFromGridPointA[atomChunk]);
-            REALVEC distanceB = MAKEVEC(distanceFromGridPointB[atomChunk]);
-            REALVEC distanceC = MAKEVEC(distanceFromGridPointC[atomChunk]);
-            makeSplines(splinesA, distanceA, splineOrder_, splineDerivativeLevel);
-            makeSplines(splinesB, distanceB, splineOrder_, splineDerivativeLevel);
-            makeSplines(splinesC, distanceC, splineOrder_, splineDerivativeLevel);
-            size_t offsetCBA = 0;
-            for (int orderC = 0; orderC < splineOrder_; ++orderC) {
-                for (int orderB = 0; orderB < splineOrder_; ++orderB) {
-                    for (int orderA = 0; orderA < splineOrder_; ++orderA) {
-                        for (int angMomComponent = 0; angMomComponent < nAngMomComponents; ++angMomComponent) {
-                            const auto &quanta = angMomIterator_[angMomComponent];
-                            const auto splineA = masksA[orderA] * splinesA[quanta[0] * splineOrder_ + orderA];
-                            const auto splineB = masksB[orderB] * splinesB[quanta[1] * splineOrder_ + orderB];
-                            const auto splineC = masksC[orderC] * splinesC[quanta[2] * splineOrder_ + orderC];
-                            // Order is splineC,splineB,splineA,AtomChunk,AngMom
-                            const size_t address = atomChunk * splineOrderCubed * nAngMomComponents + offsetCBA +
-                                                   REALVECLEN * angMomComponent;
+                //// Construct a mask for values that belong on other nodes
+                // mipp::vector<mipp::vector<Real>> masksVecA(splineOrder_);
+                // mipp::vector<mipp::vector<Real>> masksVecB(splineOrder_);
+                // mipp::vector<mipp::vector<Real>> masksVecC(splineOrder_);
+                // for (size_t spline = 0; spline < splineOrder_; ++spline) {
+                //    for (size_t atom = atomChunk; atom < atomChunk + REALVECLEN; ++atom) {
+                //        if (atom < nAtoms) {
+                //            const int &splineA = maskedGridIteratorA_[startingGridPointsA[atom]][spline];
+                //            const int &splineB = maskedGridIteratorB_[startingGridPointsB[atom]][spline];
+                //            const int &splineC = maskedGridIteratorC_[startingGridPointsC[atom]][spline];
+                //            masksVecA[spline].push_back(static_cast<Real>(splineA >= 0));
+                //            masksVecB[spline].push_back(static_cast<Real>(splineB >= 0));
+                //            masksVecC[spline].push_back(static_cast<Real>(splineC >= 0));
+                //        } else {
+                //            masksVecA[spline].push_back(static_cast<Real>(0));
+                //            masksVecB[spline].push_back(static_cast<Real>(0));
+                //            masksVecC[spline].push_back(static_cast<Real>(0));
+                //        }
+                //    }
+                //}
+                // mipp::vector<REALVEC> masksA(splineOrder_);
+                // mipp::vector<REALVEC> masksB(splineOrder_);
+                // mipp::vector<REALVEC> masksC(splineOrder_);
+                // for (size_t spline = 0; spline < splineOrder_; ++spline) {
+                //    masksA[spline] = MAKEVEC((masksVecA[spline][0]));
+                //    masksB[spline] = MAKEVEC((masksVecB[spline][0]));
+                //    masksC[spline] = MAKEVEC((masksVecC[spline][0]));
+                //}
+                // Make B-Splines and products thereof
+                REALVEC distance = MAKEVEC(distanceFromGridPointA[atomChunk]);
+                makeSplines(splinesA, distance, splineOrder_, splineDerivativeLevel);
+                distance = MAKEVEC(distanceFromGridPointB[atomChunk]);
+                makeSplines(splinesB, distance, splineOrder_, splineDerivativeLevel);
+                distance = MAKEVEC(distanceFromGridPointC[atomChunk]);
+                makeSplines(splinesC, distance, splineOrder_, splineDerivativeLevel);
+                //
+                // size_t offsetCBA = 0;
+                // for (int orderC = 0; orderC < splineOrder_; ++orderC) {
+                //    for (int orderB = 0; orderB < splineOrder_; ++orderB) {
+                //        for (int orderA = 0; orderA < splineOrder_; ++orderA) {
+                //            for (int angMomComponent = 0; angMomComponent < nAngMomComponents; ++angMomComponent) {
+                //                const auto &quanta = angMomIterator_[angMomComponent];
+                //                const auto splineA = /*masksA[orderA] */ splinesA[quanta[0] * splineOrder_ + orderA];
+                //                const auto splineB = /*masksB[orderB] */ splinesB[quanta[1] * splineOrder_ + orderB];
+                //                const auto splineC = /*masksC[orderC] */ splinesC[quanta[2] * splineOrder_ + orderC];
+                //                // Order is splineC,splineB,splineA,AtomChunk,AngMom
+                //                const size_t address = atomChunk * splineOrderCubed * nAngMomComponents + offsetCBA +
+                //                                       REALVECLEN * angMomComponent;
 
-                            STOREVEC(splineC * splineB * splineA, coefficients[address]);
+                //                STOREVEC(splineC * splineB * splineA, coefficients[address]);
+                //            }
+                //            offsetCBA += nAngMomComponents * REALVECLEN;
+                //        }
+                //    }
+                //}
+                for (int angMomComponent = 0; angMomComponent < nAngMomComponents; ++angMomComponent) {
+                    const auto &quanta = angMomIterator_[angMomComponent];
+                    size_t offsetCBA = 0;
+                    for (int orderC = 0; orderC < splineOrder_; ++orderC) {
+                        const auto splineC = /*masksC[orderC] */ splinesC[quanta[2] * splineOrder_ + orderC];
+                        for (int orderB = 0; orderB < splineOrder_; ++orderB) {
+                            const auto splineB = /*masksB[orderB] */ splinesB[quanta[1] * splineOrder_ + orderB];
+                            REALVEC splineCB = splineC * splineB;
+                            for (int orderA = 0; orderA < splineOrder_; ++orderA) {
+                                const auto splineA = /*masksA[orderA] */ splinesA[quanta[0] * splineOrder_ + orderA];
+                                // Order is splineC,splineB,splineA,AtomChunk,AngMom
+                                const size_t address = atomChunk * splineOrderCubed * nAngMomComponents + offsetCBA +
+                                                       REALVECLEN * angMomComponent;
+
+                                STOREVEC(splineCB * splineA, coefficients[address]);
+                                offsetCBA += nAngMomComponents * REALVECLEN;
+                            }
                         }
-                        offsetCBA += nAngMomComponents * REALVECLEN;
                     }
                 }
             }
@@ -2385,7 +2418,8 @@ class PMEInstance {
                 mipp::vector<REALVEC> fractionalPotentials(nAngMomComponents, 0.0f);
                 for (size_t splines = 0; splines < splineOrderCubed; ++splines) {
                     for (int atom = 0; atom < REALVECLEN; ++atom) {
-                        gridTemp[atom] = potentialGrid[metadata[splines * paddedNumAtoms + atomChunk + atom]];
+                        gridTemp[atom] =
+                            potentialGrid[metadata[atomChunk * splineOrderCubed + splines * REALVECLEN + atom]];
                     }
                     REALVEC gridVals = MAKEVEC(gridTemp[0]);
                     const Real *splinesCoefficient = atomCoefficients + splines * nAngMomComponents * REALVECLEN;
