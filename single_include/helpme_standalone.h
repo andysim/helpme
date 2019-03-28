@@ -443,6 +443,9 @@ class FFTWAllocator {
     template <class U>
     FFTWAllocator(const FFTWAllocator<U>&) throw() {}
     ~FFTWAllocator() throw() {}
+    FFTWAllocator & operator = (FFTWAllocator other) throw() {}
+    template <class U>
+    FFTWAllocator & operator = (FFTWAllocator<U> other) throw() {}
 
     // return maximum number of elements that can be allocated
     size_type max_size() const throw() { return std::numeric_limits<std::size_t>::max() / sizeof(T); }
@@ -3228,7 +3231,7 @@ class PMEInstance {
                                            const Real *zMods, const int *xMVals, const int *yMVals, const int *zMVals,
                                            int nThreads) {
         bool nodeZero = startX == 0 && startY == 0 && startZ == 0;
-        size_t nxz = myNx * myNz;
+        size_t nxz = (size_t)myNx * myNz;
         size_t nyxz = myNy * nxz;
         influenceFunction.resize(nyxz);
         Real *gridPtr = influenceFunction.data();

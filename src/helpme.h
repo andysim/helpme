@@ -877,7 +877,7 @@ class PMEInstance {
                                            const Real *zMods, const int *xMVals, const int *yMVals, const int *zMVals,
                                            int nThreads) {
         bool nodeZero = startX == 0 && startY == 0 && startZ == 0;
-        size_t nxz = myNx * myNz;
+        size_t nxz = (size_t)myNx * myNz;
         size_t nyxz = myNy * nxz;
         influenceFunction.resize(nyxz);
         Real *gridPtr = influenceFunction.data();
