@@ -649,7 +649,7 @@ class PMEInstance {
 
         Real bPrefac = PI * PI / (kappa * kappa);
         Real volPrefac = scaleFactor * pow(PI, rPower - 1) / (SQRTPI * gammaComputer<Real, rPower>::value * volume);
-        size_t nxz = myNx * myNz;
+        size_t nxz = (size_t)myNx * myNz;
         Real Vxx = 0, Vxy = 0, Vyy = 0, Vxz = 0, Vyz = 0, Vzz = 0;
         const Real *boxPtr = boxInv[0];
         size_t nyxz = myNy * nxz;
@@ -755,7 +755,7 @@ class PMEInstance {
 
         Real bPrefac = PI * PI / (kappa * kappa);
         Real volPrefac = scaleFactor * pow(PI, rPower - 1) / (SQRTPI * gammaComputer<Real, rPower>::value * volume);
-        size_t nxz = myNx * myNz;
+        size_t nxz = (size_t)myNx * myNz;
         size_t nyxz = myNy * nxz;
         Real Vxx = 0, Vxy = 0, Vyy = 0, Vxz = 0, Vyz = 0, Vzz = 0;
         const Real *boxPtr = boxInv[0];
@@ -783,9 +783,9 @@ class PMEInstance {
             Real eGamma = std::get<0>(gammas);
             Real vGamma = std::get<1>(gammas);
             const Real &gridVal = gridPtrIn[yxz];
-            int minusKx = (mx == 0 ? 0 : (mx < 0 ? kx - 1 : kx + 1));
-            int minusKy = (my == 0 ? 0 : (my < 0 ? ky - 1 : ky + 1));
-            int minusKz = (mz == 0 ? 0 : (mz < 0 ? kz - 1 : kz + 1));
+            size_t minusKx = (mx == 0 ? 0 : (mx < 0 ? kx - 1 : kx + 1));
+            size_t minusKy = (my == 0 ? 0 : (my < 0 ? ky - 1 : ky + 1));
+            size_t minusKz = (mz == 0 ? 0 : (mz < 0 ? kz - 1 : kz + 1));
             size_t addressXY = minusKy * nxz + minusKx * myNz + kz;
             size_t addressXZ = ky * nxz + minusKx * myNz + minusKz;
             size_t addressYZ = minusKy * nxz + kx * myNz + minusKz;
@@ -877,7 +877,7 @@ class PMEInstance {
                                            const Real *zMods, const int *xMVals, const int *yMVals, const int *zMVals,
                                            int nThreads) {
         bool nodeZero = startX == 0 && startY == 0 && startZ == 0;
-        size_t nxz = myNx * myNz;
+        size_t nxz = (size_t)myNx * myNz;
         size_t nyxz = myNy * nxz;
         influenceFunction.resize(nyxz);
         Real *gridPtr = influenceFunction.data();
@@ -1117,8 +1117,8 @@ class PMEInstance {
                 compressionCoefficientsA_ = RealMat(numKSumTermsA_, myGridDimensionA_);
                 compressionCoefficientsB_ = RealMat(numKSumTermsB_, myGridDimensionB_);
                 compressionCoefficientsC_ = RealMat(numKSumTermsC_, myGridDimensionC_);
-                scratchSize = std::max(myGridDimensionA_, numKSumTermsA) * std::max(myGridDimensionB_, numKSumTermsB) *
-                              std::max(myGridDimensionC_, numKSumTermsC);
+                scratchSize = (size_t)std::max(myGridDimensionA_, numKSumTermsA) *
+                              std::max(myGridDimensionB_, numKSumTermsB) * std::max(myGridDimensionC_, numKSumTermsC);
             } else {
                 gridDimensionA_ = findGridSize(dimA, {numNodesA_});
                 gridDimensionB_ = findGridSize(dimB, {numNodesB_ * numNodesC_});
@@ -1147,7 +1147,7 @@ class PMEInstance {
                 compressionCoefficientsA_ = RealMat();
                 compressionCoefficientsB_ = RealMat();
                 compressionCoefficientsC_ = RealMat();
-                scratchSize = myGridDimensionC_ * myComplexGridDimensionA_ * myGridDimensionB_;
+                scratchSize = (size_t)myGridDimensionC_ * myComplexGridDimensionA_ * myGridDimensionB_;
             }
 
             // Grid iterators to correctly wrap the grid when using splines.
@@ -1924,7 +1924,7 @@ class PMEInstance {
      */
     Real convolveE(Real *transformedGrid) {
         updateInfluenceFunction();
-        size_t nxz = myNumKSumTermsA_ * myNumKSumTermsC_;
+        size_t nxz = (size_t)myNumKSumTermsA_ * myNumKSumTermsC_;
         size_t nyxz = myNumKSumTermsB_ * nxz;
         bool iAmNodeZero = (myNodeRankA_ == 0 && myNodeRankB_ == 0 && myNodeRankC_ == 0);
         Real *influenceFunction = cachedInfluenceFunction_.data();
@@ -1953,7 +1953,7 @@ class PMEInstance {
      */
     Real convolveE(Complex *transformedGrid) {
         updateInfluenceFunction();
-        size_t nxz = myNumKSumTermsA_ * myNumKSumTermsC_;
+        size_t nxz = (size_t)myNumKSumTermsA_ * myNumKSumTermsC_;
         size_t nyxz = myNumKSumTermsB_ * nxz;
         bool iAmNodeZero = (myNodeRankA_ == 0 && myNodeRankB_ == 0 && myNodeRankC_ == 0);
         Real *influenceFunction = cachedInfluenceFunction_.data();
@@ -2481,8 +2481,8 @@ class PMEInstance {
                     for (int pointB = 0; pointB < numPointsB; ++pointB) {
                         const auto &bPoint = iteratorDataB[pointB];
                         Real cbValP = cValP * splineValsB[bPoint.second];
-                        Real *cbRow = realGrid + cPoint.first * myGridDimensionB_ * myGridDimensionA_ +
-                                      bPoint.first * myGridDimensionA_;
+                        Real *cbRow = &realGrid[cPoint.first * myGridDimensionB_ * myGridDimensionA_ +
+                                                bPoint.first * myGridDimensionA_];
                         for (int pointA = 0; pointA < numPointsA; ++pointA) {
                             const auto &aPoint = iteratorDataA[pointA];
                             cbRow[aPoint.first] += cbValP * splineValsA[aPoint.second];

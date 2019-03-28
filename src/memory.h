@@ -50,6 +50,9 @@ class FFTWAllocator {
     template <class U>
     FFTWAllocator(const FFTWAllocator<U>&) throw() {}
     ~FFTWAllocator() throw() {}
+    FFTWAllocator& operator=(FFTWAllocator other) throw() {}
+    template <class U>
+    FFTWAllocator& operator=(FFTWAllocator<U> other) throw() {}
 
     // return maximum number of elements that can be allocated
     size_type max_size() const throw() { return std::numeric_limits<std::size_t>::max() / sizeof(T); }
