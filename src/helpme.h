@@ -2481,8 +2481,8 @@ class PMEInstance {
                     for (int pointB = 0; pointB < numPointsB; ++pointB) {
                         const auto &bPoint = iteratorDataB[pointB];
                         Real cbValP = cValP * splineValsB[bPoint.second];
-                        Real *cbRow = (Real *)realGrid + cPoint.first * myGridDimensionB_ * myGridDimensionA_ +
-                                      bPoint.first * myGridDimensionA_;
+                        Real *cbRow = &realGrid[cPoint.first * myGridDimensionB_ * myGridDimensionA_ +
+                                                bPoint.first * myGridDimensionA_];
                         for (int pointA = 0; pointA < numPointsA; ++pointA) {
                             const auto &aPoint = iteratorDataA[pointA];
                             cbRow[aPoint.first] += cbValP * splineValsA[aPoint.second];
