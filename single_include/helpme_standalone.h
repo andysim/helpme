@@ -443,9 +443,9 @@ class FFTWAllocator {
     template <class U>
     FFTWAllocator(const FFTWAllocator<U>&) throw() {}
     ~FFTWAllocator() throw() {}
-    FFTWAllocator & operator = (FFTWAllocator other) throw() {}
+    FFTWAllocator& operator=(FFTWAllocator other) throw() {}
     template <class U>
-    FFTWAllocator & operator = (FFTWAllocator<U> other) throw() {}
+    FFTWAllocator& operator=(FFTWAllocator<U> other) throw() {}
 
     // return maximum number of elements that can be allocated
     size_type max_size() const throw() { return std::numeric_limits<std::size_t>::max() / sizeof(T); }
@@ -4835,7 +4835,7 @@ class PMEInstance {
                     for (int pointB = 0; pointB < numPointsB; ++pointB) {
                         const auto &bPoint = iteratorDataB[pointB];
                         Real cbValP = cValP * splineValsB[bPoint.second];
-                        Real *cbRow = realGrid + cPoint.first * myGridDimensionB_ * myGridDimensionA_ +
+                        Real *cbRow = (Real *)realGrid + cPoint.first * myGridDimensionB_ * myGridDimensionA_ +
                                       bPoint.first * myGridDimensionA_;
                         for (int pointA = 0; pointA < numPointsA; ++pointA) {
                             const auto &aPoint = iteratorDataA[pointA];
