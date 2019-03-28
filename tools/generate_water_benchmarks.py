@@ -1,8 +1,5 @@
 import os
 import sys
-import numpy as np
-from scipy.stats import special_ortho_group
-from random import uniform as rand
 from simtk import unit
 from simtk.openmm import app
 from simtk import openmm
