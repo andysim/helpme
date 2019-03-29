@@ -3142,7 +3142,7 @@ class PMEInstance {
             size_t minusKz = (mz == 0 ? 0 : (mz < 0 ? kz - 1 : kz + 1));
             size_t addressXY = minusKy * nxz + minusKx * myNz + kz;
             size_t addressXZ = ky * nxz + minusKx * myNz + minusKz;
-            size_t addressYZ = minusKy * nxz + kx * myNz + minusKz;
+            size_t addressYZ = minusKy * nxz + (size_t)kx * myNz + minusKz;
             Real totalPrefac = volPrefac * mTerm * yMods[ky] * xMods[kx] * zMods[kz];
             Real influenceFunction = totalPrefac * eGamma;
             gridPtrOut[yxz] = gridVal * influenceFunction;
