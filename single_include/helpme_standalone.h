@@ -3809,7 +3809,6 @@ class PMEInstance {
             } else {
                 throw std::runtime_error("Unknown lattice type in setLatticeVectors");
             }
-            std::cout << boxVecs_.nRows() << "  " << boxVecs_.nCols() << std::endl;
             recVecs_ = boxVecs_.inverse();
             scaledRecVecs_ = recVecs_.clone();
             scaledRecVecs_.row(0) *= gridDimensionA_;
