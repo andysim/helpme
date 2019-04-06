@@ -2474,49 +2474,47 @@ class PMEInstance {
     /*!
      * \brief The algorithm being used to solve for the reciprocal space quantities.
      */
-    enum class AlgorithmType : int { PME = 0, CompressedPME = 1 };
+    enum class AlgorithmType : int { Undefined = 0, PME = 1, CompressedPME = 2 };
 
     /*!
      * \brief The different conventions for orienting a lattice constructed from input parameters.
      */
-    enum class LatticeType : int { XAligned = 0, ShapeMatrix = 1 };
+    enum class LatticeType : int { Undefined = 0, XAligned = 1, ShapeMatrix = 2 };
 
     /*!
      * \brief The different conventions for numbering nodes.
      */
-    enum class NodeOrder : int { ZYX = 0 };
+    enum class NodeOrder : int { Undefined = 0, ZYX = 1 };
 
    protected:
     /// The FFT grid dimensions in the {A,B,C} grid dimensions.
-    int gridDimensionA_, gridDimensionB_, gridDimensionC_;
+    int gridDimensionA_ = 0, gridDimensionB_ = 0, gridDimensionC_ = 0;
     /// The number of K vectors in the {A,B,C} dimensions.  Equal to dim{A,B,C} for PME, lower for cPME.
-    int numKSumTermsA_, numKSumTermsB_, numKSumTermsC_;
+    int numKSumTermsA_ = 0, numKSumTermsB_ = 0, numKSumTermsC_ = 0;
     /// The number of K vectors in the {A,B,C} dimensions to be handled by this node in a parallel setup.
-    int myNumKSumTermsA_, myNumKSumTermsB_, myNumKSumTermsC_;
+    int myNumKSumTermsA_ = 0, myNumKSumTermsB_ = 0, myNumKSumTermsC_ = 0;
     /// The full A dimension after real->complex transformation.
-    int complexGridDimensionA_;
+    int complexGridDimensionA_ = 0;
     /// The locally owned A dimension after real->complex transformation.
-    int myComplexGridDimensionA_;
+    int myComplexGridDimensionA_ = 0;
     /// The order of the cardinal B-Spline used for interpolation.
-    int splineOrder_;
+    int splineOrder_ = 0;
     /// The actual number of threads per MPI instance, and the number requested previously.
-    int nThreads_, requestedNumberOfThreads_;
+    int nThreads_ = -1, requestedNumberOfThreads_ = -1;
     /// The exponent of the (inverse) interatomic distance used in this kernel.
-    int rPower_;
+    int rPower_ = 0;
     /// The scale factor to apply to all energies and derivatives.
-    Real scaleFactor_;
+    Real scaleFactor_ = 0;
     /// The attenuation parameter, whose units should be the inverse of those used to specify coordinates.
-    Real kappa_;
+    Real kappa_ = 0;
     /// The lattice vectors.
-    RealMat boxVecs_;
+    RealMat boxVecs_ = RealMat(3, 3);
     /// The reciprocal lattice vectors.
-    RealMat recVecs_;
+    RealMat recVecs_ = RealMat(3, 3);
     /// The scaled reciprocal lattice vectors, for transforming forces from scaled fractional coordinates.
-    RealMat scaledRecVecs_;
+    RealMat scaledRecVecs_ = RealMat(3, 3);
     /// An iterator over angular momentum components.
     std::vector<std::array<short, 3>> angMomIterator_;
-    /// The number of permutations of each multipole component.
-    RealVec permutations_;
     /// From a given starting point on the {A,B,C} edge of the grid, lists all points to be handled, correctly wrapping
     /// around the end.
     GridIterator gridIteratorA_, gridIteratorB_, gridIteratorC_;
@@ -2559,43 +2557,43 @@ class PMEInstance {
     std::unique_ptr<MPIWrapper<Real>> mpiCommunicatorA_, mpiCommunicatorB_, mpiCommunicatorC_;
 #endif
     /// The number of nodes in the {A,B,C} dimensions.
-    int numNodesA_, numNodesB_, numNodesC_;
+    int numNodesA_ = 1, numNodesB_ = 1, numNodesC_ = 1;
     /// The rank of this node along the {A,B,C} dimensions.
-    int myNodeRankA_, myNodeRankB_, myNodeRankC_;
+    int myNodeRankA_ = 0, myNodeRankB_ = 0, myNodeRankC_ = 0;
     /// The first grid point that this node is responsible for in the {A,B,C} dimensions.
-    int myFirstGridPointA_, myFirstGridPointB_, myFirstGridPointC_;
+    int myFirstGridPointA_ = 0, myFirstGridPointB_ = 0, myFirstGridPointC_ = 0;
     /// The first K sum term that this node is responsible for.
-    int firstKSumTermA_, firstKSumTermB_, firstKSumTermC_;
+    int firstKSumTermA_ = 0, firstKSumTermB_ = 0, firstKSumTermC_ = 0;
     /// The {X,Y,Z} dimensions of the locally owned chunk of the grid.
-    int myGridDimensionA_, myGridDimensionB_, myGridDimensionC_;
+    int myGridDimensionA_ = 0, myGridDimensionB_ = 0, myGridDimensionC_ = 0;
     /// The subsets of a given dimension to be processed when doing a transform along another dimension.
-    int subsetOfCAlongA_, subsetOfCAlongB_, subsetOfBAlongC_;
+    int subsetOfCAlongA_ = 0, subsetOfCAlongB_ = 0, subsetOfBAlongC_ = 0;
     /// The size of a cache line, in units of the size of the Real type, to allow better memory allocation policies.
-    Real cacheLineSizeInReals_;
+    Real cacheLineSizeInReals_ = 0;
     /// The current unit cell parameters.
-    Real cellA_, cellB_, cellC_, cellAlpha_, cellBeta_, cellGamma_;
+    Real cellA_ = 0, cellB_ = 0, cellC_ = 0, cellAlpha_ = 0, cellBeta_ = 0, cellGamma_ = 0;
     /// Whether the unit cell parameters have been changed, invalidating cached gF quantities.
-    bool unitCellHasChanged_;
+    bool unitCellHasChanged_ = true;
     /// Whether the kappa has been changed, invalidating kappa-dependent quantities.
-    bool kappaHasChanged_;
+    bool kappaHasChanged_ = true;
     /// Whether any of the grid dimensions have changed.
-    bool gridDimensionHasChanged_;
+    bool gridDimensionHasChanged_ = true;
     /// Whether any of the reciprocal sum dimensions have changed.
-    bool reciprocalSumDimensionHasChanged_;
+    bool reciprocalSumDimensionHasChanged_ = true;
     /// Whether the algorithm to be used has changed.
-    bool algorithmHasChanged_;
+    bool algorithmHasChanged_ = true;
     /// Whether the spline order has changed.
-    bool splineOrderHasChanged_;
+    bool splineOrderHasChanged_ = true;
     /// Whether the scale factor has changed.
-    bool scaleFactorHasChanged_;
+    bool scaleFactorHasChanged_ = true;
     /// Whether the power of R has changed.
-    bool rPowerHasChanged_;
+    bool rPowerHasChanged_ = true;
     /// Whether the parallel node setup has changed in any way.
-    bool numNodesHasChanged_;
+    bool numNodesHasChanged_ = true;
     /// The algorithm being used to solve for reciprocal space quantities.
-    AlgorithmType algorithmType_;
+    AlgorithmType algorithmType_ = AlgorithmType::Undefined;
     /// The type of alignment scheme used for the lattice vectors.
-    LatticeType latticeType_;
+    LatticeType latticeType_ = LatticeType::Undefined;
     /// Communication buffers for MPI parallelism.
     helpme::vector<Complex> workSpace1_, workSpace2_;
     /// FFTW wrappers to help with transformations in the {A,B,C} dimensions.
@@ -2679,13 +2677,11 @@ class PMEInstance {
         if (angMomIterator_.size() >= expectedNTerms) return;
 
         angMomIterator_.resize(expectedNTerms);
-        permutations_.resize(expectedNTerms);
         for (short l = 0, count = 0; l <= L; ++l) {
             for (short lz = 0; lz <= l; ++lz) {
                 for (short ly = 0; ly <= l - lz; ++ly) {
                     short lx = l - ly - lz;
                     angMomIterator_[count] = {{static_cast<short>(lx), static_cast<short>(ly), static_cast<short>(lz)}};
-                    permutations_[count] = (Real)factorial(l) / (factorial(lx) * factorial(ly) * factorial(lz));
                     ++count;
                 }
             }
@@ -3647,31 +3643,6 @@ class PMEInstance {
     }
 
    public:
-    PMEInstance()
-        : gridDimensionA_(0),
-          gridDimensionB_(0),
-          gridDimensionC_(0),
-          numKSumTermsA_(0),
-          numKSumTermsB_(0),
-          numKSumTermsC_(0),
-          splineOrder_(0),
-          requestedNumberOfThreads_(-1),
-          rPower_(0),
-          scaleFactor_(0),
-          kappa_(0),
-          boxVecs_(3, 3),
-          recVecs_(3, 3),
-          scaledRecVecs_(3, 3),
-          numNodesA_(1),
-          numNodesB_(1),
-          numNodesC_(1),
-          cellA_(0),
-          cellB_(0),
-          cellC_(0),
-          cellAlpha_(0),
-          cellBeta_(0),
-          cellGamma_(0) {}
-
     /*!
      * \brief Spread the parameters onto the charge grid.  Generally this shouldn't be called;
      *        use the various computeE() methods instead. This the more efficient version that filters
@@ -5258,8 +5229,8 @@ using PMEInstanceF = helpme::PMEInstance<float>;
 #include <mpi.h>
 #endif
 
-typedef enum { XAligned = 0, ShapeMatrix = 1 } LatticeType;
-typedef enum { ZYX = 0 } NodeOrder;
+typedef enum { Undefined = 0, XAligned = 1, ShapeMatrix = 2 } LatticeType;
+typedef enum { /* Undefined comes from the above scope */ ZYX = 1 } NodeOrder;
 
 typedef struct PMEInstance PMEInstance;
 extern struct PMEInstance *helpme_createD();

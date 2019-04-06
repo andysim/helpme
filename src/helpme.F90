@@ -4,16 +4,18 @@ module helpme
 
     ! LatticeType enum
     enum, bind(c)
-        enumerator :: ShapeMatrix = 0
-        enumerator :: XAligned = 1
+        enumerator :: Undefined = 0
+        enumerator :: ShapeMatrix = 1
+        enumerator :: XAligned = 2
     end enum
 
     ! NodeOrder enum
     enum, bind(c)
-        enumerator :: ZYX
+        ! These are not scoepd, so Undefined comes from the above
+        enumerator :: ZYX = 1
     end enum
 
-    public ShapeMatrix, XAligned, ZYX
+    public Undefined, ShapeMatrix, XAligned, ZYX
 
     interface
 
