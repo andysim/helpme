@@ -4,6 +4,7 @@ set( SOURCES_UNITTESTS_TESTS
     unittest-coulombkappasweep.cpp
     unittest-dispersionkappasweep.cpp
     unittest-fft.cpp
+    unittest-fletcher.cpp
     unittest-fullrun.cpp
     unittest-fullrun-compressed.cpp
     unittest-fullrun-multipoles.cpp
