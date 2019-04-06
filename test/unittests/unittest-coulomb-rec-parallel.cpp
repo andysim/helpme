@@ -64,11 +64,10 @@ std::tuple<Real, helpme::Matrix<Real>, helpme::Matrix<Real>> runTest(int nx, int
     if (serialRun) {
         return std::make_tuple(nodeEnergy, std::move(nodeForces), std::move(nodeVirial));
     } else {
-        // Only node 0 holds the results.   Use allreduce if all nodes need the info.
         helpme::MPITypes<Real> mpitype;
-        MPI_Reduce(&nodeEnergy, &parallelEnergy, 1, mpitype.realType_, MPI_SUM, 0, MPI_COMM_WORLD);
-        MPI_Reduce(nodeForces[0], parallelForces[0], 6 * 3, mpitype.realType_, MPI_SUM, 0, MPI_COMM_WORLD);
-        MPI_Reduce(nodeVirial[0], parallelVirial[0], 6, mpitype.realType_, MPI_SUM, 0, MPI_COMM_WORLD);
+        MPI_Allreduce(&nodeEnergy, &parallelEnergy, 1, mpitype.realType_, MPI_SUM, MPI_COMM_WORLD);
+        MPI_Allreduce(nodeForces[0], parallelForces[0], 6 * 3, mpitype.realType_, MPI_SUM, MPI_COMM_WORLD);
+        MPI_Allreduce(nodeVirial[0], parallelVirial[0], 6, mpitype.realType_, MPI_SUM, MPI_COMM_WORLD);
         return std::make_tuple(parallelEnergy, std::move(parallelForces), std::move(parallelVirial));
     }
 }
