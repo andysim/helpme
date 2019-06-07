@@ -3698,7 +3698,7 @@ class PMEInstance {
         updateAngMomIterator(parameterAngMom);
 
         int nComponents = nCartesian(parameterAngMom);
-        size_t numBA = myGridDimensionB_ * myGridDimensionA_;
+        size_t numBA = (size_t) myGridDimensionB_ * myGridDimensionA_;
 #pragma omp parallel num_threads(nThreads_)
         {
 #ifdef _OPENMP
@@ -3707,7 +3707,7 @@ class PMEInstance {
             int threadID = 0;
 #endif
             for (size_t row = threadID; row < myGridDimensionC_; row += nThreads_) {
-                std::fill(realGrid + row * numBA, realGrid + (row + 1) * numBA, Real(0));
+                std::fill(&realGrid[row * numBA], &realGrid[(row + 1) * numBA], Real(0));
             }
             for (const auto &spline : splinesPerThread_[threadID]) {
                 const auto &cacheEntry = splineCache_[spline];
@@ -4094,7 +4094,7 @@ class PMEInstance {
 #endif
 
         // B transform
-        size_t numCA = subsetOfCAlongB_ * myComplexGridDimensionA_;
+        size_t numCA = (size_t) subsetOfCAlongB_ * myComplexGridDimensionA_;
 #pragma omp parallel for num_threads(nThreads_)
         for (size_t ca = 0; ca < numCA; ++ca) {
             fftHelperB_.transform(buffer1 + ca * gridDimensionB_, FFTW_FORWARD);
@@ -4169,7 +4169,7 @@ class PMEInstance {
         }
 
         // C transform
-        size_t numYX = subsetOfBAlongC_ * myComplexGridDimensionA_;
+        size_t numYX = (size_t) subsetOfBAlongC_ * myComplexGridDimensionA_;
 #pragma omp parallel for num_threads(nThreads_)
         for (size_t yx = 0; yx < numYX; ++yx) {
             fftHelperC_.transform(convolvedGrid + yx * gridDimensionC_, FFTW_BACKWARD);
@@ -4221,7 +4221,7 @@ class PMEInstance {
 #endif
 
         // B transform with instant sort of local blocks from CAB -> CBA order
-        size_t numCA = subsetOfCAlongB_ * myComplexGridDimensionA_;
+        size_t numCA = (size_t) subsetOfCAlongB_ * myComplexGridDimensionA_;
 #pragma omp parallel for num_threads(nThreads_)
         for (size_t ca = 0; ca < numCA; ++ca) {
             fftHelperB_.transform(buffer1 + ca * gridDimensionB_, FFTW_BACKWARD);
