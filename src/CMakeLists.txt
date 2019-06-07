@@ -3,6 +3,7 @@ set(sources_list
         )
 
 include_directories(${FFTW_INCLUDES})
+include_directories(${MKL_INCLUDE_DIR})
 add_library(helpmestatic STATIC ${sources_list})
 target_link_libraries(helpmestatic ${FFTW_LIBRARIES})
 

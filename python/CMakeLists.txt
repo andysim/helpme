@@ -18,6 +18,7 @@ add_custom_target(PythonInstall
 
 include_directories(../src)
 include_directories(${FFTW_INCLUDES})
+include_directories(${MKL_INCLUDE_DIR})
 link_libraries(${EXTERNAL_LIBRARIES})
 pybind11_add_module(helpmelib pywrappers.cc)
 

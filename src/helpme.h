@@ -19,10 +19,12 @@
 #include <complex>
 #include <functional>
 #include <iostream>
+#include <list>
 #include <memory>
 #ifdef _OPENMP
 #include <omp.h>
 #endif
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <tuple>
@@ -34,6 +36,9 @@
 #include "gamma.h"
 #include "gridsize.h"
 #include "matrix.h"
+#if HAVE_MKL == 1
+#include "mkl.h"
+#endif
 #include "memory.h"
 #if HAVE_MPI == 1
 #include "mpi_wrapper.h"
@@ -159,11 +164,15 @@ class PMEInstance {
     RealMat recVecs_ = RealMat(3, 3);
     /// The scaled reciprocal lattice vectors, for transforming forces from scaled fractional coordinates.
     RealMat scaledRecVecs_ = RealMat(3, 3);
+    /// A list of the number of splines handle by each thread on this node.
+    std::vector<size_t> numAtomsPerThread_;
     /// An iterator over angular momentum components.
     std::vector<std::array<short, 3>> angMomIterator_;
     /// From a given starting point on the {A,B,C} edge of the grid, lists all points to be handled, correctly wrapping
     /// around the end.
     GridIterator gridIteratorA_, gridIteratorB_, gridIteratorC_;
+    /// The grid iterator for the C dimension, divided up by threads to avoid race conditions in parameter spreading.
+    std::vector<GridIterator> threadedGridIteratorC_;
     /// The (inverse) bspline moduli to normalize the spreading / probing steps; these are folded into the convolution.
     RealVec splineModA_, splineModB_, splineModC_;
     /// The cached influence function involved in the convolution.
@@ -244,25 +253,18 @@ class PMEInstance {
     helpme::vector<Complex> workSpace1_, workSpace2_;
     /// FFTW wrappers to help with transformations in the {A,B,C} dimensions.
     FFTWWrapper<Real> fftHelperA_, fftHelperB_, fftHelperC_;
-    /// The list of atoms, and their fractional coordinates, that will contribute to this node.
-    std::vector<std::tuple<int, Real, Real, Real>> atomList_;
-    /// The cached list of splines, which is stored as a member to make it persistent.
+    /// The cached list of splines.
     std::vector<SplineCacheEntry<Real>> splineCache_;
+    /// A scratch array for each threads to use as storage when probing the grid.
+    RealMat fractionalPhis_;
+    /// A list of the splines that each thread should handle.
+    std::vector<std::list<size_t>> splinesPerThread_;
     /// The transformation matrices for the compressed PME algorithms, in the {A,B,C} dimensions.
     RealMat compressionCoefficientsA_, compressionCoefficientsB_, compressionCoefficientsC_;
     /// Iterators that define the reciprocal lattice sums over each index, correctly defining -1/2 <= m{A,B,C} < 1/2.
     std::vector<int> mValsA_, mValsB_, mValsC_;
-
-    /*!
-     * \brief A simple helper to compute factorials.
-     * \param n the number whose factorial is to be taken.
-     * \return n!
-     */
-    unsigned int factorial(unsigned int n) {
-        unsigned int ret = 1;
-        for (unsigned int i = 1; i <= n; ++i) ret *= i;
-        return ret;
-    }
+    /// A temporary list used in the assigning of atoms to threads and resorting by starting grid point.
+    std::vector<std::set<std::pair<uint32_t, uint32_t>>> gridAtomList_;
 
     /*!
      * \brief makeGridIterator makes an iterator over the spline values that contribute to this node's grid
@@ -374,12 +376,13 @@ class PMEInstance {
      *         for Ly in range(0, L - Lz + 1):
      *              Lx  = L - Ly - Lz
      * \endcode
+     * \param thread the ID of the thread handling this term.
      */
     void spreadParametersImpl(const int &atom, Real *realGrid, const int &nComponents, const Spline &splineA,
-                              const Spline &splineB, const Spline &splineC, const RealMat &parameters) {
+                              const Spline &splineB, const Spline &splineC, const RealMat &parameters, int thread) {
         const auto &aGridIterator = gridIteratorA_[splineA.startingGridPoint()];
         const auto &bGridIterator = gridIteratorB_[splineB.startingGridPoint()];
-        const auto &cGridIterator = gridIteratorC_[splineC.startingGridPoint()];
+        const auto &cGridIterator = threadedGridIteratorC_[thread][splineC.startingGridPoint()];
         int numPointsA = static_cast<int>(aGridIterator.size());
         int numPointsB = static_cast<int>(bGridIterator.size());
         int numPointsC = static_cast<int>(cGridIterator.size());
@@ -1154,6 +1157,25 @@ class PMEInstance {
             gridIteratorC_ = makeGridIterator(gridDimensionC_, myFirstGridPointC_,
                                               myFirstGridPointC_ + myGridDimensionC_, gridPaddingC);
 
+            // Divide C grid points among threads to avoid race conditions.
+            threadedGridIteratorC_.clear();
+            for (int thread = 0; thread < nThreads_; ++thread) {
+                GridIterator myIterator;
+                for (int cGridPoint = 0; cGridPoint < gridDimensionC_; ++cGridPoint) {
+                    std::vector<std::pair<short, short>> splineIterator;
+                    for (const auto &fullIterator : gridIteratorC_[cGridPoint]) {
+                        if (fullIterator.first % nThreads_ == thread) {
+                            splineIterator.push_back(fullIterator);
+                        }
+                    }
+                    splineIterator.shrink_to_fit();
+                    myIterator.push_back(splineIterator);
+                }
+                myIterator.shrink_to_fit();
+                threadedGridIteratorC_.push_back(myIterator);
+            }
+            threadedGridIteratorC_.shrink_to_fit();
+
             // Assign a large default so that uninitialized values end up generating zeros later on
             mValsA_.resize(myNumKSumTermsA_, 99);
             mValsB_.resize(myNumKSumTermsB_, 99);
@@ -1285,6 +1307,9 @@ class PMEInstance {
 
             workSpace1_ = helpme::vector<Complex>(scratchSize);
             workSpace2_ = helpme::vector<Complex>(scratchSize);
+#if HAVE_MKL
+            mkl_set_num_threads(nThreads_);
+#endif
         }
     }
 
@@ -1312,17 +1337,28 @@ class PMEInstance {
      */
     Real *spreadParameters(int parameterAngMom, const RealMat &parameters) {
         Real *realGrid = reinterpret_cast<Real *>(workSpace1_.data());
-        std::fill(workSpace1_.begin(), workSpace1_.end(), 0);
         updateAngMomIterator(parameterAngMom);
-        size_t nAtoms = atomList_.size();
+
         int nComponents = nCartesian(parameterAngMom);
-        for (size_t relativeAtomNumber = 0; relativeAtomNumber < nAtoms; ++relativeAtomNumber) {
-            const auto &entry = splineCache_[relativeAtomNumber];
-            const int &atom = entry.absoluteAtomNumber;
-            const auto &splineA = entry.aSpline;
-            const auto &splineB = entry.bSpline;
-            const auto &splineC = entry.cSpline;
-            spreadParametersImpl(atom, realGrid, nComponents, splineA, splineB, splineC, parameters);
+        size_t numBA = (size_t)myGridDimensionB_ * myGridDimensionA_;
+#pragma omp parallel num_threads(nThreads_)
+        {
+#ifdef _OPENMP
+            int threadID = omp_get_thread_num();
+#else
+            int threadID = 0;
+#endif
+            for (size_t row = threadID; row < myGridDimensionC_; row += nThreads_) {
+                std::fill(&realGrid[row * numBA], &realGrid[(row + 1) * numBA], Real(0));
+            }
+            for (const auto &spline : splinesPerThread_[threadID]) {
+                const auto &cacheEntry = splineCache_[spline];
+                const int &atom = cacheEntry.absoluteAtomNumber;
+                const auto &splineA = cacheEntry.aSpline;
+                const auto &splineB = cacheEntry.bSpline;
+                const auto &splineC = cacheEntry.cSpline;
+                spreadParametersImpl(atom, realGrid, nComponents, splineA, splineB, splineC, parameters, threadID);
+            }
         }
         return realGrid;
     }
@@ -1330,67 +1366,140 @@ class PMEInstance {
     /*!
      * \brief filterAtomsAndBuildSplineCache builds a list of BSplines for only the atoms to be handled by this node.
      * \param splineDerivativeLevel the derivative level (parameter angular momentum + energy derivative level) of the
-     * BSplines. \param coordinates the cartesian coordinates, ordered in memory as {x1,y1,z1,x2,y2,z2,....xN,yN,zN}.
+     * BSplines.
+     * \param coordinates the cartesian coordinates, ordered in memory as {x1,y1,z1,x2,y2,z2,....xN,yN,zN}.
      */
     void filterAtomsAndBuildSplineCache(int splineDerivativeLevel, const RealMat &coords) {
         assertInitialized();
+        constexpr float EPS = 1e-6;
 
-        atomList_.clear();
         size_t nAtoms = coords.nRows();
-        for (int atom = 0; atom < nAtoms; ++atom) {
-            const Real *atomCoords = coords[atom];
-            constexpr float EPS = 1e-6;
-            Real aCoord =
-                atomCoords[0] * recVecs_(0, 0) + atomCoords[1] * recVecs_(1, 0) + atomCoords[2] * recVecs_(2, 0) - EPS;
-            Real bCoord =
-                atomCoords[0] * recVecs_(0, 1) + atomCoords[1] * recVecs_(1, 1) + atomCoords[2] * recVecs_(2, 1) - EPS;
-            Real cCoord =
-                atomCoords[0] * recVecs_(0, 2) + atomCoords[1] * recVecs_(1, 2) + atomCoords[2] * recVecs_(2, 2) - EPS;
-            // Make sure the fractional coordinates fall in the range 0 <= s < 1
-            aCoord -= floor(aCoord);
-            bCoord -= floor(bCoord);
-            cCoord -= floor(cCoord);
-            short aStartingGridPoint = gridDimensionA_ * aCoord;
-            short bStartingGridPoint = gridDimensionB_ * bCoord;
-            short cStartingGridPoint = gridDimensionC_ * cCoord;
-            const auto &aGridIterator = gridIteratorA_[aStartingGridPoint];
-            const auto &bGridIterator = gridIteratorB_[bStartingGridPoint];
-            const auto &cGridIterator = gridIteratorC_[cStartingGridPoint];
-            if (aGridIterator.size() && bGridIterator.size() && cGridIterator.size()) {
-                atomList_.emplace_back(atom, aCoord, bCoord, cCoord);
+        numAtomsPerThread_.resize(nThreads_);
+        splinesPerThread_.resize(nThreads_);
+        gridAtomList_.resize(gridDimensionC_);
+
+// Classify atoms to their worker threads first, then construct splines for each thread
+#pragma omp parallel num_threads(nThreads_)
+        {
+#ifdef _OPENMP
+            int threadID = omp_get_thread_num();
+#else
+            int threadID = 0;
+#endif
+            for (size_t row = threadID; row < gridDimensionC_; row += nThreads_) {
+                gridAtomList_[row].clear();
             }
+            auto &mySplineList = splinesPerThread_[threadID];
+            const auto &gridIteratorC = threadedGridIteratorC_[threadID];
+            mySplineList.clear();
+            size_t myNumAtoms = 0;
+            for (int atom = 0; atom < nAtoms; ++atom) {
+                const Real *atomCoords = coords[atom];
+                Real cCoord = atomCoords[0] * recVecs_(0, 2) + atomCoords[1] * recVecs_(1, 2) +
+                              atomCoords[2] * recVecs_(2, 2) - EPS;
+                cCoord -= floor(cCoord);
+                short cStartingGridPoint = gridDimensionC_ * cCoord;
+                size_t thisAtomsThread = cStartingGridPoint % nThreads_;
+                const auto &cGridIterator = gridIteratorC_[cStartingGridPoint];
+                if (cGridIterator.size() && thisAtomsThread == threadID) {
+                    Real aCoord = atomCoords[0] * recVecs_(0, 0) + atomCoords[1] * recVecs_(1, 0) +
+                                  atomCoords[2] * recVecs_(2, 0) - EPS;
+                    Real bCoord = atomCoords[0] * recVecs_(0, 1) + atomCoords[1] * recVecs_(1, 1) +
+                                  atomCoords[2] * recVecs_(2, 1) - EPS;
+                    // Make sure the fractional coordinates fall in the range 0 <= s < 1
+                    aCoord -= floor(aCoord);
+                    bCoord -= floor(bCoord);
+                    short aStartingGridPoint = gridDimensionA_ * aCoord;
+                    short bStartingGridPoint = gridDimensionB_ * bCoord;
+                    const auto &aGridIterator = gridIteratorA_[aStartingGridPoint];
+                    const auto &bGridIterator = gridIteratorB_[bStartingGridPoint];
+                    uint32_t startingGridPoint = cStartingGridPoint * gridDimensionB_ * gridDimensionA_ +
+                                                 bStartingGridPoint * gridDimensionA_ + aStartingGridPoint;
+                    if (aGridIterator.size() && bGridIterator.size()) {
+                        gridAtomList_[cStartingGridPoint].emplace(startingGridPoint, atom);
+                        ++myNumAtoms;
+                    }
+                }
+            }
+            numAtomsPerThread_[threadID] = myNumAtoms;
         }
 
+        // We could intervene here and do some load balancing by inspecting the list.  Currently
+        // the lazy approach of just assuming that the atoms are evenly distributed along c is used.
+
+        size_t numCacheEntries = std::accumulate(numAtomsPerThread_.begin(), numAtomsPerThread_.end(), 0);
         // Now we know how many atoms we loop over the dense list, redefining nAtoms accordingly.
         // The first stage above is to get the number of atoms, so we can avoid calling push_back
         // and thus avoid the many memory allocations.  If the cache is too small, grow it by a
         // certain scale factor to try and minimize allocations in a not-too-wasteful manner.
-        nAtoms = atomList_.size();
-        if (splineCache_.size() < nAtoms) {
-            size_t newSize = static_cast<size_t>(1.2 * nAtoms);
+        if (splineCache_.size() < numCacheEntries) {
+            size_t newSize = static_cast<size_t>(1.2 * numCacheEntries);
             for (int atom = splineCache_.size(); atom < newSize; ++atom)
                 splineCache_.emplace_back(splineOrder_, splineDerivativeLevel);
         }
+        std::vector<size_t> threadOffset(nThreads_, 0);
+        for (int thread = 1; thread < nThreads_; ++thread) {
+            threadOffset[thread] = threadOffset[thread - 1] + numAtomsPerThread_[thread - 1];
+        }
 
-        for (int atomListNum = 0; atomListNum < nAtoms; ++atomListNum) {
-            const auto &entry = atomList_[atomListNum];
-            const int absoluteAtomNumber = std::get<0>(entry);
-            const Real aCoord = std::get<1>(entry);
-            const Real bCoord = std::get<2>(entry);
-            const Real cCoord = std::get<3>(entry);
-            short aStartingGridPoint = gridDimensionA_ * aCoord;
-            short bStartingGridPoint = gridDimensionB_ * bCoord;
-            short cStartingGridPoint = gridDimensionC_ * cCoord;
-            auto &atomSplines = splineCache_[atomListNum];
-            atomSplines.absoluteAtomNumber = absoluteAtomNumber;
-            atomSplines.aSpline.update(aStartingGridPoint, gridDimensionA_ * aCoord - aStartingGridPoint, splineOrder_,
-                                       splineDerivativeLevel);
-            atomSplines.bSpline.update(bStartingGridPoint, gridDimensionB_ * bCoord - bStartingGridPoint, splineOrder_,
-                                       splineDerivativeLevel);
-            atomSplines.cSpline.update(cStartingGridPoint, gridDimensionC_ * cCoord - cStartingGridPoint, splineOrder_,
-                                       splineDerivativeLevel);
+#pragma omp parallel num_threads(nThreads_)
+        {
+#ifdef _OPENMP
+            int threadID = omp_get_thread_num();
+#else
+            int threadID = 0;
+#endif
+            size_t entry = threadOffset[threadID];
+            for (size_t cRow = threadID; cRow < gridDimensionC_; cRow += nThreads_) {
+                for (const auto &gridPointAndAtom : gridAtomList_[cRow]) {
+                    size_t atom = gridPointAndAtom.second;
+                    const Real *atomCoords = coords[atom];
+                    Real aCoord = atomCoords[0] * recVecs_(0, 0) + atomCoords[1] * recVecs_(1, 0) +
+                                  atomCoords[2] * recVecs_(2, 0) - EPS;
+                    Real bCoord = atomCoords[0] * recVecs_(0, 1) + atomCoords[1] * recVecs_(1, 1) +
+                                  atomCoords[2] * recVecs_(2, 1) - EPS;
+                    Real cCoord = atomCoords[0] * recVecs_(0, 2) + atomCoords[1] * recVecs_(1, 2) +
+                                  atomCoords[2] * recVecs_(2, 2) - EPS;
+                    // Make sure the fractional coordinates fall in the range 0 <= s < 1
+                    aCoord -= floor(aCoord);
+                    bCoord -= floor(bCoord);
+                    cCoord -= floor(cCoord);
+                    short aStartingGridPoint = gridDimensionA_ * aCoord;
+                    short bStartingGridPoint = gridDimensionB_ * bCoord;
+                    short cStartingGridPoint = gridDimensionC_ * cCoord;
+                    auto &atomSplines = splineCache_[entry++];
+                    atomSplines.absoluteAtomNumber = atom;
+                    atomSplines.aSpline.update(aStartingGridPoint, gridDimensionA_ * aCoord - aStartingGridPoint,
+                                               splineOrder_, splineDerivativeLevel);
+                    atomSplines.bSpline.update(bStartingGridPoint, gridDimensionB_ * bCoord - bStartingGridPoint,
+                                               splineOrder_, splineDerivativeLevel);
+                    atomSplines.cSpline.update(cStartingGridPoint, gridDimensionC_ * cCoord - cStartingGridPoint,
+                                               splineOrder_, splineDerivativeLevel);
+                }
+            }
+        }
+
+// Finally, find all of the splines that this thread will need to handle
+#pragma omp parallel num_threads(nThreads_)
+        {
+#ifdef _OPENMP
+            int threadID = omp_get_thread_num();
+#else
+            int threadID = 0;
+#endif
+            auto &mySplineList = splinesPerThread_[threadID];
+            mySplineList.clear();
+            const auto &gridIteratorC = threadedGridIteratorC_[threadID];
+            size_t count = 0;
+            for (size_t atom = 0; atom < numCacheEntries; ++atom) {
+                if (gridIteratorC[splineCache_[atom].cSpline.startingGridPoint()].size()) {
+                    mySplineList.emplace_back(count);
+                }
+                ++count;
+            }
         }
     }
+
     /*!
      * \brief cellVolume Compute the volume of the unit cell.
      * \return volume in units consistent with those used to define the lattice vectors.
@@ -1492,12 +1601,12 @@ class PMEInstance {
         contractABxCWithDxC<Real>(realGrid, compressionCoefficientsA_[0], myGridDimensionC_ * myGridDimensionB_,
                                   myGridDimensionA_, numKSumTermsA_, buffer1);
         // Sort CBA->CAB
-        permuteABCtoACB(buffer1, myGridDimensionC_, myGridDimensionB_, numKSumTermsA_, buffer2);
+        permuteABCtoACB(buffer1, myGridDimensionC_, myGridDimensionB_, numKSumTermsA_, buffer2, nThreads_);
         // Transform B index
         contractABxCWithDxC<Real>(buffer2, compressionCoefficientsB_[0], myGridDimensionC_ * numKSumTermsA_,
                                   myGridDimensionB_, numKSumTermsB_, buffer1);
         // Sort CAB->BAC
-        permuteABCtoCBA(buffer1, myGridDimensionC_, numKSumTermsA_, numKSumTermsB_, buffer2);
+        permuteABCtoCBA(buffer1, myGridDimensionC_, numKSumTermsA_, numKSumTermsB_, buffer2, nThreads_);
         // Transform C index
         contractABxCWithDxC<Real>(buffer2, compressionCoefficientsC_[0], numKSumTermsB_ * numKSumTermsA_,
                                   myGridDimensionC_, numKSumTermsC_, buffer1);
@@ -1571,18 +1680,28 @@ class PMEInstance {
         // numNodesA (dimA-1)/2 + numNodesA = complexDimA + numNodesA/2-1 if dimA is odd
         // We just allocate the larger size here, remembering that the final padding values on the last node
         // will all be allocated to zero and will not contribute to the final answer.
-        helpme::vector<Complex> buffer(complexGridDimensionA_ + numNodesA_ - 1);
+        const size_t scratchRowDim = complexGridDimensionA_ + numNodesA_ - 1;
+        helpme::vector<Complex> buffer(nThreads_ * scratchRowDim);
 
-        // A transform, with instant sort to CAB ordering for each local block
-        auto scratch = buffer.data();
-        for (int c = 0; c < subsetOfCAlongA_; ++c) {
-            for (int b = 0; b < myGridDimensionB_; ++b) {
-                Real *gridPtr = realGrid + c * myGridDimensionB_ * gridDimensionA_ + b * gridDimensionA_;
-                fftHelperA_.transform(gridPtr, scratch);
-                for (int chunk = 0; chunk < numNodesA_; ++chunk) {
-                    for (int a = 0; a < myComplexGridDimensionA_; ++a) {
-                        buffer1[(chunk * subsetOfCAlongA_ + c) * myComplexGridDimensionA_ * myGridDimensionB_ +
-                                a * myGridDimensionB_ + b] = scratch[chunk * myComplexGridDimensionA_ + a];
+// A transform, with instant sort to CAB ordering for each local block
+#pragma omp parallel num_threads(nThreads_)
+        {
+#ifdef _OPENMP
+            int threadID = omp_get_thread_num();
+#else
+            int threadID = 0;
+#endif
+            auto scratch = &buffer[threadID * scratchRowDim];
+#pragma omp for
+            for (int c = 0; c < subsetOfCAlongA_; ++c) {
+                for (int b = 0; b < myGridDimensionB_; ++b) {
+                    Real *gridPtr = realGrid + c * myGridDimensionB_ * gridDimensionA_ + b * gridDimensionA_;
+                    fftHelperA_.transform(gridPtr, scratch);
+                    for (int chunk = 0; chunk < numNodesA_; ++chunk) {
+                        for (int a = 0; a < myComplexGridDimensionA_; ++a) {
+                            buffer1[(chunk * subsetOfCAlongA_ + c) * myComplexGridDimensionA_ * myGridDimensionB_ +
+                                    a * myGridDimensionB_ + b] = scratch[chunk * myComplexGridDimensionA_ + a];
+                        }
                     }
                 }
             }
@@ -1617,11 +1736,10 @@ class PMEInstance {
 #endif
 
         // B transform
-        for (int c = 0; c < subsetOfCAlongB_; ++c) {
-            Complex *cPtr = buffer1 + c * myComplexGridDimensionA_ * gridDimensionB_;
-            for (int a = 0; a < myComplexGridDimensionA_; ++a) {
-                fftHelperB_.transform(cPtr + a * gridDimensionB_, FFTW_FORWARD);
-            }
+        size_t numCA = (size_t)subsetOfCAlongB_ * myComplexGridDimensionA_;
+#pragma omp parallel for num_threads(nThreads_)
+        for (size_t ca = 0; ca < numCA; ++ca) {
+            fftHelperB_.transform(buffer1 + ca * gridDimensionB_, FFTW_FORWARD);
         }
 
 #if HAVE_MPI == 1
@@ -1643,9 +1761,8 @@ class PMEInstance {
                                         subsetOfCAlongB_ * myComplexGridDimensionA_ * myGridDimensionB_);
         }
 #endif
-
         // sort local blocks from CAB to BAC order
-        permuteABCtoCBA(buffer1, myGridDimensionC_, myComplexGridDimensionA_, myGridDimensionB_, buffer2);
+        permuteABCtoCBA(buffer1, myGridDimensionC_, myComplexGridDimensionA_, myGridDimensionB_, buffer2, nThreads_);
 
 #if HAVE_MPI == 1
         if (numNodesC_ > 1) {
@@ -1666,14 +1783,11 @@ class PMEInstance {
             }
         }
 #endif
-
         // C transform
-        for (int b = 0; b < subsetOfBAlongC_; ++b) {
-            Complex *outPtrB = buffer2 + b * myComplexGridDimensionA_ * gridDimensionC_;
-            for (int a = 0; a < myComplexGridDimensionA_; ++a) {
-                Complex *outPtrBA = outPtrB + a * gridDimensionC_;
-                fftHelperC_.transform(outPtrBA, FFTW_FORWARD);
-            }
+        size_t numBA = (size_t)subsetOfBAlongC_ * myComplexGridDimensionA_;
+#pragma omp parallel for num_threads(nThreads_)
+        for (size_t ba = 0; ba < numBA; ++ba) {
+            fftHelperC_.transform(buffer2 + ba * gridDimensionC_, FFTW_FORWARD);
         }
 
         return buffer2;
@@ -1697,11 +1811,10 @@ class PMEInstance {
         }
 
         // C transform
-        for (int y = 0; y < subsetOfBAlongC_; ++y) {
-            for (int x = 0; x < myComplexGridDimensionA_; ++x) {
-                int yx = y * myComplexGridDimensionA_ * gridDimensionC_ + x * gridDimensionC_;
-                fftHelperC_.transform(convolvedGrid + yx, FFTW_BACKWARD);
-            }
+        size_t numYX = (size_t)subsetOfBAlongC_ * myComplexGridDimensionA_;
+#pragma omp parallel for num_threads(nThreads_)
+        for (size_t yx = 0; yx < numYX; ++yx) {
+            fftHelperC_.transform(convolvedGrid + yx * gridDimensionC_, FFTW_BACKWARD);
         }
 
 #if HAVE_MPI == 1
@@ -1726,7 +1839,7 @@ class PMEInstance {
 #endif
 
         // sort local blocks from BAC to CAB order
-        permuteABCtoCBA(buffer2, myGridDimensionB_, myComplexGridDimensionA_, myGridDimensionC_, buffer1);
+        permuteABCtoCBA(buffer2, myGridDimensionB_, myComplexGridDimensionA_, myGridDimensionC_, buffer1, nThreads_);
 
 #if HAVE_MPI == 1
         // Communicate B along rows
@@ -1750,10 +1863,15 @@ class PMEInstance {
 #endif
 
         // B transform with instant sort of local blocks from CAB -> CBA order
+        size_t numCA = (size_t)subsetOfCAlongB_ * myComplexGridDimensionA_;
+#pragma omp parallel for num_threads(nThreads_)
+        for (size_t ca = 0; ca < numCA; ++ca) {
+            fftHelperB_.transform(buffer1 + ca * gridDimensionB_, FFTW_BACKWARD);
+        }
+#pragma omp parallel for num_threads(nThreads_)
         for (int c = 0; c < subsetOfCAlongB_; ++c) {
             for (int a = 0; a < myComplexGridDimensionA_; ++a) {
                 int cx = c * myComplexGridDimensionA_ * gridDimensionB_ + a * gridDimensionB_;
-                fftHelperB_.transform(buffer1 + cx, FFTW_BACKWARD);
                 for (int b = 0; b < myGridDimensionB_; ++b) {
                     for (int chunk = 0; chunk < numNodesB_; ++chunk) {
                         int cb = (chunk * subsetOfCAlongB_ + c) * myGridDimensionB_ * myComplexGridDimensionA_ +
@@ -1797,6 +1915,7 @@ class PMEInstance {
 
         // A transform
         Real *realGrid = reinterpret_cast<Real *>(buffer2);
+#pragma omp parallel for num_threads(nThreads_)
         for (int cb = 0; cb < subsetOfCAlongA_ * myGridDimensionB_; ++cb) {
             fftHelperA_.transform(buffer1 + cb * complexGridDimensionA_, realGrid + cb * gridDimensionA_);
         }
@@ -1870,12 +1989,12 @@ class PMEInstance {
         contractABxCWithDxC<Real>(buffer2, compressionCoefficientsC_[0], numKSumTermsB_ * numKSumTermsA_,
                                   numKSumTermsC_, myGridDimensionC_, buffer1);
         // Sort BAC->CAB
-        permuteABCtoCBA(buffer1, numKSumTermsB_, numKSumTermsA_, myGridDimensionC_, buffer2);
+        permuteABCtoCBA(buffer1, numKSumTermsB_, numKSumTermsA_, myGridDimensionC_, buffer2, nThreads_);
         // Transform B index
         contractABxCWithDxC<Real>(buffer2, compressionCoefficientsB_[0], myGridDimensionC_ * numKSumTermsA_,
                                   numKSumTermsB_, myGridDimensionB_, buffer1);
         // Sort CAB->CBA
-        permuteABCtoACB(buffer1, myGridDimensionC_, numKSumTermsA_, myGridDimensionB_, buffer2);
+        permuteABCtoACB(buffer1, myGridDimensionC_, numKSumTermsA_, myGridDimensionB_, buffer2, nThreads_);
         // Transform A index
         contractABxCWithDxC<Real>(buffer2, compressionCoefficientsA_[0], myGridDimensionC_ * myGridDimensionB_,
                                   numKSumTermsA_, myGridDimensionA_, buffer1);
@@ -2020,26 +2139,31 @@ class PMEInstance {
         // Find how many multiples of the cache line size are needed
         // to ensure that each thread hits a unique page.
         size_t rowSize = std::ceil(nForceComponents / cacheLineSizeInReals_) * cacheLineSizeInReals_;
-        RealMat fractionalPhis(nThreads_, rowSize);
-        size_t nAtoms = atomList_.size();
-#pragma omp parallel for num_threads(nThreads_)
-        for (size_t relativeAtomNumber = 0; relativeAtomNumber < nAtoms; ++relativeAtomNumber) {
-            const auto &entry = splineCache_[relativeAtomNumber];
-            const int &atom = entry.absoluteAtomNumber;
-            const auto &splineA = entry.aSpline;
-            const auto &splineB = entry.bSpline;
-            const auto &splineC = entry.cSpline;
-            if (parameterAngMom) {
+        if (fractionalPhis_.nRows() != nThreads_ || fractionalPhis_.nCols() != rowSize) {
+            fractionalPhis_ = RealMat(nThreads_, rowSize);
+        }
+        size_t nAtoms = std::accumulate(numAtomsPerThread_.begin(), numAtomsPerThread_.end(), 0);
+#pragma omp parallel num_threads(nThreads_)
+        {
 #ifdef _OPENMP
-                int threadID = omp_get_thread_num();
+            int threadID = omp_get_thread_num();
 #else
-                int threadID = 0;
+            int threadID = 0;
 #endif
-                Real *myScratch = fractionalPhis[threadID % nThreads_];
-                probeGridImpl(atom, potentialGrid, nComponents, nForceComponents, splineA, splineB, splineC, myScratch,
-                              parameters, forces[atom]);
-            } else {
-                probeGridImpl(potentialGrid, splineA, splineB, splineC, paramPtr[atom], forces[atom]);
+#pragma omp for
+            for (size_t atom = 0; atom < nAtoms; ++atom) {
+                const auto &cacheEntry = splineCache_[atom];
+                const auto &absAtom = cacheEntry.absoluteAtomNumber;
+                const auto &splineA = cacheEntry.aSpline;
+                const auto &splineB = cacheEntry.bSpline;
+                const auto &splineC = cacheEntry.cSpline;
+                if (parameterAngMom) {
+                    Real *myScratch = fractionalPhis_[threadID % nThreads_];
+                    probeGridImpl(absAtom, potentialGrid, nComponents, nForceComponents, splineA, splineB, splineC,
+                                  myScratch, parameters, forces[absAtom]);
+                } else {
+                    probeGridImpl(potentialGrid, splineA, splineB, splineC, paramPtr[absAtom], forces[absAtom]);
+                }
             }
         }
     }
