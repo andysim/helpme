@@ -84,10 +84,13 @@ if(HAVE_MPI)
     set(NUM_FINDIF 30)
     add_test(NAME RunDHFRFiniteDifferenceTest COMMAND DHFRFiniteDifference 1 1 1 ${NUM_FINDIF})
     add_test(NAME RunDHFRFiniteDifferenceTestX
+             WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/test"
              COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./DHFRFiniteDifference 2 1 1 ${NUM_FINDIF} ${MPIEXEC_POSTFLAGS})
     add_test(NAME RunDHFRFiniteDifferenceTestY
+             WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/test"
              COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./DHFRFiniteDifference 1 2 1 ${NUM_FINDIF} ${MPIEXEC_POSTFLAGS})
     add_test(NAME RunDHFRFiniteDifferenceTestZ
+             WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/test"
              COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./DHFRFiniteDifference 1 1 2 ${NUM_FINDIF} ${MPIEXEC_POSTFLAGS})
 endif()
 
