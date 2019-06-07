@@ -1784,7 +1784,7 @@ class PMEInstance {
         }
 #endif
         // C transform
-        size_t numBA = subsetOfBAlongC_ * myComplexGridDimensionA_;
+        size_t numBA = (size_t)subsetOfBAlongC_ * myComplexGridDimensionA_;
 #pragma omp parallel for num_threads(nThreads_)
         for (size_t ba = 0; ba < numBA; ++ba) {
             fftHelperC_.transform(buffer2 + ba * gridDimensionC_, FFTW_FORWARD);
