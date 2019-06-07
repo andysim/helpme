@@ -35,6 +35,7 @@ endif()
 
 include_directories(${PROJECT_SOURCE_DIR}/src)
 include_directories(${FFTW_INCLUDES})
+include_directories(${MKL_INCLUDE_DIR})
 
 set( SOURCES_UNITTESTS_MAIN unittest-main.cpp )
 

@@ -23,6 +23,7 @@ endforeach()
 include_directories(${PROJECT_SOURCE_DIR}/src)
 include_directories(${PROJECT_SOURCE_DIR}/single_include)
 include_directories(${FFTW_INCLUDES})
+include_directories(${MKL_INCLUDE_DIR})
 
 if(HAVE_MPI)
     link_libraries(${MPI_CXX_LIBRARIES})
@@ -53,7 +54,6 @@ MACRO(MAKE_BENCHMARK testname)
     string(TOLOWER ${testname} lctestname)
     add_executable ("${testname}Benchmark" "${lctestname}_benchmark.cpp")
     target_link_libraries("${testname}Benchmark" ${EXTERNAL_LIBRARIES})
-    set_target_properties("${testname}Benchmark" PROPERTIES COMPILE_FLAGS "-g -O3 -pg")
     configure_file(data/${lctestname}_charges.txt . COPYONLY)
     configure_file(data/${lctestname}_c6s.txt . COPYONLY)
     configure_file(data/${lctestname}_coords.txt . COPYONLY)
@@ -75,6 +75,20 @@ if(HAVE_MPI AND NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
     MAKE_BENCHMARK("WaterBox192000")
     MAKE_BENCHMARK("WaterBox421824")
     MAKE_BENCHMARK("WaterBox526848")
+endif()
+
+# DHFR finite difference test
+add_executable (DHFRFiniteDifference dhfr_findif.cpp)
+target_link_libraries(DHFRFiniteDifference ${EXTERNAL_LIBRARIES})
+set(NUM_FINDIF 30)
+add_test(NAME RunDHFRFiniteDifferenceTest COMMAND DHFRFiniteDifference 1 1 1 ${NUM_FINDIF})
+if(HAVE_MPI)
+    add_test(NAME RunDHFRFiniteDifferenceTestX
+             COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./DHFRFiniteDifference 2 1 1 ${NUM_FINDIF} ${MPIEXEC_POSTFLAGS})
+    add_test(NAME RunDHFRFiniteDifferenceTestY
+             COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./DHFRFiniteDifference 1 2 1 ${NUM_FINDIF} ${MPIEXEC_POSTFLAGS})
+    add_test(NAME RunDHFRFiniteDifferenceTestZ
+             COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./DHFRFiniteDifference 1 1 2 ${NUM_FINDIF} ${MPIEXEC_POSTFLAGS})
 endif()
 
 # CXX example
