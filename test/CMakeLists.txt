@@ -78,11 +78,11 @@ if(HAVE_MPI AND NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
 endif()
 
 # DHFR finite difference test
-add_executable (DHFRFiniteDifference dhfr_findif.cpp)
-target_link_libraries(DHFRFiniteDifference ${EXTERNAL_LIBRARIES})
-set(NUM_FINDIF 30)
-add_test(NAME RunDHFRFiniteDifferenceTest COMMAND DHFRFiniteDifference 1 1 1 ${NUM_FINDIF})
 if(HAVE_MPI)
+    add_executable (DHFRFiniteDifference dhfr_findif.cpp)
+    target_link_libraries(DHFRFiniteDifference ${EXTERNAL_LIBRARIES})
+    set(NUM_FINDIF 30)
+    add_test(NAME RunDHFRFiniteDifferenceTest COMMAND DHFRFiniteDifference 1 1 1 ${NUM_FINDIF})
     add_test(NAME RunDHFRFiniteDifferenceTestX
              COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./DHFRFiniteDifference 2 1 1 ${NUM_FINDIF} ${MPIEXEC_POSTFLAGS})
     add_test(NAME RunDHFRFiniteDifferenceTestY

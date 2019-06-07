@@ -4511,7 +4511,7 @@ class PMEInstance {
 #pragma omp for
             for (size_t atom = 0; atom < nAtoms; ++atom) {
                 const auto &cacheEntry = splineCache_[atom];
-                const int &atom = cacheEntry.absoluteAtomNumber;
+                const auto &atom = cacheEntry.absoluteAtomNumber;
                 const auto &splineA = cacheEntry.aSpline;
                 const auto &splineB = cacheEntry.bSpline;
                 const auto &splineC = cacheEntry.cSpline;
