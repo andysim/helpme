@@ -79,6 +79,8 @@ endif()
 
 # DHFR finite difference test
 if(HAVE_MPI)
+    configure_file(data/dhfr_charges.txt . COPYONLY)
+    configure_file(data/dhfr_coords.txt . COPYONLY)
     add_executable (DHFRFiniteDifference dhfr_findif.cpp)
     target_link_libraries(DHFRFiniteDifference ${EXTERNAL_LIBRARIES})
     set(NUM_FINDIF 30)
