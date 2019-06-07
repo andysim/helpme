@@ -4511,16 +4511,16 @@ class PMEInstance {
 #pragma omp for
             for (size_t atom = 0; atom < nAtoms; ++atom) {
                 const auto &cacheEntry = splineCache_[atom];
-                const auto &atom = cacheEntry.absoluteAtomNumber;
+                const auto &absAtom = cacheEntry.absoluteAtomNumber;
                 const auto &splineA = cacheEntry.aSpline;
                 const auto &splineB = cacheEntry.bSpline;
                 const auto &splineC = cacheEntry.cSpline;
                 if (parameterAngMom) {
                     Real *myScratch = fractionalPhis_[threadID % nThreads_];
-                    probeGridImpl(atom, potentialGrid, nComponents, nForceComponents, splineA, splineB, splineC,
-                                  myScratch, parameters, forces[atom]);
+                    probeGridImpl(absAtom, potentialGrid, nComponents, nForceComponents, splineA, splineB, splineC,
+                                  myScratch, parameters, forces[absAtom]);
                 } else {
-                    probeGridImpl(potentialGrid, splineA, splineB, splineC, paramPtr[atom], forces[atom]);
+                    probeGridImpl(potentialGrid, splineA, splineB, splineC, paramPtr[absAtom], forces[absAtom]);
                 }
             }
         }
