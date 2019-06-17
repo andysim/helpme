@@ -190,7 +190,7 @@ class PMEInstance {
     /// A function pointer to call the approprate function to implement cacheing of the influence function that appears
     //  in the convolution, templated to the rPower value.
     std::function<void(int, int, int, int, int, int, Real, RealVec &, const RealMat &, Real, Real, const Real *,
-                       const Real *, const Real *, const int *, const int *, const int *, int)>
+                       const Real *, const Real *, const int *, const int *, const int *, AlgorithmType, int)>
         cacheInfluenceFunctionFxn_;
     /// A function pointer to call the approprate function to compute self energy, templated to the rPower value.
     std::function<Real(int, const RealMat &, Real, Real)> slfEFxn_;
@@ -349,7 +349,7 @@ class PMEInstance {
             cacheInfluenceFunctionFxn_(myNumKSumTermsA_, myNumKSumTermsB_, myNumKSumTermsC_, firstKSumTermA_,
                                        firstKSumTermB_, firstKSumTermC_, scaleFactor_, cachedInfluenceFunction_,
                                        recVecs_, cellVolume(), kappa_, &splineModA_[0], &splineModB_[0],
-                                       &splineModC_[0], mValsA_.data(), mValsB_.data(), mValsC_.data(), nThreads_);
+                                       &splineModC_[0], mValsA_.data(), mValsB_.data(), mValsC_.data(), algorithmType_, nThreads_);
         }
     }
 
@@ -717,8 +717,8 @@ class PMEInstance {
      * \param startZ the starting reciprocal sum term handled by this node in the Z direction.
      * \param scaleFactor a scale factor to be applied to all computed energies and derivatives thereof
      *  (e.g. thee 1 / [4 pi epslion0] for Coulomb calculations).
-     * \param gridPtrIn the Fourier space grid, with ordering YXZ.
-     * \param gridPtrOut the convolved Fourier space grid, with ordering YXZ.
+     * \param gridPtrIn the Fourier space grid, with ordering XYZ.
+     * \param gridPtrOut the convolved Fourier space grid, with ordering XYZ.
      * \param boxInv the reciprocal lattice vectors.
      * \param volume the volume of the unit cell.
      * \param kappa the attenuation parameter in units inverse of those used to specify coordinates.
@@ -754,19 +754,19 @@ class PMEInstance {
 
         Real bPrefac = PI * PI / (kappa * kappa);
         Real volPrefac = scaleFactor * pow(PI, rPower - 1) / (SQRTPI * gammaComputer<Real, rPower>::value * volume);
-        size_t nxz = (size_t)myNx * myNz;
-        size_t nyxz = myNy * nxz;
+        size_t nyz = (size_t)myNy * myNz;
+        size_t nxyz = myNx * nyz;
         Real Vxx = 0, Vxy = 0, Vyy = 0, Vxz = 0, Vyz = 0, Vzz = 0;
         const Real *boxPtr = boxInv[0];
         // Exclude m=0 cell.
         int start = (nodeZero ? 1 : 0);
 // Writing the three nested loops in one allows for better load balancing in parallel.
 #pragma omp parallel for reduction(+ : energy, Vxx, Vxy, Vyy, Vxz, Vyz, Vzz) num_threads(nThreads)
-        for (size_t yxz = start; yxz < nyxz; ++yxz) {
-            size_t xz = yxz % nxz;
-            short ky = yxz / nxz;
-            short kx = xz / myNz;
-            short kz = xz % myNz;
+        for (size_t xyz = start; xyz < nxyz; ++xyz) {
+            size_t yz = xyz % nyz;
+            short kx = xyz / nyz;
+            short ky = yz / myNz;
+            short kz = yz % myNz;
             // We only loop over the first nx/2+1 x values in the complex case;
             // this accounts for the "missing" complex conjugate values.
             const int &mx = xMVals[kx];
@@ -781,16 +781,16 @@ class PMEInstance {
             auto gammas = incompleteGammaVirialComputer<Real, 3 - rPower>::compute(bSquared);
             Real eGamma = std::get<0>(gammas);
             Real vGamma = std::get<1>(gammas);
-            const Real &gridVal = gridPtrIn[yxz];
+            const Real &gridVal = gridPtrIn[xyz];
             size_t minusKx = (mx == 0 ? 0 : (mx < 0 ? kx - 1 : kx + 1));
             size_t minusKy = (my == 0 ? 0 : (my < 0 ? ky - 1 : ky + 1));
             size_t minusKz = (mz == 0 ? 0 : (mz < 0 ? kz - 1 : kz + 1));
-            size_t addressXY = minusKy * nxz + minusKx * myNz + kz;
-            size_t addressXZ = ky * nxz + minusKx * myNz + minusKz;
-            size_t addressYZ = minusKy * nxz + (size_t)kx * myNz + minusKz;
-            Real totalPrefac = volPrefac * mTerm * yMods[ky] * xMods[kx] * zMods[kz];
+            size_t addressXY = minusKx * nyz + minusKy * myNz + kz;
+            size_t addressXZ = minusKx * nyz + (size_t) ky * myNz + minusKz;
+            size_t addressYZ = kx * nyz +  minusKy * myNz + minusKz;
+            Real totalPrefac = volPrefac * mTerm * xMods[kx] * yMods[ky] * zMods[kz];
             Real influenceFunction = totalPrefac * eGamma;
-            gridPtrOut[yxz] = gridVal * influenceFunction;
+            gridPtrOut[xyz] = gridVal * influenceFunction;
             Real eTerm = influenceFunction * gridVal * gridVal;
             Real vPrefac = vGamma * totalPrefac / mNormSq * gridVal;
             Real vTerm = vPrefac * gridVal;
@@ -866,6 +866,7 @@ class PMEInstance {
      * \param yMVals the integer prefactors to iterate over reciprocal vectors in the y dimension.
      * \param zMVals the integer prefactors to iterate over reciprocal vectors in the z dimension.
      *        This vector is incremented, not assigned.
+     * \param algorithmType The type of algorithm (conventional or compressed) being used.
      * \param nThreads the number of OpenMP threads to use.
      * \return the energy for the m=0 term.
      */
@@ -874,8 +875,9 @@ class PMEInstance {
                                            Real scaleFactor, RealVec &influenceFunction, const RealMat &boxInv,
                                            Real volume, Real kappa, const Real *xMods, const Real *yMods,
                                            const Real *zMods, const int *xMVals, const int *yMVals, const int *zMVals,
-                                           int nThreads) {
+                                           AlgorithmType algorithmType, int nThreads) {
         bool nodeZero = startX == 0 && startY == 0 && startZ == 0;
+        size_t nyz = (size_t)myNy * myNz;
         size_t nxz = (size_t)myNx * myNz;
         size_t nyxz = myNy * nxz;
         influenceFunction.resize(nyxz);
@@ -888,25 +890,49 @@ class PMEInstance {
         // Exclude m=0 cell.
         int start = (nodeZero ? 1 : 0);
 // Writing the three nested loops in one allows for better load balancing in parallel.
+        if (algorithmType == AlgorithmType::PME) {
+            // Grid order is BAC here
 #pragma omp parallel for num_threads(nThreads)
-        for (size_t yxz = start; yxz < nyxz; ++yxz) {
-            size_t xz = yxz % nxz;
-            short ky = yxz / nxz;
-            short kx = xz / myNz;
-            short kz = xz % myNz;
-            const Real mx = (Real)xMVals[kx];
-            const Real my = (Real)yMVals[ky];
-            const Real mz = (Real)zMVals[kz];
-            Real mVecX = boxPtr[0] * mx + boxPtr[1] * my + boxPtr[2] * mz;
-            Real mVecY = boxPtr[3] * mx + boxPtr[4] * my + boxPtr[5] * mz;
-            Real mVecZ = boxPtr[6] * mx + boxPtr[7] * my + boxPtr[8] * mz;
-            Real mNormSq = mVecX * mVecX + mVecY * mVecY + mVecZ * mVecZ;
-            Real mTerm = raiseNormToIntegerPower<Real, rPower - 3>::compute(mNormSq);
-            Real bSquared = bPrefac * mNormSq;
-            Real incompleteGammaTerm = incompleteGammaComputer<Real, 3 - rPower>::compute(bSquared);
-            gridPtr[yxz] = volPrefac * incompleteGammaTerm * mTerm * yMods[ky] * xMods[kx] * zMods[kz];
+            for (size_t yxz = start; yxz < nyxz; ++yxz) {
+                size_t xz = yxz % nxz;
+                short ky = yxz / nxz;
+                short kx = xz / myNz;
+                short kz = xz % myNz;
+                const Real mx = (Real)xMVals[kx];
+                const Real my = (Real)yMVals[ky];
+                const Real mz = (Real)zMVals[kz];
+                Real mVecX = boxPtr[0] * mx + boxPtr[1] * my + boxPtr[2] * mz;
+                Real mVecY = boxPtr[3] * mx + boxPtr[4] * my + boxPtr[5] * mz;
+                Real mVecZ = boxPtr[6] * mx + boxPtr[7] * my + boxPtr[8] * mz;
+                Real mNormSq = mVecX * mVecX + mVecY * mVecY + mVecZ * mVecZ;
+                Real mTerm = raiseNormToIntegerPower<Real, rPower - 3>::compute(mNormSq);
+                Real bSquared = bPrefac * mNormSq;
+                Real incompleteGammaTerm = incompleteGammaComputer<Real, 3 - rPower>::compute(bSquared);
+                gridPtr[yxz] = volPrefac * incompleteGammaTerm * mTerm * yMods[ky] * xMods[kx] * zMods[kz];
+            }
+        } else {
+            // Grid order is ABC here
+#pragma omp parallel for num_threads(nThreads)
+            for (size_t xyz = start; xyz < nyxz; ++xyz) {
+                size_t yz = xyz % nyz;
+                short kx = xyz / nyz;
+                short ky = yz / myNz;
+                short kz = yz % myNz;
+                const Real mx = (Real)xMVals[kx];
+                const Real my = (Real)yMVals[ky];
+                const Real mz = (Real)zMVals[kz];
+                Real mVecX = boxPtr[0] * mx + boxPtr[1] * my + boxPtr[2] * mz;
+                Real mVecY = boxPtr[3] * mx + boxPtr[4] * my + boxPtr[5] * mz;
+                Real mVecZ = boxPtr[6] * mx + boxPtr[7] * my + boxPtr[8] * mz;
+                Real mNormSq = mVecX * mVecX + mVecY * mVecY + mVecZ * mVecZ;
+                Real mTerm = raiseNormToIntegerPower<Real, rPower - 3>::compute(mNormSq);
+                Real bSquared = bPrefac * mNormSq;
+                Real incompleteGammaTerm = incompleteGammaComputer<Real, 3 - rPower>::compute(bSquared);
+                gridPtr[xyz] = volPrefac * incompleteGammaTerm * mTerm * xMods[kx] * yMods[ky] * zMods[kz];
+            }
         }
     }
+
 
     /*!
      * \brief dirEImpl computes the kernel for the direct energy for a pair.
@@ -1586,7 +1612,7 @@ class PMEInstance {
      * \brief Performs the forward 3D FFT of the discretized parameter grid using the compressed PME algorithm.
      * \param realGrid the array of discretized parameters (stored in CBA order,
      *                 with A being the fast running index) to be transformed.
-     * \return Pointer to the transformed grid, which is stored in one of the buffers in BAC order.
+     * \return Pointer to the transformed grid, which is stored in one of the buffers in ABC order.
      */
     Real *compressedForwardTransform(Real *realGrid) {
         Real *__restrict__ buffer1, *__restrict__ buffer2;
@@ -1597,43 +1623,52 @@ class PMEInstance {
             buffer1 = reinterpret_cast<Real *>(workSpace1_.data());
             buffer2 = reinterpret_cast<Real *>(workSpace2_.data());
         }
-        // Transform A index
-        contractABxCWithDxC<Real>(realGrid, compressionCoefficientsA_[0], myGridDimensionC_ * myGridDimensionB_,
-                                  myGridDimensionA_, numKSumTermsA_, buffer1);
-        // Sort CBA->CAB
-        permuteABCtoACB(buffer1, myGridDimensionC_, myGridDimensionB_, numKSumTermsA_, buffer2, nThreads_);
-        // Transform B index
-        contractABxCWithDxC<Real>(buffer2, compressionCoefficientsB_[0], myGridDimensionC_ * numKSumTermsA_,
-                                  myGridDimensionB_, numKSumTermsB_, buffer1);
-        // Sort CAB->BAC
-        permuteABCtoCBA(buffer1, myGridDimensionC_, numKSumTermsA_, numKSumTermsB_, buffer2, nThreads_);
-        // Transform C index
-        contractABxCWithDxC<Real>(buffer2, compressionCoefficientsC_[0], numKSumTermsB_ * numKSumTermsA_,
-                                  myGridDimensionC_, numKSumTermsC_, buffer1);
+        int numNodes = numNodesA_ * numNodesB_ * numNodesC_;
+        size_t blockSize = numNodes == 1 ? myNumKSumTermsB_ : 10;
+        blockSize = myNumKSumTermsB_;
+        size_t numKSumBlocksB = myNumKSumTermsB_ / blockSize;
+        for (size_t block = 0; block < numKSumBlocksB; ++block) {
+            size_t firstB = block * blockSize;
+            size_t lastB = std::min(firstB + blockSize, (size_t) myNumKSumTermsB_);
+            size_t numTermsB = lastB - firstB;
+            // Transform A index
+            contractABxCWithDxC<Real>(realGrid, compressionCoefficientsA_[0], myGridDimensionC_ * myGridDimensionB_,
+                                      myGridDimensionA_, numKSumTermsA_, buffer1);
+            // Sort CBA->CAB
+            permuteABCtoACB(buffer1, myGridDimensionC_, myGridDimensionB_, numKSumTermsA_, buffer2, nThreads_);
+            // Transform B index
+            contractABxCWithDxC<Real>(buffer2, compressionCoefficientsB_[0], myGridDimensionC_ * numKSumTermsA_,
+                                      myGridDimensionB_, numKSumTermsB_, buffer1);
+            // Sort CAB->ABC
+            permuteABCtoBCA(buffer1, myGridDimensionC_, numKSumTermsA_, numKSumTermsB_, buffer2, nThreads_);
+            // Transform C index
+            contractABxCWithDxC<Real>(buffer2, compressionCoefficientsC_[0], numKSumTermsB_ * numKSumTermsA_,
+                                      myGridDimensionC_, numKSumTermsC_, buffer1);
 
 #if HAVE_MPI == 1
-        int numNodes = numNodesA_ * numNodesB_ * numNodesC_;
-        if (numNodes > 1) {
-            // Resort the data to be grouped by node, for communication
-            for (int node = 0; node < numNodes; ++node) {
-                int nodeStartA = myNumKSumTermsA_ * (node % numNodesA_);
-                int nodeStartB = myNumKSumTermsB_ * ((node % (numNodesB_ * numNodesA_)) / numNodesA_);
-                int nodeStartC = myNumKSumTermsC_ * (node / (numNodesB_ * numNodesA_));
-                Real *outPtr = buffer2 + node * myNumKSumTermsA_ * myNumKSumTermsB_ * myNumKSumTermsC_;
-                for (int B = 0; B < myNumKSumTermsB_; ++B) {
-                    const Real *inPtrB = buffer1 + (nodeStartB + B) * numKSumTermsA_ * numKSumTermsC_;
+            int numNodes = numNodesA_ * numNodesB_ * numNodesC_;
+            if (numNodes > 1) {
+                // Resort the data to be grouped by node, for communication
+                for (int node = 0; node < numNodes; ++node) {
+                    int nodeStartA = myNumKSumTermsA_ * (node % numNodesA_);
+                    int nodeStartB = myNumKSumTermsB_ * ((node % (numNodesB_ * numNodesA_)) / numNodesA_);
+                    int nodeStartC = myNumKSumTermsC_ * (node / (numNodesB_ * numNodesA_));
+                    Real *outPtr = buffer2 + node * myNumKSumTermsA_ * myNumKSumTermsB_ * myNumKSumTermsC_;
                     for (int A = 0; A < myNumKSumTermsA_; ++A) {
-                        const Real *inPtrBA = inPtrB + (nodeStartA + A) * numKSumTermsC_;
-                        const Real *inPtrBAC = inPtrBA + nodeStartC;
-                        std::copy(inPtrBAC, inPtrBAC + myNumKSumTermsC_, outPtr);
-                        outPtr += myNumKSumTermsC_;
+                        const Real *inPtrA = buffer1 + (nodeStartA + A) * numKSumTermsB_ * numKSumTermsC_;
+                        for (int B = 0; B < myNumKSumTermsB_; ++B) {
+                            const Real *inPtrAB = inPtrA + (nodeStartB + B) * numKSumTermsC_;
+                            const Real *inPtrABC = inPtrAB + nodeStartC;
+                            std::copy(inPtrABC, inPtrABC + myNumKSumTermsC_, outPtr);
+                            outPtr += myNumKSumTermsC_;
+                        }
                     }
                 }
+                mpiCommunicator_->reduceScatterBlock(buffer2, buffer1,
+                                                     myNumKSumTermsA_ * myNumKSumTermsB_ * myNumKSumTermsC_);
             }
-            mpiCommunicator_->reduceScatterBlock(buffer2, buffer1,
-                                                 myNumKSumTermsA_ * myNumKSumTermsB_ * myNumKSumTermsC_);
-        }
 #endif
+        }
         return buffer1;
     }
 
@@ -1944,7 +1979,7 @@ class PMEInstance {
 
     /*!
      * \brief Performs the backward 3D FFT of the discretized parameter grid using the compressed PME algorithm.
-     * \param reciprocalGrid the reciprocal space potential grid (stored in BAC order,
+     * \param reciprocalGrid the reciprocal space potential grid (stored in ABC order,
      *                 with C being the fast running index) to be transformed.
      * \return Pointer to the transformed grid, which is stored in one of the buffers in CBA order.
      */
@@ -1972,12 +2007,12 @@ class PMEInstance {
                 int nodeStartB = myNumKSumTermsB_ * ((node % (numNodesB_ * numNodesA_)) / numNodesA_);
                 int nodeStartC = myNumKSumTermsC_ * (node / (numNodesB_ * numNodesA_));
                 Real *inPtr = buffer1 + node * myNumKSumTermsA_ * myNumKSumTermsB_ * myNumKSumTermsC_;
-                for (int B = 0; B < myNumKSumTermsB_; ++B) {
-                    Real *outPtrB = buffer2 + (nodeStartB + B) * numKSumTermsA_ * numKSumTermsC_;
-                    for (int A = 0; A < myNumKSumTermsA_; ++A) {
-                        Real *outPtrBA = outPtrB + (nodeStartA + A) * numKSumTermsC_;
-                        Real *outPtrBAC = outPtrBA + nodeStartC;
-                        std::copy(inPtr, inPtr + myNumKSumTermsC_, outPtrBAC);
+                for (int A = 0; A < myNumKSumTermsA_; ++A) {
+                    Real *outPtrA = buffer2 + (nodeStartA + A) * numKSumTermsB_ * numKSumTermsC_;
+                    for (int B = 0; B < myNumKSumTermsB_; ++B) {
+                        Real *outPtrAB = outPtrA + (nodeStartB + B) * numKSumTermsC_;
+                        Real *outPtrABC = outPtrAB + nodeStartC;
+                        std::copy(inPtr, inPtr + myNumKSumTermsC_, outPtrABC);
                         inPtr += myNumKSumTermsC_;
                     }
                 }
@@ -1988,8 +2023,9 @@ class PMEInstance {
         // Transform C index
         contractABxCWithDxC<Real>(buffer2, compressionCoefficientsC_[0], numKSumTermsB_ * numKSumTermsA_,
                                   numKSumTermsC_, myGridDimensionC_, buffer1);
-        // Sort BAC->CAB
-        permuteABCtoCBA(buffer1, numKSumTermsB_, numKSumTermsA_, myGridDimensionC_, buffer2, nThreads_);
+        // Sort ABC->CAB
+        permuteABCtoCAB(buffer1, numKSumTermsB_, numKSumTermsA_, myGridDimensionC_, buffer2, nThreads_);
+
         // Transform B index
         contractABxCWithDxC<Real>(buffer2, compressionCoefficientsB_[0], myGridDimensionC_ * numKSumTermsA_,
                                   numKSumTermsB_, myGridDimensionB_, buffer1);

@@ -61,6 +61,46 @@ void permuteABCtoACB(Real const *__restrict__ abcPtr, int const aDimension, int 
 }
 
 /*!
+ * \brief Sorts a 3D tensor stored contiguously as ABC into BCA order.
+ * \param abcPtr the address of the incoming ABC ordered tensor.
+ * \param aDimension the dimension of the A index.
+ * \param bDimension the dimension of the B index.
+ * \param cDimension the dimension of the C index.
+ * \param bcaPtr the address of the outgoing BCA ordered tensor.
+ * \param nThreads the number of parallel threads to use.
+ */
+template <typename Real>
+void permuteABCtoBCA(Real const *__restrict__ abcPtr, int const aDimension, int const bDimension, int const cDimension,
+                     Real *__restrict__ bcaPtr, size_t nThreads = 1) {
+#pragma omp parallel for num_threads(nThreads)
+    for (int B = 0; B <= -1 + bDimension; ++B)
+        for (int C = 0; C <= -1 + cDimension; ++C)
+            for (int A = 0; A <= -1 + aDimension; ++A)
+                bcaPtr[cDimension * aDimension * B + aDimension * C + A] =
+                    abcPtr[cDimension * bDimension * A + cDimension * B + C];
+}
+
+/*!
+ * \brief Sorts a 3D tensor stored contiguously as ABC into CAB order.
+ * \param abcPtr the address of the incoming ABC ordered tensor.
+ * \param aDimension the dimension of the A index.
+ * \param bDimension the dimension of the B index.
+ * \param cDimension the dimension of the C index.
+ * \param cabPtr the address of the outgoing CAB ordered tensor.
+ * \param nThreads the number of parallel threads to use.
+ */
+template <typename Real>
+void permuteABCtoCAB(Real const *__restrict__ abcPtr, int const aDimension, int const bDimension, int const cDimension,
+                     Real *__restrict__ cabPtr, size_t nThreads = 1) {
+#pragma omp parallel for num_threads(nThreads)
+    for (int C = 0; C <= -1 + cDimension; ++C)
+        for (int A = 0; A <= -1 + aDimension; ++A)
+            for (int B = 0; B <= -1 + bDimension; ++B)
+                cabPtr[aDimension * bDimension * C + bDimension * A + B] =
+                    abcPtr[cDimension * bDimension * A + cDimension * B + C];
+}
+
+/*!
  * \brief Contracts an ABxC tensor with a DxC tensor, to produce an ABxD quantity.
  * \param abcPtr the address of the incoming ABxC tensor.
  * \param dcPtr the address of the incoming DxC tensor.
