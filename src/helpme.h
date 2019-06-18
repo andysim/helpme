@@ -1624,38 +1624,41 @@ class PMEInstance {
             buffer2 = reinterpret_cast<Real *>(workSpace2_.data());
         }
         int numNodes = numNodesA_ * numNodesB_ * numNodesC_;
-        size_t blockSize = numNodes == 1 ? myNumKSumTermsB_ : 10;
-        blockSize = myNumKSumTermsB_;
-        size_t numKSumBlocksB = myNumKSumTermsB_ / blockSize;
-        for (size_t block = 0; block < numKSumBlocksB; ++block) {
-            size_t firstB = block * blockSize;
-            size_t lastB = std::min(firstB + blockSize, (size_t) myNumKSumTermsB_);
-            size_t numTermsB = lastB - firstB;
+        size_t blockSize = numNodes == 1 ? myNumKSumTermsA_ : 10;
+        size_t numKSumBlocksA = myNumKSumTermsA_ / blockSize;
+        size_t blockOffset = blockSize * std::max(myGridDimensionB_, numKSumTermsB) * std::max(myGridDimensionC_, numKSumTermsC);
+        for (size_t block = 0; block < numKSumBlocksA; ++block) {
+            size_t firstA = block * blockSize;
+            size_t lastA = std::min(firstA + blockSize, (size_t) myNumKSumTermsA_);
+            size_t numTermsA = lastA - firstA;
+            Real *buf1 = buffer1 + block * blockOffset;
+            Real *buf2 = buffer2 + block * blockOffset;
+
             // Transform A index
-            contractABxCWithDxC<Real>(realGrid, compressionCoefficientsA_[0], myGridDimensionC_ * myGridDimensionB_,
-                                      myGridDimensionA_, numKSumTermsA_, buffer1);
+            contractABxCWithDxC<Real>(realGrid, compressionCoefficientsA_[firstA], myGridDimensionC_ * myGridDimensionB_,
+                                      myGridDimensionA_, numTermsA, buf1);
             // Sort CBA->CAB
-            permuteABCtoACB(buffer1, myGridDimensionC_, myGridDimensionB_, numKSumTermsA_, buffer2, nThreads_);
+            permuteABCtoACB(buf1, myGridDimensionC_, myGridDimensionB_, numTermsA, buf2, nThreads_);
             // Transform B index
-            contractABxCWithDxC<Real>(buffer2, compressionCoefficientsB_[0], myGridDimensionC_ * numKSumTermsA_,
-                                      myGridDimensionB_, numKSumTermsB_, buffer1);
+            contractABxCWithDxC<Real>(buf2, compressionCoefficientsB_[0], myGridDimensionC_ * numTermsA,
+                                      myGridDimensionB_, numKSumTermsB_, buf1);
             // Sort CAB->ABC
-            permuteABCtoBCA(buffer1, myGridDimensionC_, numKSumTermsA_, numKSumTermsB_, buffer2, nThreads_);
+            permuteABCtoBCA(buf1, myGridDimensionC_, numKTermsA, numKSumTermsB_, buf2, nThreads_);
             // Transform C index
-            contractABxCWithDxC<Real>(buffer2, compressionCoefficientsC_[0], numKSumTermsB_ * numKSumTermsA_,
-                                      myGridDimensionC_, numKSumTermsC_, buffer1);
+            contractABxCWithDxC<Real>(buf2, compressionCoefficientsC_[0], numKSumTermsB_ * numTermsA,
+                                      myGridDimensionC_, numKSumTermsC_, buf1);
 
 #if HAVE_MPI == 1
             int numNodes = numNodesA_ * numNodesB_ * numNodesC_;
             if (numNodes > 1) {
                 // Resort the data to be grouped by node, for communication
                 for (int node = 0; node < numNodes; ++node) {
-                    int nodeStartA = myNumKSumTermsA_ * (node % numNodesA_);
+                    int nodeStartA = numTermsA * (node % numNodesA_);
                     int nodeStartB = myNumKSumTermsB_ * ((node % (numNodesB_ * numNodesA_)) / numNodesA_);
                     int nodeStartC = myNumKSumTermsC_ * (node / (numNodesB_ * numNodesA_));
-                    Real *outPtr = buffer2 + node * myNumKSumTermsA_ * myNumKSumTermsB_ * myNumKSumTermsC_;
-                    for (int A = 0; A < myNumKSumTermsA_; ++A) {
-                        const Real *inPtrA = buffer1 + (nodeStartA + A) * numKSumTermsB_ * numKSumTermsC_;
+                    Real *outPtr = buf2 + node * NumTermsA * myNumKSumTermsB_ * myNumKSumTermsC_;
+                    for (int A = 0; A < numKSumTermsA; ++A) {
+                        const Real *inPtrA = buf1 + (nodeStartA + A) * numKSumTermsB_ * numKSumTermsC_;
                         for (int B = 0; B < myNumKSumTermsB_; ++B) {
                             const Real *inPtrAB = inPtrA + (nodeStartB + B) * numKSumTermsC_;
                             const Real *inPtrABC = inPtrAB + nodeStartC;
@@ -1664,8 +1667,8 @@ class PMEInstance {
                         }
                     }
                 }
-                mpiCommunicator_->reduceScatterBlock(buffer2, buffer1,
-                                                     myNumKSumTermsA_ * myNumKSumTermsB_ * myNumKSumTermsC_);
+                mpiCommunicator_->reduceScatterBlock(buf2, buf1,
+                                                     numTermsA * myNumKSumTermsB_ * myNumKSumTermsC_);
             }
 #endif
         }
