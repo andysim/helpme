@@ -153,6 +153,18 @@ struct MPIWrapper {
             throw std::runtime_error("Problem encountered calling MPI reducescatter.");
     }
     /*!
+     * \brief iReduceScatterBlock performs a non-blocking reduction, with summation as the operation, then scatters to
+     * all nodes.
+     * \param inBuffer the buffer containing input data.
+     * \param outBuffer the buffer to send results to.
+     * \param dimension the number of elements to be reduced on each node (currently must be the same on all nodes).
+     */
+    void iReduceScatterBlock(MPI_Request* request, Real* inBuffer, Real* outBuffer, int dimension) {
+        if (MPI_Ireduce_scatter_block(inBuffer, outBuffer, dimension, types_.realType_, MPI_SUM, mpiCommunicator_,
+                                      request) != MPI_SUCCESS)
+            throw std::runtime_error("Problem encountered calling MPI ireducescatter.");
+    }
+    /*!
      * \brief allGather broadcasts a chunk of data from each node to every other node.
      * \param inBuffer the buffer containing input data.
      * \param dimension the number of elements to be broadcast.

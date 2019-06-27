@@ -32,6 +32,7 @@ int main(int argc, char *argv[]) {
     int numNodesX = 1;
     int numNodesY = 1;
     int numNodesZ = 1;
+    int chunkSize = 0;
 
 #if TIME_COMPONENTS
     std::chrono::duration<double> splineTime;
@@ -48,18 +49,23 @@ int main(int argc, char *argv[]) {
     MPI_Comm_rank(MPI_COMM_WORLD, &myRank);
 
     // Parse
-    static struct option long_options[] = {
-        {"beta", required_argument, 0, 'b'},   {"float", no_argument, 0, 'f'},
-        {"grid", required_argument, 0, 'g'},   {"ksum", required_argument, 0, 'k'},
-        {"nruns", required_argument, 0, 'n'},  {"parallel", required_argument, 0, 'p'},
-        {"rpower", required_argument, 0, 'r'}, {"splineorder", required_argument, 0, 's'},
-        {"virial", no_argument, 0, 'v'},       {0, 0, 0, 0}};
+    static struct option long_options[] = {{"beta", required_argument, 0, 'b'},
+                                           {"chunksize", required_argument, 0, 'c'},
+                                           {"float", no_argument, 0, 'f'},
+                                           {"grid", required_argument, 0, 'g'},
+                                           {"ksum", required_argument, 0, 'k'},
+                                           {"nruns", required_argument, 0, 'n'},
+                                           {"parallel", required_argument, 0, 'p'},
+                                           {"rpower", required_argument, 0, 'r'},
+                                           {"splineorder", required_argument, 0, 's'},
+                                           {"virial", no_argument, 0, 'v'},
+                                           {0, 0, 0, 0}};
 
     while (1) {
         /* getopt_long stores the option index here. */
         int option_index = 0;
 
-        int c = getopt_long_only(argc, argv, "b:fg:k:n:p:r:s:v", long_options, &option_index);
+        int c = getopt_long_only(argc, argv, "b:c:fg:k:n:p:r:s:v", long_options, &option_index);
 
         /* Detect the end of the options. */
         if (c == -1) break;
@@ -68,6 +74,9 @@ int main(int argc, char *argv[]) {
         switch (c) {
             case 'b':
                 beta = ::strtof(optarg, NULL);
+                break;
+            case 'c':
+                chunkSize = ::strtol(optarg, NULL, 10);
                 break;
             case 'f':
                 useFloat = true;
@@ -173,6 +182,7 @@ int main(int argc, char *argv[]) {
 
     if (useFloat) {
         auto pme = std::unique_ptr<PMEInstanceF>(new PMEInstanceF());
+        if (chunkSize) pme->setDesiredBlockSize(chunkSize);
         helpme::Matrix<float> coordsF = coordsD.cast<float>();
         helpme::Matrix<float> paramsF = paramsD.cast<float>();
         helpme::Matrix<float> forces(coordsD.nRows(), coordsD.nCols());
@@ -314,6 +324,7 @@ int main(int argc, char *argv[]) {
         pme.reset();
     } else {
         auto pme = std::unique_ptr<PMEInstanceD>(new PMEInstanceD());
+        if (chunkSize) pme->setDesiredBlockSize(chunkSize);
         helpme::Matrix<double> forces(coordsD.nRows(), coordsD.nCols());
         helpme::Matrix<double> nodeForces(coordsD.nRows(), coordsD.nCols());
         helpme::Matrix<double> virial(6, 1);

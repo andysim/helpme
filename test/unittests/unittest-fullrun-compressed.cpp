@@ -111,43 +111,43 @@ TEST_CASE("Full run with a small toy system, comprising two water molecules.") {
                                            {-0.000000000000, -0.000000000000, -0.000000000000, 0.000000000000,
                                             0.000000000000, 0.000000000000, 0.000000000000, -0.000000000000}});
     helpme::Matrix<double> refTransGridD(
-        {{0.00000000, -0.58382957, 0.03064679},   {-0.01153445, -0.31925648, 0.06840820},
-         {-0.02258876, -0.62920363, -0.02473811}, {0.03774178, 0.24641556, 0.10878130},
-         {-0.05346896, -0.35945169, 0.01898538},  {0.06185782, 0.18853868, 0.03900265},
-         {0.00257142, -0.00565470, 0.08541365},   {0.00000000, -0.23728964, 0.07850317},
-         {-0.00749430, -0.20443301, 0.06518672},  {-0.00810007, -0.22141778, 0.06008092},
-         {0.00206822, 0.01350278, 0.00596248},    {-0.03447059, -0.22099798, 0.03722396},
-         {0.03953936, 0.10768408, 0.01057306},    {-0.03600868, -0.09766329, -0.00375390},
-         {0.00000000, -0.64381536, 0.00919199},   {-0.01167417, -0.32424080, 0.06151103},
-         {-0.02531227, -0.70663372, -0.05340637}, {0.04656338, 0.30401192, 0.13420688},
-         {-0.05421723, -0.36848088, 0.00994400},  {0.06284992, 0.19634165, 0.04497652},
-         {0.01663875, 0.02928927, 0.10851985},    {0.00000000, 0.29262948, 0.04165293},
-         {0.00335888, 0.09555698, -0.00201765},   {0.01225503, 0.34499249, 0.07294223},
-         {-0.03037336, -0.19830778, -0.08754250}, {0.01580339, 0.11550683, 0.01595588},
-         {-0.01857580, -0.06769249, -0.02410609}, {-0.03327477, -0.07948756, -0.07601904},
-         {0.00000000, -0.25039181, 0.08342421},   {-0.00793303, -0.21638399, 0.06911798},
-         {-0.00853773, -0.23333891, 0.06402105},  {0.00206459, 0.01347901, 0.00595209},
-         {-0.03648702, -0.23386563, 0.03954130},  {0.04185039, 0.11390568, 0.01110999},
+        {{-0.00000000, -0.58382957, 0.03064679},  {0.00000000, -0.23728964, 0.07850317},
+         {-0.00000000, -0.64381536, 0.00919199},  {0.00000000, 0.29262948, 0.04165293},
+         {0.00000000, -0.25039181, 0.08342421},   {-0.01153445, -0.31925648, 0.06840820},
+         {-0.00749430, -0.20443301, 0.06518672},  {-0.01167417, -0.32424080, 0.06151103},
+         {0.00335888, 0.09555698, -0.00201765},   {-0.00793303, -0.21638399, 0.06911798},
+         {-0.02258876, -0.62920363, -0.02473811}, {-0.00810007, -0.22141778, 0.06008092},
+         {-0.02531227, -0.70663372, -0.05340637}, {0.01225503, 0.34499249, 0.07294223},
+         {-0.00853773, -0.23333891, 0.06402105},  {0.03774178, 0.24641556, 0.10878130},
+         {0.00206822, 0.01350278, 0.00596248},    {0.04656338, 0.30401192, 0.13420688},
+         {-0.03037336, -0.19830778, -0.08754250}, {0.00206459, 0.01347901, 0.00595209},
+         {-0.05346896, -0.35945169, 0.01898538},  {-0.03447059, -0.22099798, 0.03722396},
+         {-0.05421723, -0.36848088, 0.00994400},  {0.01580339, 0.11550683, 0.01595588},
+         {-0.03648702, -0.23386563, 0.03954130},  {0.06185782, 0.18853868, 0.03900265},
+         {0.03953936, 0.10768408, 0.01057306},    {0.06284992, 0.19634165, 0.04497652},
+         {-0.01857580, -0.06769249, -0.02410609}, {0.04185039, 0.11390568, 0.01110999},
+         {0.00257142, -0.00565470, 0.08541365},   {-0.03600868, -0.09766329, -0.00375390},
+         {0.01663875, 0.02928927, 0.10851985},    {-0.03327477, -0.07948756, -0.07601904},
          {-0.03832592, -0.10390258, -0.00430273}});
 
     helpme::Matrix<double> refConvolvedGridD(
-        {{0.00000000, -3.37781725, 0.17731077},   {-0.05691360, -0.86223812, 0.18475478},
-         {-0.11145810, -1.69933389, -0.06681193}, {0.03747482, 0.21427599, 0.09459314},
-         {-0.05309076, -0.31256900, 0.01650915},  {0.01658603, 0.04980684, 0.01030345},
-         {0.00068948, -0.00149382, 0.02256399},   {0.00000000, -0.68236745, 0.22574947},
-         {-0.01837977, -0.36590364, 0.11667420},  {-0.01986542, -0.39630376, 0.10753560},
-         {0.00163314, 0.00972673, 0.00429507},    {-0.02721920, -0.15919591, 0.02681428},
-         {0.00948505, 0.02570791, 0.00252415},    {-0.00863808, -0.02331561, -0.00089619},
-         {0.00000000, -1.85140252, 0.02643316},   {-0.02863089, -0.58034113, 0.11009527},
-         {-0.06207830, -1.26476562, -0.09558919}, {0.03676809, 0.21899500, 0.09667594},
-         {-0.04281185, -0.26543522, 0.00716316},  {0.01507699, 0.04687354, 0.01073745},
-         {0.00399145, 0.00699236, 0.02590744},    {0.00000000, 0.32216211, 0.04585661},
-         {0.00315370, 0.08184742, -0.00172817},   {0.01150641, 0.29549641, 0.06247721},
-         {-0.01434684, -0.09114838, -0.04023724}, {0.00746473, 0.05309051, 0.00733382},
-         {-0.00328073, -0.01215283, -0.00432776}, {-0.00587677, -0.01427040, -0.01364769},
-         {0.00000000, -0.27566175, 0.09184351},   {-0.00744843, -0.18533938, 0.05920162},
-         {-0.00801619, -0.19986177, 0.05483595},  {0.00097521, 0.00619537, 0.00273576},
-         {-0.01723463, -0.10749187, 0.01817440},  {0.00739134, 0.02044948, 0.00199458},
+        {{0.00000000, -3.37781725, 0.17731077},   {0.00000000, -0.68236745, 0.22574947},
+         {-0.00000000, -1.85140252, 0.02643316},  {0.00000000, 0.32216211, 0.04585661},
+         {0.00000000, -0.27566175, 0.09184351},   {-0.05691360, -0.86223812, 0.18475478},
+         {-0.01837977, -0.36590364, 0.11667420},  {-0.02863089, -0.58034113, 0.11009527},
+         {0.00315370, 0.08184742, -0.00172817},   {-0.00744843, -0.18533938, 0.05920162},
+         {-0.11145810, -1.69933389, -0.06681193}, {-0.01986542, -0.39630376, 0.10753560},
+         {-0.06207830, -1.26476562, -0.09558919}, {0.01150641, 0.29549641, 0.06247721},
+         {-0.00801619, -0.19986177, 0.05483595},  {0.03747482, 0.21427599, 0.09459314},
+         {0.00163314, 0.00972673, 0.00429507},    {0.03676809, 0.21899500, 0.09667594},
+         {-0.01434684, -0.09114838, -0.04023724}, {0.00097521, 0.00619537, 0.00273576},
+         {-0.05309076, -0.31256900, 0.01650915},  {-0.02721920, -0.15919591, 0.02681428},
+         {-0.04281185, -0.26543522, 0.00716316},  {0.00746473, 0.05309051, 0.00733382},
+         {-0.01723463, -0.10749187, 0.01817440},  {0.01658603, 0.04980684, 0.01030345},
+         {0.00948505, 0.02570791, 0.00252415},    {0.01507699, 0.04687354, 0.01073745},
+         {-0.00328073, -0.01215283, -0.00432776}, {0.00739134, 0.02044948, 0.00199458},
+         {0.00068948, -0.00149382, 0.02256399},   {-0.00863808, -0.02331561, -0.00089619},
+         {0.00399145, 0.00699236, 0.02590744},    {-0.00587677, -0.01427040, -0.01364769},
          {-0.00676887, -0.01865362, -0.00077247}});
 
     helpme::Matrix<double> refPotentialGridD(
@@ -221,11 +221,11 @@ TEST_CASE("Full run with a small toy system, comprising two water molecules.") {
 
         auto gridAddress = pmeD->compressedForwardTransform(realGrid);
         helpme::Matrix<double> transformedGrid(gridAddress, kDimY * kDimX, kDimZ);
-        // REQUIRE(refTransGridD.almostEquals(transformedGrid, TOL));
+        REQUIRE(refTransGridD.almostEquals(transformedGrid, TOL));
 
         double energy = pmeD->convolveE(gridAddress);
         helpme::Matrix<double> convolvedGrid(gridAddress, kDimY * kDimX, kDimZ);
-        // REQUIRE(refConvolvedGridD.almostEquals(convolvedGrid, TOL));
+        REQUIRE(refConvolvedGridD.almostEquals(convolvedGrid, TOL));
 
         realGrid = pmeD->compressedInverseTransform(gridAddress);
         helpme::Matrix<double> potentialGrid(realGrid, nfftz * nffty, nfftx);
@@ -252,7 +252,7 @@ TEST_CASE("Full run with a small toy system, comprising two water molecules.") {
 
         auto gridAddress = pmeD->compressedForwardTransform(realGrid);
         helpme::Matrix<double> transformedGrid(gridAddress, kDimY * kDimX, kDimZ);
-        //REQUIRE(refTransGridD.almostEquals(transformedGrid, TOL));
+        REQUIRE(refTransGridD.almostEquals(transformedGrid, TOL));
 
         helpme::Matrix<double> virial(6, 1);
         double *convolvedGrid;
@@ -260,7 +260,7 @@ TEST_CASE("Full run with a small toy system, comprising two water molecules.") {
         REQUIRE(refVirialD.almostEquals(virial, TOL));
 
         helpme::Matrix<double> convolvedGridMat(convolvedGrid, kDimY * kDimX, kDimZ);
-        //REQUIRE(refConvolvedGridD.almostEquals(convolvedGridMat, TOL));
+        REQUIRE(refConvolvedGridD.almostEquals(convolvedGridMat, TOL));
 
         realGrid = pmeD->compressedInverseTransform(convolvedGrid);
         helpme::Matrix<double> potentialGrid(realGrid, nfftz * nffty, nfftx);
@@ -288,11 +288,11 @@ TEST_CASE("Full run with a small toy system, comprising two water molecules.") {
 
         auto gridAddress = pmeF->compressedForwardTransform(realGrid);
         helpme::Matrix<float> transformedGrid(gridAddress, kDimY * kDimX, kDimZ);
-        //REQUIRE(refTransGridD.cast<float>().almostEquals(transformedGrid, TOL));
+        REQUIRE(refTransGridD.cast<float>().almostEquals(transformedGrid, TOL));
 
         float energy = pmeF->convolveE(gridAddress);
         helpme::Matrix<float> convolvedGrid(gridAddress, kDimY * kDimX, kDimZ);
-        //REQUIRE(refConvolvedGridD.cast<float>().almostEquals(convolvedGrid, TOL));
+        REQUIRE(refConvolvedGridD.cast<float>().almostEquals(convolvedGrid, TOL));
 
         realGrid = pmeF->compressedInverseTransform(gridAddress);
         helpme::Matrix<float> potentialGrid(realGrid, nfftz * nffty, nfftx);
@@ -319,14 +319,14 @@ TEST_CASE("Full run with a small toy system, comprising two water molecules.") {
 
         auto gridAddress = pmeF->compressedForwardTransform(realGrid);
         helpme::Matrix<float> transformedGrid(gridAddress, kDimY * kDimX, kDimZ);
-        //REQUIRE(refTransGridD.cast<float>().almostEquals(transformedGrid, TOL));
+        REQUIRE(refTransGridD.cast<float>().almostEquals(transformedGrid, TOL));
 
         helpme::Matrix<float> virial(6, 1);
         float *convolvedGrid;
         float energy = pmeF->convolveEV(gridAddress, convolvedGrid, virial);
         helpme::Matrix<float> convolvedGridMat(convolvedGrid, kDimY * kDimX, kDimZ);
         REQUIRE(refVirialD.cast<float>().almostEquals(virial, TOL));
-        //REQUIRE(refConvolvedGridD.cast<float>().almostEquals(convolvedGridMat, TOL));
+        REQUIRE(refConvolvedGridD.cast<float>().almostEquals(convolvedGridMat, TOL));
 
         realGrid = pmeF->compressedInverseTransform(convolvedGrid);
         helpme::Matrix<float> potentialGrid(realGrid, nfftz * nffty, nfftx);

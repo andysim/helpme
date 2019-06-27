@@ -1995,6 +1995,18 @@ struct MPIWrapper {
             throw std::runtime_error("Problem encountered calling MPI reducescatter.");
     }
     /*!
+     * \brief iReduceScatterBlock performs a non-blocking reduction, with summation as the operation, then scatters to
+     * all nodes.
+     * \param inBuffer the buffer containing input data.
+     * \param outBuffer the buffer to send results to.
+     * \param dimension the number of elements to be reduced on each node (currently must be the same on all nodes).
+     */
+    void iReduceScatterBlock(MPI_Request* request, Real* inBuffer, Real* outBuffer, int dimension) {
+        if (MPI_Ireduce_scatter_block(inBuffer, outBuffer, dimension, types_.realType_, MPI_SUM, mpiCommunicator_,
+                                      request) != MPI_SUCCESS)
+            throw std::runtime_error("Problem encountered calling MPI ireducescatter.");
+    }
+    /*!
      * \brief allGather broadcasts a chunk of data from each node to every other node.
      * \param inBuffer the buffer containing input data.
      * \param dimension the number of elements to be broadcast.
@@ -2536,6 +2548,8 @@ class PMEInstance {
     enum class NodeOrder : int { Undefined = 0, ZYX = 1 };
 
    protected:
+    /// The desired size of each chunk (in bytes) of data to be asynchronously computed/communicated during transforms.
+    int desiredBlockSize_ = 10000;
     /// The FFT grid dimensions in the {A,B,C} grid dimensions.
     int gridDimensionA_ = 0, gridDimensionB_ = 0, gridDimensionC_ = 0;
     /// The number of K vectors in the {A,B,C} dimensions.  Equal to dim{A,B,C} for PME, lower for cPME.
@@ -2649,6 +2663,8 @@ class PMEInstance {
     LatticeType latticeType_ = LatticeType::Undefined;
     /// Communication buffers for MPI parallelism.
     helpme::vector<Complex> workSpace1_, workSpace2_;
+    /// This nodes density / potential grid
+    helpme::vector<Real> realGrid_;
     /// FFTW wrappers to help with transformations in the {A,B,C} dimensions.
     FFTWWrapper<Real> fftHelperA_, fftHelperB_, fftHelperC_;
     /// The cached list of splines.
@@ -2747,7 +2763,8 @@ class PMEInstance {
             cacheInfluenceFunctionFxn_(myNumKSumTermsA_, myNumKSumTermsB_, myNumKSumTermsC_, firstKSumTermA_,
                                        firstKSumTermB_, firstKSumTermC_, scaleFactor_, cachedInfluenceFunction_,
                                        recVecs_, cellVolume(), kappa_, &splineModA_[0], &splineModB_[0],
-                                       &splineModC_[0], mValsA_.data(), mValsB_.data(), mValsC_.data(), algorithmType_, nThreads_);
+                                       &splineModC_[0], mValsA_.data(), mValsB_.data(), mValsC_.data(), algorithmType_,
+                                       nThreads_);
         }
     }
 
@@ -3184,8 +3201,8 @@ class PMEInstance {
             size_t minusKy = (my == 0 ? 0 : (my < 0 ? ky - 1 : ky + 1));
             size_t minusKz = (mz == 0 ? 0 : (mz < 0 ? kz - 1 : kz + 1));
             size_t addressXY = minusKx * nyz + minusKy * myNz + kz;
-            size_t addressXZ = minusKx * nyz + (size_t) ky * myNz + minusKz;
-            size_t addressYZ = kx * nyz +  minusKy * myNz + minusKz;
+            size_t addressXZ = minusKx * nyz + (size_t)ky * myNz + minusKz;
+            size_t addressYZ = kx * nyz + minusKy * myNz + minusKz;
             Real totalPrefac = volPrefac * mTerm * xMods[kx] * yMods[ky] * zMods[kz];
             Real influenceFunction = totalPrefac * eGamma;
             gridPtrOut[xyz] = gridVal * influenceFunction;
@@ -3287,9 +3304,9 @@ class PMEInstance {
         const Real *boxPtr = boxInv[0];
         // Exclude m=0 cell.
         int start = (nodeZero ? 1 : 0);
-// Writing the three nested loops in one allows for better load balancing in parallel.
+        // Writing the three nested loops in one allows for better load balancing in parallel.
         if (algorithmType == AlgorithmType::PME) {
-            // Grid order is BAC here
+// Grid order is BAC here
 #pragma omp parallel for num_threads(nThreads)
             for (size_t yxz = start; yxz < nyxz; ++yxz) {
                 size_t xz = yxz % nxz;
@@ -3309,7 +3326,7 @@ class PMEInstance {
                 gridPtr[yxz] = volPrefac * incompleteGammaTerm * mTerm * yMods[ky] * xMods[kx] * zMods[kz];
             }
         } else {
-            // Grid order is ABC here
+// Grid order is ABC here
 #pragma omp parallel for num_threads(nThreads)
             for (size_t xyz = start; xyz < nyxz; ++xyz) {
                 size_t yz = xyz % nyz;
@@ -3330,7 +3347,6 @@ class PMEInstance {
             }
         }
     }
-
 
     /*!
      * \brief dirEImpl computes the kernel for the direct energy for a pair.
@@ -3731,6 +3747,7 @@ class PMEInstance {
 
             workSpace1_ = helpme::vector<Complex>(scratchSize);
             workSpace2_ = helpme::vector<Complex>(scratchSize);
+            realGrid_ = helpme::vector<Real>(myGridDimensionA_ * myGridDimensionB_ * myGridDimensionC_);
 #if HAVE_MKL
             mkl_set_num_threads(nThreads_);
 #endif
@@ -3738,6 +3755,11 @@ class PMEInstance {
     }
 
    public:
+    /*!
+     * \brief Set the target number of rows of the grid to be processed asynchronously.
+     * \param size the number of rows in each chunk of data being processed.
+     */
+    void setDesiredBlockSize(int size) { desiredBlockSize_ = size; }
     /*!
      * \brief Spread the parameters onto the charge grid.  Generally this shouldn't be called;
      *        use the various computeE() methods instead. This the more efficient version that filters
@@ -3760,7 +3782,6 @@ class PMEInstance {
      * \return realGrid the array of discretized parameters (stored in CBA order).
      */
     Real *spreadParameters(int parameterAngMom, const RealMat &parameters) {
-        Real *realGrid = reinterpret_cast<Real *>(workSpace1_.data());
         updateAngMomIterator(parameterAngMom);
 
         int nComponents = nCartesian(parameterAngMom);
@@ -3773,7 +3794,7 @@ class PMEInstance {
             int threadID = 0;
 #endif
             for (size_t row = threadID; row < myGridDimensionC_; row += nThreads_) {
-                std::fill(&realGrid[row * numBA], &realGrid[(row + 1) * numBA], Real(0));
+                std::fill(&realGrid_[row * numBA], &realGrid_[(row + 1) * numBA], Real(0));
             }
             for (const auto &spline : splinesPerThread_[threadID]) {
                 const auto &cacheEntry = splineCache_[spline];
@@ -3781,10 +3802,11 @@ class PMEInstance {
                 const auto &splineA = cacheEntry.aSpline;
                 const auto &splineB = cacheEntry.bSpline;
                 const auto &splineC = cacheEntry.cSpline;
-                spreadParametersImpl(atom, realGrid, nComponents, splineA, splineB, splineC, parameters, threadID);
+                spreadParametersImpl(atom, realGrid_.data(), nComponents, splineA, splineB, splineC, parameters,
+                                     threadID);
             }
         }
-        return realGrid;
+        return realGrid_.data();
     }
 
     /*!
@@ -4013,47 +4035,65 @@ class PMEInstance {
      * \return Pointer to the transformed grid, which is stored in one of the buffers in ABC order.
      */
     Real *compressedForwardTransform(Real *realGrid) {
-        Real *__restrict__ buffer1, *__restrict__ buffer2;
-        if (realGrid == reinterpret_cast<Real *>(workSpace1_.data())) {
-            buffer1 = reinterpret_cast<Real *>(workSpace2_.data());
-            buffer2 = reinterpret_cast<Real *>(workSpace1_.data());
-        } else {
-            buffer1 = reinterpret_cast<Real *>(workSpace1_.data());
-            buffer2 = reinterpret_cast<Real *>(workSpace2_.data());
-        }
-        int numNodes = numNodesA_ * numNodesB_ * numNodesC_;
-        size_t blockSize = numNodes == 1 ? myNumKSumTermsB_ : 10;
-        blockSize = myNumKSumTermsB_;
-        size_t numKSumBlocksB = myNumKSumTermsB_ / blockSize;
-        for (size_t block = 0; block < numKSumBlocksB; ++block) {
-            size_t firstB = block * blockSize;
-            size_t lastB = std::min(firstB + blockSize, (size_t) myNumKSumTermsB_);
-            size_t numTermsB = lastB - firstB;
-            // Transform A index
-            contractABxCWithDxC<Real>(realGrid, compressionCoefficientsA_[0], myGridDimensionC_ * myGridDimensionB_,
-                                      myGridDimensionA_, numKSumTermsA_, buffer1);
-            // Sort CBA->CAB
-            permuteABCtoACB(buffer1, myGridDimensionC_, myGridDimensionB_, numKSumTermsA_, buffer2, nThreads_);
-            // Transform B index
-            contractABxCWithDxC<Real>(buffer2, compressionCoefficientsB_[0], myGridDimensionC_ * numKSumTermsA_,
-                                      myGridDimensionB_, numKSumTermsB_, buffer1);
-            // Sort CAB->ABC
-            permuteABCtoBCA(buffer1, myGridDimensionC_, numKSumTermsA_, numKSumTermsB_, buffer2, nThreads_);
-            // Transform C index
-            contractABxCWithDxC<Real>(buffer2, compressionCoefficientsC_[0], numKSumTermsB_ * numKSumTermsA_,
-                                      myGridDimensionC_, numKSumTermsC_, buffer1);
+        Real *__restrict__ buffer1 = reinterpret_cast<Real *>(workSpace1_.data());
+        Real *__restrict__ buffer2 = reinterpret_cast<Real *>(workSpace2_.data());
 
+        int numNodes = numNodesA_ * numNodesB_ * numNodesC_;
+        int desiredBlockSizeAPerNode =
+            std::ceil((float)(desiredBlockSize_) / (myNumKSumTermsB_ * myNumKSumTermsC_ * sizeof(Real)));
+        size_t numAPerBlockPerNode = std::min(desiredBlockSizeAPerNode, myNumKSumTermsA_);
+        // For one node, there's no scope to overlap communication and computation!
+        if (numNodes == 1) numAPerBlockPerNode = myNumKSumTermsA_;
+        size_t numKSumBlocksA = std::ceil(myNumKSumTermsA_ / (float)numAPerBlockPerNode);
+        // This is the space needed to guarantee that the two buffers do not overlap.  The final result
+        // may require less space than this, which is accounted for in the MPI call's pointers at the end
+        size_t bufferBCDimension =
+            std::max(myGridDimensionB_, numKSumTermsB_) * std::max(myGridDimensionC_, numKSumTermsC_);
+        size_t blockDimension = numNodesA_ * numAPerBlockPerNode * bufferBCDimension;
+        size_t gridBCDimension = myGridDimensionB_ * myGridDimensionC_;
+        std::vector<Real> tempCoef(numKSumTermsA_ * myGridDimensionA_);
 #if HAVE_MPI == 1
-            int numNodes = numNodesA_ * numNodesB_ * numNodesC_;
+        std::vector<MPI_Request> requests(numKSumBlocksA);
+        std::vector<MPI_Status> statuses(numKSumBlocksA);
+#endif
+        for (size_t block = 0; block < numKSumBlocksA; ++block) {
+            size_t firstA = block * numAPerBlockPerNode;
+            size_t lastA = std::min(firstA + numAPerBlockPerNode, (size_t)myNumKSumTermsA_);
+            size_t numTermsAPerNode = lastA - firstA;
+            size_t numTermsA = numTermsAPerNode * numNodesA_;
+
+            // These two pointers into the buffers will not overlap for each subblock
+            Real *__restrict__ buf1 = buffer1 + block * blockDimension;
+            Real *__restrict__ buf2 = buffer2 + block * blockDimension;
+
+            // Transform A index
+            for (int nodeA = 0; nodeA < numNodesA_; ++nodeA) {
+                std::copy_n(compressionCoefficientsA_[nodeA * myNumKSumTermsA_ + firstA],
+                            numTermsAPerNode * myGridDimensionA_,
+                            tempCoef.data() + nodeA * numTermsAPerNode * myGridDimensionA_);
+            }
+            contractABxCWithDxC<Real>(realGrid_.data(), tempCoef.data(), gridBCDimension, myGridDimensionA_, numTermsA,
+                                      buf1);
+            // Sort CBA->CAB
+            permuteABCtoACB(buf1, myGridDimensionC_, myGridDimensionB_, numTermsA, buf2, nThreads_);
+            // Transform B index
+            contractABxCWithDxC<Real>(buf2, compressionCoefficientsB_[0], myGridDimensionC_ * numTermsA,
+                                      myGridDimensionB_, numKSumTermsB_, buf1);
+            // Sort CAB->ABC
+            permuteABCtoBCA(buf1, myGridDimensionC_, numTermsA, numKSumTermsB_, buf2, nThreads_);
+            // Transform C index
+            contractABxCWithDxC<Real>(buf2, compressionCoefficientsC_[0], numKSumTermsB_ * numTermsA, myGridDimensionC_,
+                                      numKSumTermsC_, buf1);
+#if HAVE_MPI == 1
             if (numNodes > 1) {
                 // Resort the data to be grouped by node, for communication
                 for (int node = 0; node < numNodes; ++node) {
-                    int nodeStartA = myNumKSumTermsA_ * (node % numNodesA_);
+                    int nodeStartA = numTermsAPerNode * (node % numNodesA_);
                     int nodeStartB = myNumKSumTermsB_ * ((node % (numNodesB_ * numNodesA_)) / numNodesA_);
                     int nodeStartC = myNumKSumTermsC_ * (node / (numNodesB_ * numNodesA_));
-                    Real *outPtr = buffer2 + node * myNumKSumTermsA_ * myNumKSumTermsB_ * myNumKSumTermsC_;
-                    for (int A = 0; A < myNumKSumTermsA_; ++A) {
-                        const Real *inPtrA = buffer1 + (nodeStartA + A) * numKSumTermsB_ * numKSumTermsC_;
+                    Real *outPtr = buf2 + node * numTermsAPerNode * myNumKSumTermsB_ * myNumKSumTermsC_;
+                    for (int A = 0; A < numTermsAPerNode; ++A) {
+                        const Real *inPtrA = buf1 + (nodeStartA + A) * numKSumTermsB_ * numKSumTermsC_;
                         for (int B = 0; B < myNumKSumTermsB_; ++B) {
                             const Real *inPtrAB = inPtrA + (nodeStartB + B) * numKSumTermsC_;
                             const Real *inPtrABC = inPtrAB + nodeStartC;
@@ -4062,11 +4102,65 @@ class PMEInstance {
                         }
                     }
                 }
-                mpiCommunicator_->reduceScatterBlock(buffer2, buffer1,
-                                                     myNumKSumTermsA_ * myNumKSumTermsB_ * myNumKSumTermsC_);
+                if (numKSumBlocksA > 1) {
+                    mpiCommunicator_->iReduceScatterBlock(&requests[block], buf2, buf1,
+                                                          numTermsAPerNode * myNumKSumTermsB_ * myNumKSumTermsC_);
+                } else {
+                    mpiCommunicator_->reduceScatterBlock(buf2, buf1,
+                                                         numTermsAPerNode * myNumKSumTermsB_ * myNumKSumTermsC_);
+                }
             }
 #endif
         }
+#if HAVE_MPI == 1
+#if 1
+        if (numKSumBlocksA > 1) {
+            // The block dimension is allocated above to make sure that the two buffers never overlap.  This could
+            // result in gaps between successive chunks of A, which we resolve here by copying to contiguous memory
+            size_t targetBCDimension = myNumKSumTermsB_ * myNumKSumTermsC_;
+            MPI_Waitall(numKSumBlocksA, requests.data(), statuses.data());
+            for (size_t block = 0; block < numKSumBlocksA; ++block) {
+                size_t firstA = block * numAPerBlockPerNode;
+                size_t lastA = std::min(firstA + numAPerBlockPerNode, (size_t)myNumKSumTermsA_);
+                size_t numTermsAPerNode = (lastA - firstA);
+                Real *__restrict__ src = buffer1 + block * blockDimension;
+                Real *__restrict__ dest = buffer2 + firstA * targetBCDimension;
+                size_t targetDimension = numTermsAPerNode * targetBCDimension;
+                std::copy_n(src, targetDimension, dest);
+            }
+            std::swap(buffer1, buffer2);
+        }
+#else
+        if (numKSumBlocksA > 1) {
+            // The block dimension is allocated above to make sure that the two buffers never overlap.  This could
+            // result in gaps between successive chunks of A, which we resolve here by copying to contiguous memory
+            size_t targetBCDimension = myNumKSumTermsB_ * myNumKSumTermsC_;
+            int requestsRemaining = numKSumBlocksA;
+            std::vector<bool> blockProcessed(numKSumBlocksA, false);
+            while (requestsRemaining) {
+                for (size_t block = 0; block < numKSumBlocksA; ++block) {
+                    // for (size_t block = numKSumBlocksA-1; block >= 0; --block) {
+                    if (blockProcessed[block]) continue;
+                    int requestStatus = 0;
+                    MPI_Test(&requests[block], &requestStatus, &statuses[block]);
+                    if (requestStatus == 1) {
+                        size_t firstA = block * numAPerBlockPerNode;
+                        size_t lastA = std::min(firstA + numAPerBlockPerNode, (size_t)myNumKSumTermsA_);
+                        size_t numTermsAPerNode = (lastA - firstA);
+                        Real *__restrict__ buf1 = buffer1 + block * blockDimension;
+                        Real *__restrict__ buf2 = buffer2 + firstA * targetBCDimension;
+                        size_t targetDimension = numTermsAPerNode * targetBCDimension;
+                        std::copy(buf1, buf1 + targetDimension, buf2);
+                        blockProcessed[block] = true;
+                        --requestsRemaining;
+                    }
+                }
+            }
+            std::swap(buffer1, buffer2);
+        }
+#endif
+#endif
+
         return buffer1;
     }
 
@@ -4077,17 +4171,9 @@ class PMEInstance {
      * \return Pointer to the transformed grid, which is stored in one of the buffers in BAC order.
      */
     Complex *forwardTransform(Real *realGrid) {
-        Real *__restrict__ realCBA;
-        Complex *__restrict__ buffer1, *__restrict__ buffer2;
-        if (realGrid == reinterpret_cast<Real *>(workSpace1_.data())) {
-            realCBA = reinterpret_cast<Real *>(workSpace2_.data());
-            buffer1 = workSpace2_.data();
-            buffer2 = workSpace1_.data();
-        } else {
-            realCBA = reinterpret_cast<Real *>(workSpace1_.data());
-            buffer1 = workSpace1_.data();
-            buffer2 = workSpace2_.data();
-        }
+        Real *__restrict__ realCBA = reinterpret_cast<Real *>(workSpace1_.data());
+        Complex *__restrict__ buffer1 = workSpace1_.data();
+        Complex *__restrict__ buffer2 = workSpace2_.data();
 
 #if HAVE_MPI == 1
         if (numNodesA_ > 1) {
@@ -4346,22 +4432,21 @@ class PMEInstance {
         std::swap(buffer1, buffer2);
 #endif
 
-        // A transform
-        Real *realGrid = reinterpret_cast<Real *>(buffer2);
+// A transform
 #pragma omp parallel for num_threads(nThreads_)
         for (int cb = 0; cb < subsetOfCAlongA_ * myGridDimensionB_; ++cb) {
-            fftHelperA_.transform(buffer1 + cb * complexGridDimensionA_, realGrid + cb * gridDimensionA_);
+            fftHelperA_.transform(buffer1 + cb * complexGridDimensionA_, realGrid_.data() + cb * gridDimensionA_);
         }
 
 #if HAVE_MPI == 1
         // Communicate A back to blocks
         if (numNodesA_ > 1) {
-            Real *realGrid2 = reinterpret_cast<Real *>(buffer1);
+            Real *realTmp = reinterpret_cast<Real *>(buffer1);
             for (int c = 0; c < subsetOfCAlongA_; ++c) {
-                Real *cPtr = realGrid + c * myGridDimensionB_ * gridDimensionA_;
+                Real *cPtr = realGrid_.data() + c * myGridDimensionB_ * gridDimensionA_;
                 for (int b = 0; b < myGridDimensionB_; ++b) {
                     for (int chunk = 0; chunk < numNodesA_; ++chunk) {
-                        Real *outPtr = realGrid2 +
+                        Real *outPtr = realTmp +
                                        (chunk * subsetOfCAlongA_ + c) * myGridDimensionB_ * myGridDimensionA_ +
                                        b * myGridDimensionA_;
                         Real *inPtr = cPtr + b * gridDimensionA_ + chunk * myGridDimensionA_;
@@ -4369,10 +4454,11 @@ class PMEInstance {
                     }
                 }
             }
-            mpiCommunicatorA_->allToAll(realGrid2, realGrid, subsetOfCAlongA_ * myGridDimensionB_ * myGridDimensionA_);
+            mpiCommunicatorA_->allToAll(realTmp, realGrid_.data(),
+                                        subsetOfCAlongA_ * myGridDimensionB_ * myGridDimensionA_);
         }
 #endif
-        return realGrid;
+        return realGrid_.data();
     }
 
     /*!
@@ -4975,8 +5061,7 @@ class PMEInstance {
         // simply regenerating splines on demand in the probing stage.  If this becomes too slow, it's
         // easy to write some logic to check whether gridPoints and coordinates are the same, and
         // handle that special case using spline cacheing machinery for efficiency.
-        Real *realGrid = reinterpret_cast<Real *>(workSpace1_.data());
-        std::fill(workSpace1_.begin(), workSpace1_.end(), 0);
+        std::fill(realGrid_.begin(), realGrid_.end(), 0);
         updateAngMomIterator(parameterAngMom);
         auto fractionalParameters =
             cartesianTransform(parameterAngMom, onlyOneShellForInput, scaledRecVecs_, parameters);
@@ -5010,8 +5095,8 @@ class PMEInstance {
                     for (int pointB = 0; pointB < numPointsB; ++pointB) {
                         const auto &bPoint = iteratorDataB[pointB];
                         Real cbValP = cValP * splineValsB[bPoint.second];
-                        Real *cbRow = &realGrid[cPoint.first * myGridDimensionB_ * myGridDimensionA_ +
-                                                bPoint.first * myGridDimensionA_];
+                        Real *cbRow = &realGrid_[cPoint.first * myGridDimensionB_ * myGridDimensionA_ +
+                                                 bPoint.first * myGridDimensionA_];
                         for (int pointA = 0; pointA < numPointsA; ++pointA) {
                             const auto &aPoint = iteratorDataA[pointA];
                             cbRow[aPoint.first] += cbValP * splineValsA[aPoint.second];
@@ -5023,11 +5108,11 @@ class PMEInstance {
 
         Real *potentialGrid;
         if (algorithmType_ == AlgorithmType::PME) {
-            auto gridAddress = forwardTransform(realGrid);
+            auto gridAddress = forwardTransform(realGrid_.data());
             convolveE(gridAddress);
             potentialGrid = inverseTransform(gridAddress);
         } else if (algorithmType_ == AlgorithmType::CompressedPME) {
-            auto gridAddress = compressedForwardTransform(realGrid);
+            auto gridAddress = compressedForwardTransform(realGrid_.data());
             convolveE(gridAddress);
             potentialGrid = compressedInverseTransform(gridAddress);
         } else {
