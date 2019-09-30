@@ -12,6 +12,7 @@
 #include "gridsize.h"
 
 TEST_CASE("test the grid size computing routines.") {
+    helpme::findGridSize(125, {34});
     REQUIRE(helpme::findGridSize(14, {4, 2}) == 16);
     REQUIRE(helpme::findGridSize(16, {4, 2}) == 16);
     REQUIRE(helpme::findGridSize(17, {4}) == 20);

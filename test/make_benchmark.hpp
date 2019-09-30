@@ -12,8 +12,32 @@
 #include <chrono>
 #include <stdlib.h>
 #include <getopt.h>
+#include <exception>
 
 #define TIME_COMPONENTS 1
+
+std::string strategyName(PMEInstanceD::MPIStrategy strategy){
+    switch (strategy) {
+        case(PMEInstanceD::MPIStrategy::ReduceScatter):
+          return "ReduceScatter";
+        case(PMEInstanceD::MPIStrategy::ReduceThenScatter):
+         return "ReduceThenScatter";
+        case(PMEInstanceD::MPIStrategy::Reduce):
+         return "Reduce";
+        case(PMEInstanceD::MPIStrategy::IReduce):
+         return "IReduce";
+        case(PMEInstanceD::MPIStrategy::AllReduce):
+         return "AllReduce";
+        case(PMEInstanceD::MPIStrategy::ReduceScatterBlock):
+         return "ReduceScatterBlock";
+        case(PMEInstanceD::MPIStrategy::IReduceScatterBlockWait):
+         return "IReduceScatterBlockWait";
+        case(PMEInstanceD::MPIStrategy::IReduceScatterBlockWaitAll):
+         return "IReduceScatterBlockWaitAll";
+         default:
+         throw std::runtime_error("Bad strategy name provided");
+    }
+}
 
 int main(int argc, char *argv[]) {
     // Defaults!
@@ -32,7 +56,7 @@ int main(int argc, char *argv[]) {
     int numNodesX = 1;
     int numNodesY = 1;
     int numNodesZ = 1;
-    int chunkSize = 0;
+    size_t chunkSize = 0;
 
 #if TIME_COMPONENTS
     std::chrono::duration<double> splineTime;
@@ -47,6 +71,7 @@ int main(int argc, char *argv[]) {
     MPI_Comm_size(MPI_COMM_WORLD, &foundNumNodes);
     int myRank;
     MPI_Comm_rank(MPI_COMM_WORLD, &myRank);
+    int mpiStrategy = 5;// default to allreduce
 
     // Parse
     static struct option long_options[] = {{"beta", required_argument, 0, 'b'},
@@ -54,6 +79,7 @@ int main(int argc, char *argv[]) {
                                            {"float", no_argument, 0, 'f'},
                                            {"grid", required_argument, 0, 'g'},
                                            {"ksum", required_argument, 0, 'k'},
+                                           {"mpistrategy", required_argument, 0, 'm'},
                                            {"nruns", required_argument, 0, 'n'},
                                            {"parallel", required_argument, 0, 'p'},
                                            {"rpower", required_argument, 0, 'r'},
@@ -65,7 +91,7 @@ int main(int argc, char *argv[]) {
         /* getopt_long stores the option index here. */
         int option_index = 0;
 
-        int c = getopt_long_only(argc, argv, "b:c:fg:k:n:p:r:s:v", long_options, &option_index);
+        int c = getopt_long_only(argc, argv, "b:c:fg:k:m:n:p:r:s:v", long_options, &option_index);
 
         /* Detect the end of the options. */
         if (c == -1) break;
@@ -113,6 +139,9 @@ int main(int argc, char *argv[]) {
                         numNodesZ = ::strtol(argv[optind++], NULL, 10);
                     }
                 }
+                break;
+            case 'm':
+                mpiStrategy = ::strtol(optarg, NULL, 10);
                 break;
             case 'n':
                 nCalcs = ::strtol(optarg, NULL, 10);
@@ -169,6 +198,7 @@ int main(int argc, char *argv[]) {
         std::cout << "Box Size: " << boxDimX << " x " << boxDimY << " x " << boxDimZ << std::endl;
         std::cout << "Number of Atoms " << nAtoms << std::endl;
         std::cout << "PME Parameter: " << beta << std::endl;
+        std::cout << "MPI strategy: " << strategyName(PMEInstanceD::MPIStrategy(mpiStrategy)) << std::endl;
         std::cout << "R exponent: " << rPower << std::endl;
         std::cout << "Number of runs: " << nCalcs << std::endl;
         std::cout << "Node counts: " << numNodesX << " x " << numNodesY << " x " << numNodesZ << std::endl;
@@ -183,6 +213,7 @@ int main(int argc, char *argv[]) {
     if (useFloat) {
         auto pme = std::unique_ptr<PMEInstanceF>(new PMEInstanceF());
         if (chunkSize) pme->setDesiredBlockSize(chunkSize);
+        pme->setMPIStrategy(PMEInstanceF::MPIStrategy(mpiStrategy));
         helpme::Matrix<float> coordsF = coordsD.cast<float>();
         helpme::Matrix<float> paramsF = paramsD.cast<float>();
         helpme::Matrix<float> forces(coordsD.nRows(), coordsD.nCols());
@@ -319,12 +350,14 @@ int main(int argc, char *argv[]) {
         if (myRank == 0) {
             std::cout << "Energy: " << std::setw(16) << std::setprecision(12) << energy << std::endl;
             if (computeVirial) std::cout << "Virial:" << std::endl << virial << std::endl;
+            std::cout << "Force norm: " << std::sqrt(forces.dot(forces)) << std::endl;
             forces.writeToFile("forces.dat");
         }
         pme.reset();
     } else {
         auto pme = std::unique_ptr<PMEInstanceD>(new PMEInstanceD());
         if (chunkSize) pme->setDesiredBlockSize(chunkSize);
+        pme->setMPIStrategy(PMEInstanceD::MPIStrategy(mpiStrategy));
         helpme::Matrix<double> forces(coordsD.nRows(), coordsD.nCols());
         helpme::Matrix<double> nodeForces(coordsD.nRows(), coordsD.nCols());
         helpme::Matrix<double> virial(6, 1);
@@ -457,8 +490,10 @@ int main(int argc, char *argv[]) {
         MPI_Reduce(nodeVirial[0], virial[0], 6, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
         virial.applyOperationToEachElement([&](double &v) { v *= (1.0 / nCalcs); });
         if (myRank == 0) {
+            std::cout << "Node Energy: " << std::setw(16) << std::setprecision(12) << nodeEnergy << std::endl;
             std::cout << "Energy: " << std::setw(16) << std::setprecision(12) << energy << std::endl;
             if (computeVirial) std::cout << "Virial:" << std::endl << virial << std::endl;
+            std::cout << "Force norm: " << std::sqrt(forces.dot(forces)) << std::endl;
             forces.writeToFile("forces.dat");
         }
         pme.reset();
@@ -486,6 +521,8 @@ int main(int argc, char *argv[]) {
 #endif
         std::cout << "Total run time: " << totalTime << "s (" << 1000 * totalTime / nCalcs << " ms per calculation)"
                   << std::endl;
+                  std::cout << "Precision: " << (double) std::chrono::system_clock::period::num
+                               / std::chrono::system_clock::period::den << std::endl;
     }
 
     MPI_Finalize();

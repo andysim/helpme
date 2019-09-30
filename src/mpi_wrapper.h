@@ -130,6 +130,28 @@ struct MPIWrapper {
             throw std::runtime_error("Problem encountered calling MPI alltoall.");
     }
     /*!
+     * \brief scatter performs a scatter operation from a given node to all others.
+     * \param inBuffer the buffer containing input data.
+     * \param outBuffer the buffer to send results to.
+     * \param dimension the number of elements to be scattered.
+     * \param node the node to send the result from (defaulted to zero).
+     */
+    void scatter(Real* inBuffer, Real* outBuffer, int dimension, int node = 0) {
+        if (MPI_Scatter(inBuffer, dimension, types_.realType_, outBuffer, dimension, types_.realType_, node,
+                        mpiCommunicator_) != MPI_SUCCESS)
+            throw std::runtime_error("Problem encountered calling MPI scatter.");
+    }
+    /*!
+     * \brief allreduce performs a reduction, with summation as the operation, replicating on all nodes.
+     * \param inBuffer the buffer containing input data.
+     * \param outBuffer the buffer to send results to.
+     * \param dimension the number of elements to be reduced.
+     */
+    void allreduce(void* inBuffer, void* outBuffer, int dimension) {
+        if (MPI_Allreduce(inBuffer, outBuffer, dimension, types_.realType_, MPI_SUM, mpiCommunicator_) != MPI_SUCCESS)
+            throw std::runtime_error("Problem encountered calling MPI allreduce.");
+    }
+    /*!
      * \brief reduce performs a reduction, with summation as the operation.
      * \param inBuffer the buffer containing input data.
      * \param outBuffer the buffer to send results to.
@@ -142,6 +164,31 @@ struct MPIWrapper {
             throw std::runtime_error("Problem encountered calling MPI reduce.");
     }
     /*!
+     * \brief reduce performs a non-blocking reduction, with summation as the operation.
+     * \param request pointer to an MPI_Request instance, to handle the request metadata.
+     * \param inBuffer the buffer containing input data.
+     * \param outBuffer the buffer to send results to.
+     * \param dimension the number of elements to be reduced.
+     * \param node the node to reduce the result to (defaulted to zero).
+     */
+    void iReduce(MPI_Request* request, Real* inBuffer, Real* outBuffer, int dimension, int node = 0) {
+        if (MPI_Ireduce(inBuffer, outBuffer, dimension, types_.realType_, MPI_SUM, node, mpiCommunicator_, request) !=
+            MPI_SUCCESS)
+            throw std::runtime_error("Problem encountered calling MPI iReduce.");
+    }
+    /*!
+     * \brief reduceScatter performs a reduction, with summation as the operation, then scatters to all nodes.  This
+     *        version supports different size chunks of data on each node
+     * \param inBuffer the buffer containing input data.
+     * \param outBuffer the buffer to send results to.
+     * \param dimension the number of elements to be reduced on each node.
+     */
+    void reduceScatter(Real* inBuffer, Real* outBuffer, int* dimensions) {
+        if (MPI_Reduce_scatter(inBuffer, outBuffer, dimensions, types_.realType_, MPI_SUM, mpiCommunicator_) !=
+            MPI_SUCCESS)
+            throw std::runtime_error("Problem encountered calling MPI reducescatter.");
+    }
+    /*!
      * \brief reduceScatterBlock performs a reduction, with summation as the operation, then scatters to all nodes.
      * \param inBuffer the buffer containing input data.
      * \param outBuffer the buffer to send results to.
@@ -150,11 +197,12 @@ struct MPIWrapper {
     void reduceScatterBlock(Real* inBuffer, Real* outBuffer, int dimension) {
         if (MPI_Reduce_scatter_block(inBuffer, outBuffer, dimension, types_.realType_, MPI_SUM, mpiCommunicator_) !=
             MPI_SUCCESS)
-            throw std::runtime_error("Problem encountered calling MPI reducescatter.");
+            throw std::runtime_error("Problem encountered calling MPI ReduceScatterBlock.");
     }
     /*!
      * \brief iReduceScatterBlock performs a non-blocking reduction, with summation as the operation, then scatters to
      * all nodes.
+     * \param request pointer to an MPI_Request instance, to handle the request metadata.
      * \param inBuffer the buffer containing input data.
      * \param outBuffer the buffer to send results to.
      * \param dimension the number of elements to be reduced on each node (currently must be the same on all nodes).
@@ -174,6 +222,18 @@ struct MPIWrapper {
         if (MPI_Allgather(inBuffer, dimension, types_.realType_, outBuffer, dimension, types_.realType_,
                           mpiCommunicator_) != MPI_SUCCESS)
             throw std::runtime_error("Problem encountered calling MPI allgather.");
+    }
+    /*!
+     * \brief iAllGather performs a non-blocking broadcast of a chunk of data from each node to every other node.
+     * \param request pointer to an MPI_Request instance, to handle the request metadata.
+     * \param inBuffer the buffer containing input data.
+     * \param dimension the number of elements to be broadcast.
+     * \param outBuffer the buffer to send results to.
+     */
+    void iAllGather(MPI_Request* request, Real* inBuffer, Real* outBuffer, int dimension) {
+        if (MPI_Iallgather(inBuffer, dimension, types_.realType_, outBuffer, dimension, types_.realType_,
+                           mpiCommunicator_, request) != MPI_SUCCESS)
+            throw std::runtime_error("Problem encountered calling MPI iallgather.");
     }
 
     /*!

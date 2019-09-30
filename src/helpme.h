@@ -137,11 +137,28 @@ class PMEInstance {
      */
     enum class NodeOrder : int { Undefined = 0, ZYX = 1 };
 
+    /*!
+     * \brief The algorithm being used to parallelize cPME
+     */
+    enum class MPIStrategy : int {
+        Undefined = 0,
+        ReduceScatter = 1,
+        ReduceThenScatter = 2,
+        Reduce = 3,
+        IReduce = 4,
+        AllReduce = 5,
+        ReduceScatterBlock = 6,
+        IReduceScatterBlockWait = 7,
+        IReduceScatterBlockWaitAll = 8,
+    };
+
    protected:
     /// The desired size of each chunk (in bytes) of data to be asynchronously computed/communicated during transforms.
-    int desiredBlockSize_ = 10000;
+    size_t desiredBlockSize_ = 100000;
     /// The FFT grid dimensions in the {A,B,C} grid dimensions.
     int gridDimensionA_ = 0, gridDimensionB_ = 0, gridDimensionC_ = 0;
+    /// The users-requested FFT grid dimensions in the {A,B,C} grid dimensions.
+    int requestedGridDimensionA_ = 0, requestedGridDimensionB_ = 0, requestedGridDimensionC_ = 0;
     /// The number of K vectors in the {A,B,C} dimensions.  Equal to dim{A,B,C} for PME, lower for cPME.
     int numKSumTermsA_ = 0, numKSumTermsB_ = 0, numKSumTermsC_ = 0;
     /// The number of K vectors in the {A,B,C} dimensions to be handled by this node in a parallel setup.
@@ -249,6 +266,8 @@ class PMEInstance {
     bool numNodesHasChanged_ = true;
     /// The algorithm being used to solve for reciprocal space quantities.
     AlgorithmType algorithmType_ = AlgorithmType::Undefined;
+    /// The approach used to parallelize cPME calculations - a few different methods can be used
+    MPIStrategy mpiStrategy_ = MPIStrategy::AllReduce;
     /// The type of alignment scheme used for the lattice vectors.
     LatticeType latticeType_ = LatticeType::Undefined;
     /// Communication buffers for MPI parallelism.
@@ -1063,7 +1082,8 @@ class PMEInstance {
         kappaHasChanged_ = kappa != kappa_;
         numNodesHasChanged_ = numNodesA_ != numNodesA || numNodesB_ != numNodesB || numNodesC_ != numNodesC;
         rPowerHasChanged_ = rPower_ != rPower;
-        gridDimensionHasChanged_ = gridDimensionA_ != dimA || gridDimensionB_ != dimB || gridDimensionC_ != dimC;
+        gridDimensionHasChanged_ =
+            requestedGridDimensionA_ != dimA || requestedGridDimensionB_ != dimB || requestedGridDimensionC_ != dimC;
         reciprocalSumDimensionHasChanged_ =
             numKSumTermsA != numKSumTermsA_ || numKSumTermsB != numKSumTermsB_ || numKSumTermsC != numKSumTermsC_;
         algorithmHasChanged_ = algorithmType_ != algorithm;
@@ -1108,6 +1128,9 @@ class PMEInstance {
             splineOrder_ = splineOrder;
             cacheLineSizeInReals_ = static_cast<Real>(sysconf(_SC_PAGESIZE) / sizeof(Real));
             requestedNumberOfThreads_ = nThreads;
+            requestedGridDimensionA_ = dimA;
+            requestedGridDimensionB_ = dimB;
+            requestedGridDimensionC_ = dimC;
 #ifdef _OPENMP
             nThreads_ = nThreads ? nThreads : omp_get_max_threads();
 #else
@@ -1131,15 +1154,27 @@ class PMEInstance {
                 myFirstGridPointA_ = myNodeRankA_ * (myGridDimensionA_ - gridPaddingA);
                 myFirstGridPointB_ = myNodeRankB_ * (myGridDimensionB_ - gridPaddingB);
                 myFirstGridPointC_ = myNodeRankC_ * (myGridDimensionC_ - gridPaddingC);
-                myNumKSumTermsA_ = numNodesA == 1 ? numKSumTermsA : 2 * std::ceil((maxKA + 1.0) / numNodesA);
-                myNumKSumTermsB_ = numNodesB == 1 ? numKSumTermsB : 2 * std::ceil((maxKB + 1.0) / numNodesB);
-                myNumKSumTermsC_ = numNodesC == 1 ? numKSumTermsC : 2 * std::ceil((maxKC + 1.0) / numNodesC);
-                numKSumTermsA_ = myNumKSumTermsA_ * numNodesA;
-                numKSumTermsB_ = myNumKSumTermsB_ * numNodesB;
-                numKSumTermsC_ = myNumKSumTermsC_ * numNodesC;
-                firstKSumTermA_ = myNodeRankA_ * myNumKSumTermsA_;
-                firstKSumTermB_ = myNodeRankB_ * myNumKSumTermsB_;
-                firstKSumTermC_ = myNodeRankC_ * myNumKSumTermsC_;
+                if (mpiStrategy_ == MPIStrategy::AllReduce) {
+                    myNumKSumTermsA_ = numKSumTermsA;
+                    myNumKSumTermsB_ = numKSumTermsB;
+                    myNumKSumTermsC_ = numKSumTermsC;
+                    numKSumTermsA_ = myNumKSumTermsA_;
+                    numKSumTermsB_ = myNumKSumTermsB_;
+                    numKSumTermsC_ = myNumKSumTermsC_;
+                    firstKSumTermA_ = 0;
+                    firstKSumTermB_ = 0;
+                    firstKSumTermC_ = 0;
+                } else {
+                    myNumKSumTermsA_ = numNodesA == 1 ? numKSumTermsA : 2 * std::ceil((maxKA + 1.0) / numNodesA);
+                    myNumKSumTermsB_ = numNodesB == 1 ? numKSumTermsB : 2 * std::ceil((maxKB + 1.0) / numNodesB);
+                    myNumKSumTermsC_ = numNodesC == 1 ? numKSumTermsC : 2 * std::ceil((maxKC + 1.0) / numNodesC);
+                    numKSumTermsA_ = myNumKSumTermsA_ * numNodesA;
+                    numKSumTermsB_ = myNumKSumTermsB_ * numNodesB;
+                    numKSumTermsC_ = myNumKSumTermsC_ * numNodesC;
+                    firstKSumTermA_ = myNodeRankA_ * myNumKSumTermsA_;
+                    firstKSumTermB_ = myNodeRankB_ * myNumKSumTermsB_;
+                    firstKSumTermC_ = myNodeRankC_ * myNumKSumTermsC_;
+                }
                 fftHelperA_ = FFTWWrapper<Real>();
                 fftHelperB_ = FFTWWrapper<Real>();
                 fftHelperC_ = FFTWWrapper<Real>();
@@ -1211,66 +1246,114 @@ class PMEInstance {
             mValsB_.resize(myNumKSumTermsB_, 99);
             mValsC_.resize(myNumKSumTermsC_, 99);
             if (algorithm == AlgorithmType::CompressedPME) {
-                // For compressed PME we order the m values as 0, 1, -1, 2, -2, ..., Kmax, -Kmax
-                // because we need to guarantee that +/- m pairs live on the same node for the virial.
-                mValsA_[0] = 0;
-                int startA = myNodeRankA_ ? 0 : 1;
-                for (int k = startA; k < (myNumKSumTermsA_ + (numNodesA_ == 1)) / 2; ++k) {
-                    int m = myNodeRankA_ * myNumKSumTermsA_ / 2 + k;
-                    mValsA_[startA + 2 * (k - startA)] = m;
-                    mValsA_[startA + 2 * (k - startA) + 1] = -m;
-                }
-                mValsB_[0] = 0;
-                int startB = myNodeRankB_ ? 0 : 1;
-                for (int k = startB; k < (myNumKSumTermsB_ + (numNodesB_ == 1)) / 2; ++k) {
-                    int m = myNodeRankB_ * myNumKSumTermsB_ / 2 + k;
-                    mValsB_[startB + 2 * (k - startB)] = m;
-                    mValsB_[startB + 2 * (k - startB) + 1] = -m;
-                }
-                mValsC_[0] = 0;
-                int startC = myNodeRankC_ ? 0 : 1;
-                for (int k = startC; k < (myNumKSumTermsC_ + (numNodesC_ == 1)) / 2; ++k) {
-                    int m = myNodeRankC_ * myNumKSumTermsC_ / 2 + k;
-                    mValsC_[startC + 2 * (k - startC)] = m;
-                    mValsC_[startC + 2 * (k - startC) + 1] = -m;
-                }
+                if (mpiStrategy_ == MPIStrategy::AllReduce) {
+                    // For compressed PME we order the m values as 0, 1, -1, 2, -2, ..., Kmax, -Kmax
+                    // because we need to guarantee that +/- m pairs live on the same node for the virial.
+                    mValsA_[0] = 0;
+                    for (int k = 1; k <= numKSumTermsA_ / 2; ++k) {
+                        mValsA_[2 * k - 1] = k;
+                        mValsA_[2 * k] = -k;
+                    }
+                    mValsB_[0] = 0;
+                    for (int k = 1; k <= numKSumTermsB_ / 2; ++k) {
+                        mValsB_[2 * k - 1] = k;
+                        mValsB_[2 * k] = -k;
+                    }
+                    mValsC_[0] = 0;
+                    for (int k = 1; k <= numKSumTermsC_ / 2; ++k) {
+                        mValsC_[2 * k - 1] = k;
+                        mValsC_[2 * k] = -k;
+                    }
 
-                std::fill(compressionCoefficientsA_[0], compressionCoefficientsA_[1], 1);
-                for (int node = 0; node < numNodesA_; ++node) {
-                    int offset = node ? 0 : 1;
-                    for (int m = offset; m < (myNumKSumTermsA_ + (numNodesA_ == 1)) / 2; ++m) {
-                        int fullM = m + node * myNumKSumTermsA_ / 2;
-                        Real *rowPtr = compressionCoefficientsA_[offset + 2 * (fullM - offset)];
+                    std::fill(compressionCoefficientsA_[0], compressionCoefficientsA_[1], 1);
+                    for (int m = 1; m <= numKSumTermsA_ / 2; ++m) {
+                        Real *rowPtr = compressionCoefficientsA_[2 * m - 1];
                         for (int n = 0; n < myGridDimensionA_; ++n) {
-                            Real exponent = 2 * PI * fullM * (n + myFirstGridPointA_) / gridDimensionA_;
+                            Real exponent = 2 * PI * m * (n + myFirstGridPointA_) / gridDimensionA_;
                             rowPtr[n] = std::sqrt(2) * std::cos(exponent);
                             rowPtr[n + myGridDimensionA_] = std::sqrt(2) * std::sin(exponent);
                         }
                     }
-                }
-                std::fill(compressionCoefficientsB_[0], compressionCoefficientsB_[1], 1);
-                for (int node = 0; node < numNodesB_; ++node) {
-                    int offset = node ? 0 : 1;
-                    for (int m = offset; m < (myNumKSumTermsB_ + (numNodesB_ == 1)) / 2; ++m) {
-                        int fullM = m + node * myNumKSumTermsB_ / 2;
-                        Real *rowPtr = compressionCoefficientsB_[offset + 2 * (fullM - offset)];
+                    std::fill(compressionCoefficientsB_[0], compressionCoefficientsB_[1], 1);
+                    for (int m = 1; m <= numKSumTermsB_ / 2; ++m) {
+                        Real *rowPtr = compressionCoefficientsB_[2 * m - 1];
                         for (int n = 0; n < myGridDimensionB_; ++n) {
-                            Real exponent = 2 * PI * fullM * (n + myFirstGridPointB_) / gridDimensionB_;
+                            Real exponent = 2 * PI * m * (n + myFirstGridPointB_) / gridDimensionB_;
                             rowPtr[n] = std::sqrt(2) * std::cos(exponent);
                             rowPtr[n + myGridDimensionB_] = std::sqrt(2) * std::sin(exponent);
                         }
                     }
-                }
-                std::fill(compressionCoefficientsC_[0], compressionCoefficientsC_[1], 1);
-                for (int node = 0; node < numNodesC_; ++node) {
-                    int offset = node ? 0 : 1;
-                    for (int m = offset; m < (myNumKSumTermsC_ + (numNodesC_ == 1)) / 2; ++m) {
-                        int fullM = m + node * myNumKSumTermsC_ / 2;
-                        Real *rowPtr = compressionCoefficientsC_[offset + 2 * (fullM - offset)];
+                    std::fill(compressionCoefficientsC_[0], compressionCoefficientsC_[1], 1);
+                    for (int m = 1; m <= numKSumTermsC_ / 2; ++m) {
+                        Real *rowPtr = compressionCoefficientsC_[2 * m - 1];
                         for (int n = 0; n < myGridDimensionC_; ++n) {
-                            Real exponent = 2 * PI * fullM * (n + myFirstGridPointC_) / gridDimensionC_;
+                            Real exponent = 2 * PI * m * (n + myFirstGridPointC_) / gridDimensionB_;
                             rowPtr[n] = std::sqrt(2) * std::cos(exponent);
                             rowPtr[n + myGridDimensionC_] = std::sqrt(2) * std::sin(exponent);
+                        }
+                    }
+                } else {
+                    // For compressed PME we order the m values as 0, 1, -1, 2, -2, ..., Kmax, -Kmax
+                    // because we need to guarantee that +/- m pairs live on the same node for the virial.
+                    mValsA_[0] = 0;
+                    int startA = myNodeRankA_ ? 0 : 1;
+                    for (int k = startA; k < (myNumKSumTermsA_ + (numNodesA_ == 1)) / 2; ++k) {
+                        int m = myNodeRankA_ * myNumKSumTermsA_ / 2 + k;
+                        mValsA_[startA + 2 * (k - startA)] = m;
+                        mValsA_[startA + 2 * (k - startA) + 1] = -m;
+                    }
+                    mValsB_[0] = 0;
+                    int startB = myNodeRankB_ ? 0 : 1;
+                    for (int k = startB; k < (myNumKSumTermsB_ + (numNodesB_ == 1)) / 2; ++k) {
+                        int m = myNodeRankB_ * myNumKSumTermsB_ / 2 + k;
+                        mValsB_[startB + 2 * (k - startB)] = m;
+                        mValsB_[startB + 2 * (k - startB) + 1] = -m;
+                    }
+                    mValsC_[0] = 0;
+                    int startC = myNodeRankC_ ? 0 : 1;
+                    for (int k = startC; k < (myNumKSumTermsC_ + (numNodesC_ == 1)) / 2; ++k) {
+                        int m = myNodeRankC_ * myNumKSumTermsC_ / 2 + k;
+                        mValsC_[startC + 2 * (k - startC)] = m;
+                        mValsC_[startC + 2 * (k - startC) + 1] = -m;
+                    }
+
+                    std::fill(compressionCoefficientsA_[0], compressionCoefficientsA_[1], 1);
+                    for (int node = 0; node < numNodesA_; ++node) {
+                        int offset = node ? 0 : 1;
+                        for (int m = offset; m < (myNumKSumTermsA_ + (numNodesA_ == 1)) / 2; ++m) {
+                            int fullM = m + node * myNumKSumTermsA_ / 2;
+                            Real *rowPtr = compressionCoefficientsA_[offset + 2 * (fullM - offset)];
+                            for (int n = 0; n < myGridDimensionA_; ++n) {
+                                Real exponent = 2 * PI * fullM * (n + myFirstGridPointA_) / gridDimensionA_;
+                                rowPtr[n] = std::sqrt(2) * std::cos(exponent);
+                                rowPtr[n + myGridDimensionA_] = std::sqrt(2) * std::sin(exponent);
+                            }
+                        }
+                    }
+                    std::fill(compressionCoefficientsB_[0], compressionCoefficientsB_[1], 1);
+                    for (int node = 0; node < numNodesB_; ++node) {
+                        int offset = node ? 0 : 1;
+                        for (int m = offset; m < (myNumKSumTermsB_ + (numNodesB_ == 1)) / 2; ++m) {
+                            int fullM = m + node * myNumKSumTermsB_ / 2;
+                            Real *rowPtr = compressionCoefficientsB_[offset + 2 * (fullM - offset)];
+                            for (int n = 0; n < myGridDimensionB_; ++n) {
+                                Real exponent = 2 * PI * fullM * (n + myFirstGridPointB_) / gridDimensionB_;
+                                rowPtr[n] = std::sqrt(2) * std::cos(exponent);
+                                rowPtr[n + myGridDimensionB_] = std::sqrt(2) * std::sin(exponent);
+                            }
+                        }
+                    }
+                    std::fill(compressionCoefficientsC_[0], compressionCoefficientsC_[1], 1);
+                    for (int node = 0; node < numNodesC_; ++node) {
+                        int offset = node ? 0 : 1;
+                        for (int m = offset; m < (myNumKSumTermsC_ + (numNodesC_ == 1)) / 2; ++m) {
+                            int fullM = m + node * myNumKSumTermsC_ / 2;
+                            Real *rowPtr = compressionCoefficientsC_[offset + 2 * (fullM - offset)];
+                            for (int n = 0; n < myGridDimensionC_; ++n) {
+                                Real exponent = 2 * PI * fullM * (n + myFirstGridPointC_) / gridDimensionC_;
+                                rowPtr[n] = std::sqrt(2) * std::cos(exponent);
+                                rowPtr[n + myGridDimensionC_] = std::sqrt(2) * std::sin(exponent);
+                            }
                         }
                     }
                 }
@@ -1349,7 +1432,11 @@ class PMEInstance {
      * \brief Set the target number of rows of the grid to be processed asynchronously.
      * \param size the number of rows in each chunk of data being processed.
      */
-    void setDesiredBlockSize(int size) { desiredBlockSize_ = size; }
+    void setDesiredBlockSize(size_t size) { desiredBlockSize_ = size; }
+    /*!
+     * \brief Set the type of MPI scheme to use in cPME runs
+     */
+    void setMPIStrategy(MPIStrategy strategy) { mpiStrategy_ = strategy; }
     /*!
      * \brief Spread the parameters onto the charge grid.  Generally this shouldn't be called;
      *        use the various computeE() methods instead. This the more efficient version that filters
@@ -1629,11 +1716,15 @@ class PMEInstance {
         Real *__restrict__ buffer2 = reinterpret_cast<Real *>(workSpace2_.data());
 
         int numNodes = numNodesA_ * numNodesB_ * numNodesC_;
-        int desiredBlockSizeAPerNode =
+        size_t desiredBlockSizeAPerNode =
             std::ceil((float)(desiredBlockSize_) / (myNumKSumTermsB_ * myNumKSumTermsC_ * sizeof(Real)));
-        size_t numAPerBlockPerNode = std::min(desiredBlockSizeAPerNode, myNumKSumTermsA_);
+        size_t numAPerBlockPerNode;
         // For one node, there's no scope to overlap communication and computation!
-        if (numNodes == 1) numAPerBlockPerNode = myNumKSumTermsA_;
+        if (numNodes == 1 || mpiStrategy_ == MPIStrategy::AllReduce) {
+            numAPerBlockPerNode = myNumKSumTermsA_;
+        } else {
+            numAPerBlockPerNode = std::min(desiredBlockSizeAPerNode, (size_t)myNumKSumTermsA_);
+        }
         size_t numKSumBlocksA = std::ceil(myNumKSumTermsA_ / (float)numAPerBlockPerNode);
         // This is the space needed to guarantee that the two buffers do not overlap.  The final result
         // may require less space than this, which is accounted for in the MPI call's pointers at the end
@@ -1641,10 +1732,23 @@ class PMEInstance {
             std::max(myGridDimensionB_, numKSumTermsB_) * std::max(myGridDimensionC_, numKSumTermsC_);
         size_t blockDimension = numNodesA_ * numAPerBlockPerNode * bufferBCDimension;
         size_t gridBCDimension = myGridDimensionB_ * myGridDimensionC_;
-        std::vector<Real> tempCoef(numKSumTermsA_ * myGridDimensionA_);
+        size_t targetBCDimension = myNumKSumTermsB_ * myNumKSumTermsC_;
+        std::vector<Real> tempCoef(numAPerBlockPerNode * numNodesA_ * myGridDimensionA_);
 #if HAVE_MPI == 1
-        std::vector<MPI_Request> requests(numKSumBlocksA);
-        std::vector<MPI_Status> statuses(numKSumBlocksA);
+        std::vector<MPI_Request> request;
+        if (numNodes > 1) {
+            switch (mpiStrategy_) {
+                case MPIStrategy::IReduceScatterBlockWait:
+                    request.resize(1, MPI_REQUEST_NULL);
+                    break;
+                case MPIStrategy::IReduceScatterBlockWaitAll:
+                    request.resize(numKSumBlocksA, MPI_REQUEST_NULL);
+                    break;
+                case MPIStrategy::IReduce:
+                    request.resize(numNodes * numKSumBlocksA, MPI_REQUEST_NULL);
+                    break;
+            }
+        }
 #endif
         for (size_t block = 0; block < numKSumBlocksA; ++block) {
             size_t firstA = block * numAPerBlockPerNode;
@@ -1655,15 +1759,20 @@ class PMEInstance {
             // These two pointers into the buffers will not overlap for each subblock
             Real *__restrict__ buf1 = buffer1 + block * blockDimension;
             Real *__restrict__ buf2 = buffer2 + block * blockDimension;
-
             // Transform A index
-            for (int nodeA = 0; nodeA < numNodesA_; ++nodeA) {
-                std::copy_n(compressionCoefficientsA_[nodeA * myNumKSumTermsA_ + firstA],
-                            numTermsAPerNode * myGridDimensionA_,
-                            tempCoef.data() + nodeA * numTermsAPerNode * myGridDimensionA_);
+            if (mpiStrategy_ == MPIStrategy::AllReduce) {
+                numTermsA = numKSumTermsA_;
+                contractABxCWithDxC<Real>(realGrid_.data(), compressionCoefficientsA_[0], gridBCDimension,
+                                          myGridDimensionA_, numTermsA, buf1);
+            } else {
+                for (int nodeA = 0; nodeA < numNodesA_; ++nodeA) {
+                    std::copy_n(compressionCoefficientsA_[nodeA * myNumKSumTermsA_ + firstA],
+                                numTermsAPerNode * myGridDimensionA_,
+                                tempCoef.data() + nodeA * numTermsAPerNode * myGridDimensionA_);
+                }
+                contractABxCWithDxC<Real>(realGrid_.data(), tempCoef.data(), gridBCDimension, myGridDimensionA_,
+                                          numTermsA, buf1);
             }
-            contractABxCWithDxC<Real>(realGrid_.data(), tempCoef.data(), gridBCDimension, myGridDimensionA_, numTermsA,
-                                      buf1);
             // Sort CBA->CAB
             permuteABCtoACB(buf1, myGridDimensionC_, myGridDimensionB_, numTermsA, buf2, nThreads_);
             // Transform B index
@@ -1676,6 +1785,10 @@ class PMEInstance {
                                       numKSumTermsC_, buf1);
 #if HAVE_MPI == 1
             if (numNodes > 1) {
+                if (mpiStrategy_ == MPIStrategy::AllReduce) {
+                    mpiCommunicator_->allreduce(buffer1, buffer2, numKSumTermsA_ * numKSumTermsB_ * numKSumTermsC_);
+                    return buffer2;
+                }
                 // Resort the data to be grouped by node, for communication
                 for (int node = 0; node < numNodes; ++node) {
                     int nodeStartA = numTermsAPerNode * (node % numNodesA_);
@@ -1692,63 +1805,89 @@ class PMEInstance {
                         }
                     }
                 }
+                Real *__restrict__ dest = buffer1 + firstA * targetBCDimension;
                 if (numKSumBlocksA > 1) {
-                    mpiCommunicator_->iReduceScatterBlock(&requests[block], buf2, buf1,
-                                                          numTermsAPerNode * myNumKSumTermsB_ * myNumKSumTermsC_);
+                    // These are the nonblocking approaches
+                    switch (mpiStrategy_) {
+                        case MPIStrategy::IReduceScatterBlockWait:
+                            // Don't issue a communication until the previous one completed
+                            if (block) MPI_Wait(&request[0], MPI_STATUS_IGNORE);
+                            mpiCommunicator_->iReduceScatterBlock(
+                                &request[0], buf2, dest, numTermsAPerNode * myNumKSumTermsB_ * myNumKSumTermsC_);
+                            break;
+                        case MPIStrategy::IReduceScatterBlockWaitAll:
+                            mpiCommunicator_->iReduceScatterBlock(
+                                &request[block], buf2, dest, numTermsAPerNode * myNumKSumTermsB_ * myNumKSumTermsC_);
+                            break;
+                        case MPIStrategy::IReduce:
+                            for (int node = 0; node < numNodes; ++node) {
+                                mpiCommunicator_->iReduce(
+                                    &request[block * numNodes + node],
+                                    buf2 + node * numTermsAPerNode * myNumKSumTermsB_ * myNumKSumTermsC_, dest,
+                                    numTermsAPerNode * myNumKSumTermsB_ * myNumKSumTermsC_, node);
+                            }
+                            break;
+                        case MPIStrategy::ReduceScatterBlock:
+                            mpiCommunicator_->reduceScatterBlock(
+                                buf2, dest, numTermsAPerNode * myNumKSumTermsB_ * myNumKSumTermsC_);
+                            break;
+                    }
                 } else {
-                    mpiCommunicator_->reduceScatterBlock(buf2, buf1,
-                                                         numTermsAPerNode * myNumKSumTermsB_ * myNumKSumTermsC_);
-                }
-            }
-#endif
-        }
-#if HAVE_MPI == 1
-#if 1
-        if (numKSumBlocksA > 1) {
-            // The block dimension is allocated above to make sure that the two buffers never overlap.  This could
-            // result in gaps between successive chunks of A, which we resolve here by copying to contiguous memory
-            size_t targetBCDimension = myNumKSumTermsB_ * myNumKSumTermsC_;
-            MPI_Waitall(numKSumBlocksA, requests.data(), statuses.data());
-            for (size_t block = 0; block < numKSumBlocksA; ++block) {
-                size_t firstA = block * numAPerBlockPerNode;
-                size_t lastA = std::min(firstA + numAPerBlockPerNode, (size_t)myNumKSumTermsA_);
-                size_t numTermsAPerNode = (lastA - firstA);
-                Real *__restrict__ src = buffer1 + block * blockDimension;
-                Real *__restrict__ dest = buffer2 + firstA * targetBCDimension;
-                size_t targetDimension = numTermsAPerNode * targetBCDimension;
-                std::copy_n(src, targetDimension, dest);
-            }
-            std::swap(buffer1, buffer2);
-        }
-#else
-        if (numKSumBlocksA > 1) {
-            // The block dimension is allocated above to make sure that the two buffers never overlap.  This could
-            // result in gaps between successive chunks of A, which we resolve here by copying to contiguous memory
-            size_t targetBCDimension = myNumKSumTermsB_ * myNumKSumTermsC_;
-            int requestsRemaining = numKSumBlocksA;
-            std::vector<bool> blockProcessed(numKSumBlocksA, false);
-            while (requestsRemaining) {
-                for (size_t block = 0; block < numKSumBlocksA; ++block) {
-                    // for (size_t block = numKSumBlocksA-1; block >= 0; --block) {
-                    if (blockProcessed[block]) continue;
-                    int requestStatus = 0;
-                    MPI_Test(&requests[block], &requestStatus, &statuses[block]);
-                    if (requestStatus == 1) {
-                        size_t firstA = block * numAPerBlockPerNode;
-                        size_t lastA = std::min(firstA + numAPerBlockPerNode, (size_t)myNumKSumTermsA_);
-                        size_t numTermsAPerNode = (lastA - firstA);
-                        Real *__restrict__ buf1 = buffer1 + block * blockDimension;
-                        Real *__restrict__ buf2 = buffer2 + firstA * targetBCDimension;
-                        size_t targetDimension = numTermsAPerNode * targetBCDimension;
-                        std::copy(buf1, buf1 + targetDimension, buf2);
-                        blockProcessed[block] = true;
-                        --requestsRemaining;
+                    // These are the blocking approaches
+                    std::vector<int> dimensions(numNodes, numTermsAPerNode * myNumKSumTermsB_ * myNumKSumTermsC_);
+                    switch (mpiStrategy_) {
+                        case MPIStrategy::AllReduce:
+                            mpiCommunicator_->allreduce(buf2, buf1, numKSumTermsA_ * numKSumTermsB_ * numKSumTermsC_);
+                            std::copy_n(
+                                buf1 +
+                                    mpiCommunicator_->myRank_ * myNumKSumTermsA_ * myNumKSumTermsB_ * myNumKSumTermsC_,
+                                myNumKSumTermsA_ * myNumKSumTermsB_ * myNumKSumTermsC_, buf2);
+                            std::swap(buffer1, buffer2);
+                            break;
+                        case MPIStrategy::ReduceScatter:
+                            mpiCommunicator_->reduceScatter(buf2, dest, dimensions.data());
+                            break;
+                        case MPIStrategy::ReduceScatterBlock:
+                        case MPIStrategy::IReduceScatterBlockWait:
+                        case MPIStrategy::IReduceScatterBlockWaitAll:
+                            mpiCommunicator_->reduceScatterBlock(
+                                buf2, dest, numTermsAPerNode * myNumKSumTermsB_ * myNumKSumTermsC_);
+                            break;
+                        case MPIStrategy::Reduce:
+                        case MPIStrategy::IReduce:
+                            for (int node = 0; node < numNodes; ++node) {
+                                mpiCommunicator_->reduce(
+                                    buf2 + node * numTermsAPerNode * myNumKSumTermsB_ * myNumKSumTermsC_, dest,
+                                    numTermsAPerNode * myNumKSumTermsB_ * myNumKSumTermsC_, node);
+                            }
+                            break;
+                        case MPIStrategy::ReduceThenScatter:
+                            mpiCommunicator_->reduce(buf2, buf1, numKSumTermsA_ * numKSumTermsB_ * numKSumTermsC_);
+                            mpiCommunicator_->scatter(buf1, buf2,
+                                                      myNumKSumTermsA_ * myNumKSumTermsB_ * myNumKSumTermsC_);
+                            std::swap(buffer1, buffer2);
+                            break;
                     }
                 }
             }
-            std::swap(buffer1, buffer2);
-        }
 #endif
+        }  // End loop over blocks
+
+#if HAVE_MPI == 1
+        // Make sure the final chunk is done before proceeding
+        if (numNodes > 1) {
+            switch (mpiStrategy_) {
+                case MPIStrategy::IReduceScatterBlockWait:
+                    MPI_Wait(request.data(), MPI_STATUS_IGNORE);
+                    break;
+                case MPIStrategy::IReduceScatterBlockWaitAll:
+                    MPI_Waitall(numKSumBlocksA, request.data(), MPI_STATUS_IGNORE);
+                    break;
+                case MPIStrategy::IReduce:
+                    MPI_Waitall(numNodes * numKSumBlocksA, request.data(), MPI_STATUS_IGNORE);
+                    break;
+            }
+        }
 #endif
 
         return buffer1;
@@ -2071,43 +2210,105 @@ class PMEInstance {
         compressionCoefficientsB_.transposeInPlace();
         compressionCoefficientsC_.transposeInPlace();
 
-#if HAVE_MPI == 1
         int numNodes = numNodesA_ * numNodesB_ * numNodesC_;
-        if (numNodes > 1) {
-            mpiCommunicator_->allGather(buffer2, buffer1, myNumKSumTermsA_ * myNumKSumTermsB_ * myNumKSumTermsC_);
-            // Resort the data to be grouped by node, for communication
-            for (int node = 0; node < numNodes; ++node) {
-                int nodeStartA = myNumKSumTermsA_ * (node % numNodesA_);
-                int nodeStartB = myNumKSumTermsB_ * ((node % (numNodesB_ * numNodesA_)) / numNodesA_);
-                int nodeStartC = myNumKSumTermsC_ * (node / (numNodesB_ * numNodesA_));
-                Real *inPtr = buffer1 + node * myNumKSumTermsA_ * myNumKSumTermsB_ * myNumKSumTermsC_;
-                for (int A = 0; A < myNumKSumTermsA_; ++A) {
-                    Real *outPtrA = buffer2 + (nodeStartA + A) * numKSumTermsB_ * numKSumTermsC_;
-                    for (int B = 0; B < myNumKSumTermsB_; ++B) {
-                        Real *outPtrAB = outPtrA + (nodeStartB + B) * numKSumTermsC_;
-                        Real *outPtrABC = outPtrAB + nodeStartC;
-                        std::copy(inPtr, inPtr + myNumKSumTermsC_, outPtrABC);
-                        inPtr += myNumKSumTermsC_;
+        size_t desiredBlockSizeAPerNode =
+            std::ceil((float)(desiredBlockSize_) / (myNumKSumTermsB_ * myNumKSumTermsC_ * sizeof(Real)));
+        size_t numAPerBlockPerNode;
+        // For one node, there's no scope to overlap communication and computation!
+        if (numNodes == 1 || mpiStrategy_ == MPIStrategy::AllReduce) {
+            numAPerBlockPerNode = myNumKSumTermsA_;
+        } else {
+            numAPerBlockPerNode = std::min(desiredBlockSizeAPerNode, (size_t)myNumKSumTermsA_);
+        }
+
+        size_t numKSumBlocksA = std::ceil(myNumKSumTermsA_ / (float)numAPerBlockPerNode);
+        // This is the space needed to guarantee that the two buffers do not overlap.  The final result
+        // may require less space than this, which is accounted for in the MPI call's pointers at the end
+        size_t bufferBCDimension =
+            std::max(myGridDimensionB_, numKSumTermsB_) * std::max(myGridDimensionC_, numKSumTermsC_);
+        size_t blockDimension = numNodesA_ * numAPerBlockPerNode * bufferBCDimension;
+        size_t gridBCDimension = myGridDimensionB_ * myGridDimensionC_;
+        size_t targetBCDimension = myNumKSumTermsB_ * myNumKSumTermsC_;
+        std::vector<Real> tempCoef(numAPerBlockPerNode * numNodesA_ * myGridDimensionA_);
+#if HAVE_MPI == 1
+        MPI_Request request(MPI_REQUEST_NULL);
+        if (mpiStrategy_ != MPIStrategy::AllReduce) {
+            // Get the first buffer of data using a blocking call to guarantee its timely arrival
+            if (numNodes > 1)
+                mpiCommunicator_->allGather(buffer2, buffer1,
+                                            numAPerBlockPerNode * myNumKSumTermsB_ * myNumKSumTermsC_);
+        }
+#endif
+        for (size_t block = 0; block < numKSumBlocksA; ++block) {
+            size_t firstA = block * numAPerBlockPerNode;
+            size_t lastA = std::min(firstA + numAPerBlockPerNode, (size_t)myNumKSumTermsA_);
+            size_t numTermsAPerNode = lastA - firstA;
+            size_t numTermsA = mpiStrategy_ == MPIStrategy::AllReduce ? numKSumTermsA_ : numTermsAPerNode * numNodesA_;
+            size_t nextBlockFirstA = std::min((block + 1) * numAPerBlockPerNode, (size_t)myNumKSumTermsA_);
+            size_t nextBlockLastA = std::min(nextBlockFirstA + numAPerBlockPerNode, (size_t)myNumKSumTermsA_);
+            size_t nextBlockNumTermsAPerNode = nextBlockLastA - nextBlockFirstA;
+
+            // These two pointers into the buffers will not overlap for each subblock
+            Real *__restrict__ buf1 = buffer1 + block * blockDimension;
+            Real *__restrict__ buf2 = buffer2 + block * blockDimension;
+
+#if HAVE_MPI == 1
+            if (numNodes > 1 && mpiStrategy_ != MPIStrategy::AllReduce) {
+                Real *__restrict__ src = buffer2 + nextBlockFirstA * targetBCDimension;
+                Real *__restrict__ dest = buffer1 + (block + 1) * blockDimension;
+                // The first block already recieved data in a nonblocking call, others have to guarantee their pre-fetch
+                // chunk arrived
+                // if (block) MPI_Wait(&request, MPI_STATUS_IGNORE);
+                // if (block < numKSumBlocksA - 1)
+                //    mpiCommunicator_->iAllGather(&request, src, dest,
+                //                                 nextBlockNumTermsAPerNode * myNumKSumTermsB_ * myNumKSumTermsC_);
+                mpiCommunicator_->allGather(src, dest, nextBlockNumTermsAPerNode * myNumKSumTermsB_ * myNumKSumTermsC_);
+                // Resort the data to be grouped by node, for communication
+                for (int node = 0; node < numNodes; ++node) {
+                    int nodeStartA = numTermsAPerNode * (node % numNodesA_);
+                    int nodeStartB = myNumKSumTermsB_ * ((node % (numNodesB_ * numNodesA_)) / numNodesA_);
+                    int nodeStartC = myNumKSumTermsC_ * (node / (numNodesB_ * numNodesA_));
+                    Real *inPtr = buf1 + node * numTermsAPerNode * myNumKSumTermsB_ * myNumKSumTermsC_;
+                    for (int A = 0; A < numTermsAPerNode; ++A) {
+                        Real *outPtrA = buf2 + (nodeStartA + A) * numKSumTermsB_ * numKSumTermsC_;
+                        for (int B = 0; B < myNumKSumTermsB_; ++B) {
+                            Real *outPtrAB = outPtrA + (nodeStartB + B) * numKSumTermsC_;
+                            Real *outPtrABC = outPtrAB + nodeStartC;
+                            std::copy(inPtr, inPtr + myNumKSumTermsC_, outPtrABC);
+                            inPtr += myNumKSumTermsC_;
+                        }
                     }
                 }
             }
-        }
 #endif
 
-        // Transform C index
-        contractABxCWithDxC<Real>(buffer2, compressionCoefficientsC_[0], numKSumTermsB_ * numKSumTermsA_,
-                                  numKSumTermsC_, myGridDimensionC_, buffer1);
-        // Sort ABC->CAB
-        permuteABCtoCAB(buffer1, numKSumTermsB_, numKSumTermsA_, myGridDimensionC_, buffer2, nThreads_);
+            // Transform C index
+            contractABxCWithDxC<Real>(buf2, compressionCoefficientsC_[0], numKSumTermsB_ * numTermsA, numKSumTermsC_,
+                                      myGridDimensionC_, buf1);
+            // Sort ABC->CAB
+            permuteABCtoCAB(buf1, numKSumTermsB_, numTermsA, myGridDimensionC_, buf2, nThreads_);
 
-        // Transform B index
-        contractABxCWithDxC<Real>(buffer2, compressionCoefficientsB_[0], myGridDimensionC_ * numKSumTermsA_,
-                                  numKSumTermsB_, myGridDimensionB_, buffer1);
-        // Sort CAB->CBA
-        permuteABCtoACB(buffer1, myGridDimensionC_, numKSumTermsA_, myGridDimensionB_, buffer2, nThreads_);
-        // Transform A index
-        contractABxCWithDxC<Real>(buffer2, compressionCoefficientsA_[0], myGridDimensionC_ * myGridDimensionB_,
-                                  numKSumTermsA_, myGridDimensionA_, buffer1);
+            // Transform B index
+            contractABxCWithDxC<Real>(buf2, compressionCoefficientsB_[0], myGridDimensionC_ * numTermsA, numKSumTermsB_,
+                                      myGridDimensionB_, buf1);
+            // Sort CAB->CBA
+            permuteABCtoACB(buf1, myGridDimensionC_, numTermsA, myGridDimensionB_, buf2, nThreads_);
+            if (mpiStrategy_ == MPIStrategy::AllReduce) {
+                contractABxCWithDxC<Real>(buf2, compressionCoefficientsA_[0], myGridDimensionC_ * myGridDimensionB_,
+                                          numTermsA, myGridDimensionA_, buffer1);
+            } else {
+                // Transform A index
+                for (int gridA = 0; gridA < myGridDimensionA_; ++gridA) {
+                    for (int nodeA = 0; nodeA < numNodesA_; ++nodeA) {
+                        std::copy_n(&compressionCoefficientsA_[gridA][nodeA * myNumKSumTermsA_ + firstA],
+                                    numTermsAPerNode, tempCoef.data() + gridA * numTermsA + nodeA * numTermsAPerNode);
+                    }
+                }
+                contractABxCWithDxC<Real>(buf2, tempCoef.data(), myGridDimensionC_ * myGridDimensionB_, numTermsA,
+                                          myGridDimensionA_, buffer1);
+            }
+
+        }  // End loop over blocks
 
         // Make the grid dimensions the fast running indices again
         compressionCoefficientsA_.transposeInPlace();
@@ -2143,7 +2344,12 @@ class PMEInstance {
             energy += transformedGrid[yxz] * transformedGrid[yxz] * influenceFunction[yxz];
             transformedGrid[yxz] *= influenceFunction[yxz];
         }
-        return energy / 2;
+        if (mpiStrategy_ == MPIStrategy::AllReduce) {
+            int numNodes = numNodesA_ * numNodesB_ * numNodesC_;
+            return mpiCommunicator_->myRank_ ? 0 : energy / 2;
+        } else {
+            return energy / 2;
+        }
     }
 
     /*!

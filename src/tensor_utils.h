@@ -11,10 +11,12 @@
 
 #if HAVE_BLAS == 1
 extern "C" {
-extern void dgemm_(char *, char *, int *, int *, int *, double *, double *, int *, double *, int *, double *, double *,
-                   int *);
 extern void sgemm_(char *, char *, int *, int *, int *, float *, float *, int *, float *, int *, float *, float *,
                    int *);
+extern void dgemm_(char *, char *, int *, int *, int *, double *, double *, int *, double *, int *, double *, double *,
+                   int *);
+extern void cgemm_(char *, char *, int *, int *, int *, void *, void *, int *, void *, int *, void *, void *, int *);
+extern void zgemm_(char *, char *, int *, int *, int *, void *, void *, int *, void *, int *, void *, void *, int *);
 }
 #endif
 
@@ -152,6 +154,40 @@ void contractABxCWithDxC<double>(double const *__restrict__ abcPtr, double const
     dgemm_(&transB, &transA, const_cast<int *>(&dDimension), const_cast<int *>(&abDimension),
            const_cast<int *>(&cDimension), &alpha, const_cast<double *>(dcPtr), const_cast<int *>(&cDimension),
            const_cast<double *>(abcPtr), const_cast<int *>(&cDimension), &beta, abdPtr, const_cast<int *>(&dDimension));
+}
+
+template <>
+void contractABxCWithDxC<std::complex<float>>(std::complex<float> const *__restrict__ abcPtr,
+                                              std::complex<float> const *__restrict__ dcPtr, int const abDimension,
+                                              int const cDimension, int const dDimension,
+                                              std::complex<float> *__restrict__ abdPtr) {
+    if (abDimension == 0 || cDimension == 0 || dDimension == 0) return;
+
+    char transB = 't';
+    char transA = 'n';
+    float alpha = 1;
+    float beta = 0;
+    cgemm_(&transB, &transA, const_cast<int *>(&dDimension), const_cast<int *>(&abDimension),
+           const_cast<int *>(&cDimension), &alpha, reinterpret_cast<void *>(const_cast<std::complex<float> *>(dcPtr)),
+           const_cast<int *>(&cDimension), reinterpret_cast<void *>(const_cast<std::complex<float> *>(abcPtr)),
+           const_cast<int *>(&cDimension), &beta, abdPtr, const_cast<int *>(&dDimension));
+}
+
+template <>
+void contractABxCWithDxC<std::complex<double>>(std::complex<double> const *__restrict__ abcPtr,
+                                               std::complex<double> const *__restrict__ dcPtr, int const abDimension,
+                                               int const cDimension, int const dDimension,
+                                               std::complex<double> *__restrict__ abdPtr) {
+    if (abDimension == 0 || cDimension == 0 || dDimension == 0) return;
+
+    char transB = 't';
+    char transA = 'n';
+    float alpha = 1;
+    float beta = 0;
+    zgemm_(&transB, &transA, const_cast<int *>(&dDimension), const_cast<int *>(&abDimension),
+           const_cast<int *>(&cDimension), &alpha, reinterpret_cast<void *>(const_cast<std::complex<double> *>(dcPtr)),
+           const_cast<int *>(&cDimension), reinterpret_cast<void *>(const_cast<std::complex<double> *>(abcPtr)),
+           const_cast<int *>(&cDimension), &beta, abdPtr, const_cast<int *>(&dDimension));
 }
 #endif
 
