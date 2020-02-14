@@ -1045,7 +1045,7 @@ class PMEInstance {
             numNodesC_ = numNodesC;
             myNodeRankA_ = myNodeRankB_ = myNodeRankC_ = 0;
 #if HAVE_MPI == 1
-            MPI_Comm const &communicator = static_cast<MPI_Comm const &>(*commPtrIn);
+            MPI_Comm const &communicator = *(MPI_Comm *)(commPtrIn);
             if (communicator) {
                 mpiCommunicator_ = std::unique_ptr<MPIWrapper<Real>>(
                     new MPIWrapper<Real>(communicator, numNodesA, numNodesB, numNodesC));
@@ -2952,7 +2952,7 @@ class PMEInstance {
                        int nThreads, const MPI_Comm &communicator, NodeOrder nodeOrder, int numNodesA, int numNodesB,
                        int numNodesC) {
         setupCalculationMetadata(rPower, kappa, splineOrder, dimA, dimB, dimC, dimA, dimB, dimC, scaleFactor, nThreads,
-                                 (void *)communicator, nodeOrder, numNodesA, numNodesB, numNodesC);
+                                 (void *)&communicator, nodeOrder, numNodesA, numNodesB, numNodesC);
     }
 
     /*!
@@ -2982,7 +2982,7 @@ class PMEInstance {
                                  int maxKB, int maxKC, Real scaleFactor, int nThreads, const MPI_Comm &communicator,
                                  NodeOrder nodeOrder, int numNodesA, int numNodesB, int numNodesC) {
         setupCalculationMetadata(rPower, kappa, splineOrder, dimA, dimB, dimC, maxKA, maxKB, maxKC, scaleFactor,
-                                 nThreads, (void *)communicator, nodeOrder, numNodesA, numNodesB, numNodesC);
+                                 nThreads, (void *)&communicator, nodeOrder, numNodesA, numNodesB, numNodesC);
     }
 #endif
 };
