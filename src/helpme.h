@@ -1045,7 +1045,7 @@ class PMEInstance {
             numNodesC_ = numNodesC;
             myNodeRankA_ = myNodeRankB_ = myNodeRankC_ = 0;
 #if HAVE_MPI == 1
-            MPI_Comm const& communicator = static_cast<MPI_Comm const&>(*commPtrIn);
+            MPI_Comm const &communicator = static_cast<MPI_Comm const &>(*commPtrIn);
             if (communicator) {
                 mpiCommunicator_ = std::unique_ptr<MPIWrapper<Real>>(
                     new MPIWrapper<Real>(communicator, numNodesA, numNodesB, numNodesC));
