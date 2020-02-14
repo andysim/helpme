@@ -2927,7 +2927,7 @@ class PMEInstance {
         setupCalculationMetadata(rPower, kappa, splineOrder, dimA, dimB, dimC, maxKA, maxKB, maxKC, scaleFactor,
                                  nThreads, 0, NodeOrder::ZYX, 1, 1, 1);
     }
-
+#   if HAVE_MPI == 1
     /*!
      * \brief setupParallel initializes this object for a conventional PME calculation using MPI parallism
      *        and threading.  This may be called repeatedly without compromising performance.
@@ -2984,6 +2984,7 @@ class PMEInstance {
         setupCalculationMetadata(rPower, kappa, splineOrder, dimA, dimB, dimC, maxKA, maxKB, maxKC, scaleFactor,
                                  nThreads, communicator, nodeOrder, numNodesA, numNodesB, numNodesC);
     }
+#   endif
 };
 }  // Namespace helpme
 
