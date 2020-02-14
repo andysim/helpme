@@ -42,8 +42,6 @@
 #include "memory.h"
 #if HAVE_MPI == 1
 #include "mpi_wrapper.h"
-#else
-typedef struct ompi_communicator_t *MPI_Comm;
 #endif
 #include "powers.h"
 #include "splines.h"
