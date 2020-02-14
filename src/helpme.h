@@ -42,8 +42,6 @@
 #include "memory.h"
 #if HAVE_MPI == 1
 #include "mpi_wrapper.h"
-#else
-typedef struct ompi_communicator_t *MPI_Comm;
 #endif
 #include "powers.h"
 #include "splines.h"
@@ -1022,7 +1020,7 @@ class PMEInstance {
      * \brief common_init sets up information that is common to serial and parallel runs.
      */
     void setupCalculationMetadata(int rPower, Real kappa, int splineOrder, int dimA, int dimB, int dimC, int maxKA,
-                                  int maxKB, int maxKC, Real scaleFactor, int nThreads, const MPI_Comm &communicator,
+                                  int maxKB, int maxKC, Real scaleFactor, int nThreads, void *commPtrIn,
                                   NodeOrder nodeOrder, int numNodesA, int numNodesB, int numNodesC) {
         int numKSumTermsA = std::min(2 * maxKA + 1, dimA);
         int numKSumTermsB = std::min(2 * maxKB + 1, dimB);
@@ -1047,7 +1045,8 @@ class PMEInstance {
             numNodesC_ = numNodesC;
             myNodeRankA_ = myNodeRankB_ = myNodeRankC_ = 0;
 #if HAVE_MPI == 1
-            if (communicator) {
+            if (commPtrIn) {
+                MPI_Comm const &communicator = *((MPI_Comm *)(commPtrIn));
                 mpiCommunicator_ = std::unique_ptr<MPIWrapper<Real>>(
                     new MPIWrapper<Real>(communicator, numNodesA, numNodesB, numNodesC));
                 switch (nodeOrder) {
@@ -2928,7 +2927,7 @@ class PMEInstance {
         setupCalculationMetadata(rPower, kappa, splineOrder, dimA, dimB, dimC, maxKA, maxKB, maxKC, scaleFactor,
                                  nThreads, 0, NodeOrder::ZYX, 1, 1, 1);
     }
-
+#if HAVE_MPI == 1
     /*!
      * \brief setupParallel initializes this object for a conventional PME calculation using MPI parallism
      *        and threading.  This may be called repeatedly without compromising performance.
@@ -2953,7 +2952,7 @@ class PMEInstance {
                        int nThreads, const MPI_Comm &communicator, NodeOrder nodeOrder, int numNodesA, int numNodesB,
                        int numNodesC) {
         setupCalculationMetadata(rPower, kappa, splineOrder, dimA, dimB, dimC, dimA, dimB, dimC, scaleFactor, nThreads,
-                                 communicator, nodeOrder, numNodesA, numNodesB, numNodesC);
+                                 (void *)&communicator, nodeOrder, numNodesA, numNodesB, numNodesC);
     }
 
     /*!
@@ -2983,8 +2982,9 @@ class PMEInstance {
                                  int maxKB, int maxKC, Real scaleFactor, int nThreads, const MPI_Comm &communicator,
                                  NodeOrder nodeOrder, int numNodesA, int numNodesB, int numNodesC) {
         setupCalculationMetadata(rPower, kappa, splineOrder, dimA, dimB, dimC, maxKA, maxKB, maxKC, scaleFactor,
-                                 nThreads, communicator, nodeOrder, numNodesA, numNodesB, numNodesC);
+                                 nThreads, (void *)&communicator, nodeOrder, numNodesA, numNodesB, numNodesC);
     }
+#endif
 };
 }  // Namespace helpme
 
