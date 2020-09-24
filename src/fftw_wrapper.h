@@ -25,13 +25,16 @@ namespace helpme {
  */
 template <typename Real>
 struct FFTWTypes {
+    // This is just a default implementation that does nothing - we just need to be able to instantiate something
+    // in order to query the isImplemented member at runtime to check if the desired precision model was compiled in.
     struct EmptyPlan {
         int unused;
     };
-    using Plan = int;
+    using Plan = void *;
     using Complex = std::complex<int>;
     static Plan makePlan4(size_t, void *, void *, int) { return 0; };
     static Plan makePlan5(size_t, void *, void *, int, int) { return 0; };
+    static void cleanFFTW(){};
     static void execPlan1(Plan){};
     static void execPlan3(Plan, void *, void *){};
     static constexpr bool isImplemented = false;
@@ -42,7 +45,7 @@ struct FFTWTypes {
     static constexpr decltype(&execPlan3) ExecuteComplexToRealPlan = &execPlan3;
     static constexpr decltype(&execPlan3) ExecuteComplexToComplexPlan = &execPlan3;
     static constexpr decltype(&execPlan1) DestroyPlan = &execPlan1;
-    static constexpr decltype(&execPlan1) CleanupFFTW = &execPlan1;
+    static constexpr decltype(&cleanFFTW) CleanupFFTW = nullptr;
 };
 
 #if HAVE_FFTWF == 1
@@ -108,17 +111,17 @@ class FFTWWrapper {
 
    protected:
     /// An FFTW plan object, describing out of place complex to complex forward transforms.
-    typename typeinfo::Plan forwardPlan_;
+    typename typeinfo::Plan forwardPlan_ = nullptr;
     /// An FFTW plan object, describing out of place complex to complex inverse transforms.
-    typename typeinfo::Plan inversePlan_;
+    typename typeinfo::Plan inversePlan_ = nullptr;
     /// An FFTW plan object, describing in place complex to complex forward transforms.
-    typename typeinfo::Plan forwardInPlacePlan_;
+    typename typeinfo::Plan forwardInPlacePlan_ = nullptr;
     /// An FFTW plan object, describing in place complex to complex inverse transforms.
-    typename typeinfo::Plan inverseInPlacePlan_;
+    typename typeinfo::Plan inverseInPlacePlan_ = nullptr;
     /// An FFTW plan object, describing out of place real to complex forward transforms.
-    typename typeinfo::Plan realToComplexPlan_;
+    typename typeinfo::Plan realToComplexPlan_ = nullptr;
     /// An FFTW plan object, describing out of place complex to real inverse transforms.
-    typename typeinfo::Plan complexToRealPlan_;
+    typename typeinfo::Plan complexToRealPlan_ = nullptr;
     /// The size of the real data.
     size_t fftDimension_;
     /// The flags to be passed to the FFTW plan creator, to determine startup cost.
@@ -149,6 +152,33 @@ class FFTWWrapper {
             typeinfo::MakeComplexToComplexPlan(fftDimension_, complexPtr1, complexPtr1, FFTW_BACKWARD, transformFlags_);
         realToComplexPlan_ = typeinfo::MakeRealToComplexPlan(fftDimension_, realPtr, complexPtr1, transformFlags_);
         complexToRealPlan_ = typeinfo::MakeComplexToRealPlan(fftDimension_, complexPtr1, realPtr, transformFlags_);
+    }
+
+    FFTWWrapper(const FFTWWrapper &other) = delete;
+
+    FFTWWrapper(FFTWWrapper &&other) = delete;
+
+    FFTWWrapper &operator=(const FFTWWrapper &other) = delete;
+
+    FFTWWrapper &operator=(FFTWWrapper &&other) {
+        std::swap(forwardPlan_, other.forwardPlan_);
+        std::swap(forwardInPlacePlan_, other.forwardInPlacePlan_);
+        std::swap(inversePlan_, other.inversePlan_);
+        std::swap(inverseInPlacePlan_, other.inverseInPlacePlan_);
+        std::swap(realToComplexPlan_, other.realToComplexPlan_);
+        std::swap(complexToRealPlan_, other.complexToRealPlan_);
+        std::swap(fftDimension_, other.fftDimension_);
+        std::swap(transformFlags_, other.transformFlags_);
+        return *this;
+    }
+
+    ~FFTWWrapper() {
+        if (forwardPlan_) typeinfo::DestroyPlan(forwardPlan_);
+        if (inversePlan_) typeinfo::DestroyPlan(inversePlan_);
+        if (forwardInPlacePlan_) typeinfo::DestroyPlan(forwardInPlacePlan_);
+        if (inverseInPlacePlan_) typeinfo::DestroyPlan(inverseInPlacePlan_);
+        if (realToComplexPlan_) typeinfo::DestroyPlan(realToComplexPlan_);
+        if (complexToRealPlan_) typeinfo::DestroyPlan(complexToRealPlan_);
     }
 
     /*!
