@@ -1176,13 +1176,16 @@ namespace helpme {
  */
 template <typename Real>
 struct FFTWTypes {
+    // This is just a default implementation that does nothing - we just need to be able to instantiate something
+    // in order to query the isImplemented member at runtime to check if the desired precision model was compiled in.
     struct EmptyPlan {
         int unused;
     };
-    using Plan = int;
+    using Plan = void *;
     using Complex = std::complex<int>;
     static Plan makePlan4(size_t, void *, void *, int) { return 0; };
     static Plan makePlan5(size_t, void *, void *, int, int) { return 0; };
+    static void cleanFFTW(){};
     static void execPlan1(Plan){};
     static void execPlan3(Plan, void *, void *){};
     static constexpr bool isImplemented = false;
@@ -1193,7 +1196,7 @@ struct FFTWTypes {
     static constexpr decltype(&execPlan3) ExecuteComplexToRealPlan = &execPlan3;
     static constexpr decltype(&execPlan3) ExecuteComplexToComplexPlan = &execPlan3;
     static constexpr decltype(&execPlan1) DestroyPlan = &execPlan1;
-    static constexpr decltype(&execPlan1) CleanupFFTW = &execPlan1;
+    static constexpr decltype(&cleanFFTW) CleanupFFTW = nullptr;
 };
 
 #if HAVE_FFTWF == 1
@@ -1259,17 +1262,17 @@ class FFTWWrapper {
 
    protected:
     /// An FFTW plan object, describing out of place complex to complex forward transforms.
-    typename typeinfo::Plan forwardPlan_;
+    typename typeinfo::Plan forwardPlan_ = nullptr;
     /// An FFTW plan object, describing out of place complex to complex inverse transforms.
-    typename typeinfo::Plan inversePlan_;
+    typename typeinfo::Plan inversePlan_ = nullptr;
     /// An FFTW plan object, describing in place complex to complex forward transforms.
-    typename typeinfo::Plan forwardInPlacePlan_;
+    typename typeinfo::Plan forwardInPlacePlan_ = nullptr;
     /// An FFTW plan object, describing in place complex to complex inverse transforms.
-    typename typeinfo::Plan inverseInPlacePlan_;
+    typename typeinfo::Plan inverseInPlacePlan_ = nullptr;
     /// An FFTW plan object, describing out of place real to complex forward transforms.
-    typename typeinfo::Plan realToComplexPlan_;
+    typename typeinfo::Plan realToComplexPlan_ = nullptr;
     /// An FFTW plan object, describing out of place complex to real inverse transforms.
-    typename typeinfo::Plan complexToRealPlan_;
+    typename typeinfo::Plan complexToRealPlan_ = nullptr;
     /// The size of the real data.
     size_t fftDimension_;
     /// The flags to be passed to the FFTW plan creator, to determine startup cost.
@@ -1300,6 +1303,33 @@ class FFTWWrapper {
             typeinfo::MakeComplexToComplexPlan(fftDimension_, complexPtr1, complexPtr1, FFTW_BACKWARD, transformFlags_);
         realToComplexPlan_ = typeinfo::MakeRealToComplexPlan(fftDimension_, realPtr, complexPtr1, transformFlags_);
         complexToRealPlan_ = typeinfo::MakeComplexToRealPlan(fftDimension_, complexPtr1, realPtr, transformFlags_);
+    }
+
+    FFTWWrapper(const FFTWWrapper &other) = delete;
+
+    FFTWWrapper(FFTWWrapper &&other) = delete;
+
+    FFTWWrapper &operator=(const FFTWWrapper &other) = delete;
+
+    FFTWWrapper &operator=(FFTWWrapper &&other) {
+        std::swap(forwardPlan_, other.forwardPlan_);
+        std::swap(forwardInPlacePlan_, other.forwardInPlacePlan_);
+        std::swap(inversePlan_, other.inversePlan_);
+        std::swap(inverseInPlacePlan_, other.inverseInPlacePlan_);
+        std::swap(realToComplexPlan_, other.realToComplexPlan_);
+        std::swap(complexToRealPlan_, other.complexToRealPlan_);
+        std::swap(fftDimension_, other.fftDimension_);
+        std::swap(transformFlags_, other.transformFlags_);
+        return *this;
+    }
+
+    ~FFTWWrapper() {
+        if (forwardPlan_) typeinfo::DestroyPlan(forwardPlan_);
+        if (inversePlan_) typeinfo::DestroyPlan(inversePlan_);
+        if (forwardInPlacePlan_) typeinfo::DestroyPlan(forwardInPlacePlan_);
+        if (inverseInPlacePlan_) typeinfo::DestroyPlan(inverseInPlacePlan_);
+        if (realToComplexPlan_) typeinfo::DestroyPlan(realToComplexPlan_);
+        if (complexToRealPlan_) typeinfo::DestroyPlan(complexToRealPlan_);
     }
 
     /*!
@@ -1386,9 +1416,9 @@ class FFTWWrapper {
 
 namespace helpme {
 
-#define SQRTTWO std::sqrt(static_cast<Real>(2))
-#define SQRTPI static_cast<Real>(1.77245385090551602729816748334114518279754945612238712821381L)
-#define PI static_cast<Real>(3.14159265358979323846264338327950288419716939937510582097494L)
+#define HELPME_SQRTTWO std::sqrt(static_cast<Real>(2))
+#define HELPME_SQRTPI static_cast<Real>(1.77245385090551602729816748334114518279754945612238712821381L)
+#define HELPME_PI static_cast<Real>(3.14159265358979323846264338327950288419716939937510582097494L)
 
 /*!
  * Compute upper incomplete gamma functions for positive half-integral s values using the recursion
@@ -1424,13 +1454,13 @@ struct incompleteGammaRecursion<Real, 2, true> {
 /// Specific value of incomplete gamma function.
 template <typename Real>
 struct incompleteGammaRecursion<Real, 1, false> {
-    static Real compute(Real x) { return SQRTPI * erfc(std::sqrt(x)); }
+    static Real compute(Real x) { return HELPME_SQRTPI * erfc(std::sqrt(x)); }
 };
 
 /// Specific value of incomplete gamma function.
 template <typename Real>
 struct incompleteGammaRecursion<Real, 1, true> {
-    static Real compute(Real x) { return SQRTPI * erfc(std::sqrt(x)); }
+    static Real compute(Real x) { return HELPME_SQRTPI * erfc(std::sqrt(x)); }
 };
 
 /// Specific value of incomplete gamma function.
@@ -1636,13 +1666,13 @@ struct gammaRecursion<Real, 0, false> {
 /// Specific value of the Gamma function.
 template <typename Real>
 struct gammaRecursion<Real, 1, true> {
-    static constexpr Real value = SQRTPI;
+    static constexpr Real value = HELPME_SQRTPI;
 };
 
 /// Specific value of the Gamma function.
 template <typename Real>
 struct gammaRecursion<Real, 1, false> {
-    static constexpr Real value = SQRTPI;
+    static constexpr Real value = HELPME_SQRTPI;
 };
 
 /// Specific value of the Gamma function.
@@ -1746,7 +1776,7 @@ struct gammaComputer {
 template <typename Real>
 Real nonTemplateGammaComputer(int twoS) {
     if (twoS == 1) {
-        return SQRTPI;
+        return HELPME_SQRTPI;
     } else if (twoS == 2) {
         return 1;
     } else if (twoS <= 0 && twoS % 2 == 0) {
@@ -2995,15 +3025,16 @@ class PMEInstance {
         if (rPower > 3 && nodeZero) {
             // Kernels with rPower>3 are absolutely convergent and should have the m=0 term present.
             // To compute it we need sum_ij c(i)c(j), which can be obtained from the structure factor norm.
-            Real prefac = 2 * scaleFactor * PI * SQRTPI * pow(kappa, rPower - 3) /
+            Real prefac = 2 * scaleFactor * HELPME_PI * HELPME_SQRTPI * pow(kappa, rPower - 3) /
                           ((rPower - 3) * gammaComputer<Real, rPower>::value * volume);
             energy += prefac * (gridPtr[0].real() * gridPtr[0].real() + gridPtr[0].imag() * gridPtr[0].imag());
         }
         // Ensure the m=0 term convolution product is zeroed for the backtransform; it's been accounted for above.
         if (nodeZero) gridPtr[0] = Complex(0, 0);
 
-        Real bPrefac = PI * PI / (kappa * kappa);
-        Real volPrefac = scaleFactor * pow(PI, rPower - 1) / (SQRTPI * gammaComputer<Real, rPower>::value * volume);
+        Real bPrefac = HELPME_PI * HELPME_PI / (kappa * kappa);
+        Real volPrefac =
+            scaleFactor * pow(HELPME_PI, rPower - 1) / (HELPME_SQRTPI * gammaComputer<Real, rPower>::value * volume);
         size_t nxz = (size_t)myNx * myNz;
         Real Vxx = 0, Vxy = 0, Vyy = 0, Vxz = 0, Vyz = 0, Vzz = 0;
         const Real *boxPtr = boxInv[0];
@@ -3101,15 +3132,16 @@ class PMEInstance {
         if (rPower > 3 && nodeZero) {
             // Kernels with rPower>3 are absolutely convergent and should have the m=0 term present.
             // To compute it we need sum_ij c(i)c(j), which can be obtained from the structure factor norm.
-            Real prefac = 2 * scaleFactor * PI * SQRTPI * pow(kappa, rPower - 3) /
+            Real prefac = 2 * scaleFactor * HELPME_PI * HELPME_SQRTPI * pow(kappa, rPower - 3) /
                           ((rPower - 3) * gammaComputer<Real, rPower>::value * volume);
             energy += prefac * gridPtrIn[0] * gridPtrIn[0];
         }
         // Ensure the m=0 term convolution product is zeroed for the backtransform; it's been accounted for above.
         if (nodeZero) gridPtrOut[0] = 0;
 
-        Real bPrefac = PI * PI / (kappa * kappa);
-        Real volPrefac = scaleFactor * pow(PI, rPower - 1) / (SQRTPI * gammaComputer<Real, rPower>::value * volume);
+        Real bPrefac = HELPME_PI * HELPME_PI / (kappa * kappa);
+        Real volPrefac =
+            scaleFactor * pow(HELPME_PI, rPower - 1) / (HELPME_SQRTPI * gammaComputer<Real, rPower>::value * volume);
         size_t nxz = (size_t)myNx * myNz;
         size_t nyxz = myNy * nxz;
         Real Vxx = 0, Vxy = 0, Vyy = 0, Vxz = 0, Vyz = 0, Vzz = 0;
@@ -3238,8 +3270,9 @@ class PMEInstance {
         Real *gridPtr = influenceFunction.data();
         if (nodeZero) gridPtr[0] = 0;
 
-        Real bPrefac = PI * PI / (kappa * kappa);
-        Real volPrefac = scaleFactor * pow(PI, rPower - 1) / (SQRTPI * gammaComputer<Real, rPower>::value * volume);
+        Real bPrefac = HELPME_PI * HELPME_PI / (kappa * kappa);
+        Real volPrefac =
+            scaleFactor * pow(HELPME_PI, rPower - 1) / (HELPME_SQRTPI * gammaComputer<Real, rPower>::value * volume);
         const Real *boxPtr = boxInv[0];
         // Exclude m=0 cell.
         int start = (nodeZero ? 1 : 0);
@@ -3404,7 +3437,7 @@ class PMEInstance {
             myNodeRankA_ = myNodeRankB_ = myNodeRankC_ = 0;
 #if HAVE_MPI == 1
             if (commPtrIn) {
-                MPI_Comm const &communicator = *((MPI_Comm*)(commPtrIn));
+                MPI_Comm const &communicator = *((MPI_Comm *)(commPtrIn));
                 mpiCommunicator_ = std::unique_ptr<MPIWrapper<Real>>(
                     new MPIWrapper<Real>(communicator, numNodesA, numNodesB, numNodesC));
                 switch (nodeOrder) {
@@ -3467,9 +3500,9 @@ class PMEInstance {
                 firstKSumTermA_ = myNodeRankA_ * myNumKSumTermsA_;
                 firstKSumTermB_ = myNodeRankB_ * myNumKSumTermsB_;
                 firstKSumTermC_ = myNodeRankC_ * myNumKSumTermsC_;
-                fftHelperA_ = FFTWWrapper<Real>();
-                fftHelperB_ = FFTWWrapper<Real>();
-                fftHelperC_ = FFTWWrapper<Real>();
+                fftHelperA_ = std::move(FFTWWrapper<Real>());
+                fftHelperB_ = std::move(FFTWWrapper<Real>());
+                fftHelperC_ = std::move(FFTWWrapper<Real>());
                 compressionCoefficientsA_ = RealMat(numKSumTermsA_, myGridDimensionA_);
                 compressionCoefficientsB_ = RealMat(numKSumTermsB_, myGridDimensionB_);
                 compressionCoefficientsC_ = RealMat(numKSumTermsC_, myGridDimensionC_);
@@ -3497,9 +3530,9 @@ class PMEInstance {
                 firstKSumTermA_ = myNodeRankA_ * myComplexGridDimensionA_;
                 firstKSumTermB_ = myNodeRankB_ * myGridDimensionB_ + myNodeRankC_ * myGridDimensionB_ / numNodesC_;
                 firstKSumTermC_ = 0;
-                fftHelperA_ = FFTWWrapper<Real>(gridDimensionA_);
-                fftHelperB_ = FFTWWrapper<Real>(gridDimensionB_);
-                fftHelperC_ = FFTWWrapper<Real>(gridDimensionC_);
+                fftHelperA_ = std::move(FFTWWrapper<Real>(gridDimensionA_));
+                fftHelperB_ = std::move(FFTWWrapper<Real>(gridDimensionB_));
+                fftHelperC_ = std::move(FFTWWrapper<Real>(gridDimensionC_));
                 compressionCoefficientsA_ = RealMat();
                 compressionCoefficientsB_ = RealMat();
                 compressionCoefficientsC_ = RealMat();
@@ -3569,7 +3602,7 @@ class PMEInstance {
                         int fullM = m + node * myNumKSumTermsA_ / 2;
                         Real *rowPtr = compressionCoefficientsA_[offset + 2 * (fullM - offset)];
                         for (int n = 0; n < myGridDimensionA_; ++n) {
-                            Real exponent = 2 * PI * fullM * (n + myFirstGridPointA_) / gridDimensionA_;
+                            Real exponent = 2 * HELPME_PI * fullM * (n + myFirstGridPointA_) / gridDimensionA_;
                             rowPtr[n] = std::sqrt(2) * std::cos(exponent);
                             rowPtr[n + myGridDimensionA_] = std::sqrt(2) * std::sin(exponent);
                         }
@@ -3582,7 +3615,7 @@ class PMEInstance {
                         int fullM = m + node * myNumKSumTermsB_ / 2;
                         Real *rowPtr = compressionCoefficientsB_[offset + 2 * (fullM - offset)];
                         for (int n = 0; n < myGridDimensionB_; ++n) {
-                            Real exponent = 2 * PI * fullM * (n + myFirstGridPointB_) / gridDimensionB_;
+                            Real exponent = 2 * HELPME_PI * fullM * (n + myFirstGridPointB_) / gridDimensionB_;
                             rowPtr[n] = std::sqrt(2) * std::cos(exponent);
                             rowPtr[n + myGridDimensionB_] = std::sqrt(2) * std::sin(exponent);
                         }
@@ -3595,7 +3628,7 @@ class PMEInstance {
                         int fullM = m + node * myNumKSumTermsC_ / 2;
                         Real *rowPtr = compressionCoefficientsC_[offset + 2 * (fullM - offset)];
                         for (int n = 0; n < myGridDimensionC_; ++n) {
-                            Real exponent = 2 * PI * fullM * (n + myFirstGridPointC_) / gridDimensionC_;
+                            Real exponent = 2 * HELPME_PI * fullM * (n + myFirstGridPointC_) / gridDimensionC_;
                             rowPtr[n] = std::sqrt(2) * std::cos(exponent);
                             rowPtr[n + myGridDimensionC_] = std::sqrt(2) * std::sin(exponent);
                         }
@@ -3891,9 +3924,9 @@ class PMEInstance {
                 HtH(2, 2) = C * C;
                 const float TOL = 1e-4f;
                 // Check for angles very close to 90, to avoid noise from the eigensolver later on.
-                HtH(0, 1) = HtH(1, 0) = std::abs(gamma - 90) < TOL ? 0 : A * B * std::cos(PI * gamma / 180);
-                HtH(0, 2) = HtH(2, 0) = std::abs(beta - 90) < TOL ? 0 : A * C * std::cos(PI * beta / 180);
-                HtH(1, 2) = HtH(2, 1) = std::abs(alpha - 90) < TOL ? 0 : B * C * std::cos(PI * alpha / 180);
+                HtH(0, 1) = HtH(1, 0) = std::abs(gamma - 90) < TOL ? 0 : A * B * std::cos(HELPME_PI * gamma / 180);
+                HtH(0, 2) = HtH(2, 0) = std::abs(beta - 90) < TOL ? 0 : A * C * std::cos(HELPME_PI * beta / 180);
+                HtH(1, 2) = HtH(2, 1) = std::abs(alpha - 90) < TOL ? 0 : B * C * std::cos(HELPME_PI * alpha / 180);
 
                 auto eigenTuple = HtH.diagonalize();
                 RealMat evalsReal = std::get<0>(eigenTuple);
@@ -3912,11 +3945,12 @@ class PMEInstance {
                 boxVecs_(0, 0) = A;
                 boxVecs_(0, 1) = 0;
                 boxVecs_(0, 2) = 0;
-                boxVecs_(1, 0) = B * std::cos(PI / 180 * gamma);
-                boxVecs_(1, 1) = B * std::sin(PI / 180 * gamma);
+                boxVecs_(1, 0) = B * std::cos(HELPME_PI / 180 * gamma);
+                boxVecs_(1, 1) = B * std::sin(HELPME_PI / 180 * gamma);
                 boxVecs_(1, 2) = 0;
-                boxVecs_(2, 0) = C * std::cos(PI / 180 * beta);
-                boxVecs_(2, 1) = (B * C * cos(PI / 180 * alpha) - boxVecs_(2, 0) * boxVecs_(1, 0)) / boxVecs_(1, 1);
+                boxVecs_(2, 0) = C * std::cos(HELPME_PI / 180 * beta);
+                boxVecs_(2, 1) =
+                    (B * C * cos(HELPME_PI / 180 * alpha) - boxVecs_(2, 0) * boxVecs_(1, 0)) / boxVecs_(1, 1);
                 boxVecs_(2, 2) = std::sqrt(C * C - boxVecs_(2, 0) * boxVecs_(2, 0) - boxVecs_(2, 1) * boxVecs_(2, 1));
             } else {
                 throw std::runtime_error("Unknown lattice type in setLatticeVectors");
@@ -4379,7 +4413,7 @@ class PMEInstance {
         if (rPower_ > 3 && iAmNodeZero) {
             // Kernels with rPower>3 are absolutely convergent and should have the m=0 term present.
             // To compute it we need sum_ij c(i)c(j), which can be obtained from the structure factor norm.
-            Real prefac = 2 * scaleFactor_ * PI * SQRTPI * pow(kappa_, rPower_ - 3) /
+            Real prefac = 2 * scaleFactor_ * HELPME_PI * HELPME_SQRTPI * pow(kappa_, rPower_ - 3) /
                           ((rPower_ - 3) * nonTemplateGammaComputer<Real>(rPower_) * cellVolume());
             energy += prefac * transformedGrid[0] * transformedGrid[0];
         }
@@ -4410,7 +4444,7 @@ class PMEInstance {
         if (rPower_ > 3 && iAmNodeZero) {
             // Kernels with rPower>3 are absolutely convergent and should have the m=0 term present.
             // To compute it we need sum_ij c(i)c(j), which can be obtained from the structure factor norm.
-            Real prefac = 2 * scaleFactor_ * PI * SQRTPI * pow(kappa_, rPower_ - 3) /
+            Real prefac = 2 * scaleFactor_ * HELPME_PI * HELPME_SQRTPI * pow(kappa_, rPower_ - 3) /
                           ((rPower_ - 3) * nonTemplateGammaComputer<Real>(rPower_) * cellVolume());
             energy += prefac * std::norm(transformedGrid[0]);
         }
@@ -5211,7 +5245,8 @@ class PMEInstance {
      * \param includedList dense list of included atom pairs, ordered like i1, j1, i2, j2, i3, j3, ... iN, jN.
      * \param excludedList dense list of excluded atom pairs, ordered like i1, j1, i2, j2, i3, j3, ... iN, jN.
      * \param parameterAngMom the angular momentum of the parameters (0 for charges, C6 coefficients, 2 for
-     * quadrupoles, etc.). \param parameters the list of parameters associated with each atom (charges, C6
+     * quadrupoles, etc.).
+     * \param parameters the list of parameters associated with each atom (charges, C6
      * coefficients, multipoles, etc...). For a parameter with angular momentum L, a matrix of dimension nAtoms x nL
      * is expected, where nL = (L+1)*(L+2)*(L+3)/6 and the fast running index nL has the ordering
      *
@@ -5247,7 +5282,8 @@ class PMEInstance {
      * \brief setup initializes this object for a PME calculation using only threading.
      *        This may be called repeatedly without compromising performance.
      * \param rPower the exponent of the (inverse) distance kernel (e.g. 1 for Coulomb, 6 for attractive
-     * dispersion). \param kappa the attenuation parameter in units inverse of those used to specify coordinates.
+     * dispersion).
+     * \param kappa the attenuation parameter in units inverse of those used to specify coordinates.
      * \param splineOrder the order of B-spline; must be at least (2 + max. multipole order + deriv. level needed).
      * \param dimA the dimension of the FFT grid along the A axis.
      * \param dimB the dimension of the FFT grid along the B axis.

@@ -19,9 +19,9 @@
 
 namespace helpme {
 
-#define SQRTTWO std::sqrt(static_cast<Real>(2))
-#define SQRTPI static_cast<Real>(1.77245385090551602729816748334114518279754945612238712821381L)
-#define PI static_cast<Real>(3.14159265358979323846264338327950288419716939937510582097494L)
+#define HELPME_SQRTTWO std::sqrt(static_cast<Real>(2))
+#define HELPME_SQRTPI static_cast<Real>(1.77245385090551602729816748334114518279754945612238712821381L)
+#define HELPME_PI static_cast<Real>(3.14159265358979323846264338327950288419716939937510582097494L)
 
 /*!
  * Compute upper incomplete gamma functions for positive half-integral s values using the recursion
@@ -57,13 +57,13 @@ struct incompleteGammaRecursion<Real, 2, true> {
 /// Specific value of incomplete gamma function.
 template <typename Real>
 struct incompleteGammaRecursion<Real, 1, false> {
-    static Real compute(Real x) { return SQRTPI * erfc(std::sqrt(x)); }
+    static Real compute(Real x) { return HELPME_SQRTPI * erfc(std::sqrt(x)); }
 };
 
 /// Specific value of incomplete gamma function.
 template <typename Real>
 struct incompleteGammaRecursion<Real, 1, true> {
-    static Real compute(Real x) { return SQRTPI * erfc(std::sqrt(x)); }
+    static Real compute(Real x) { return HELPME_SQRTPI * erfc(std::sqrt(x)); }
 };
 
 /// Specific value of incomplete gamma function.
@@ -269,13 +269,13 @@ struct gammaRecursion<Real, 0, false> {
 /// Specific value of the Gamma function.
 template <typename Real>
 struct gammaRecursion<Real, 1, true> {
-    static constexpr Real value = SQRTPI;
+    static constexpr Real value = HELPME_SQRTPI;
 };
 
 /// Specific value of the Gamma function.
 template <typename Real>
 struct gammaRecursion<Real, 1, false> {
-    static constexpr Real value = SQRTPI;
+    static constexpr Real value = HELPME_SQRTPI;
 };
 
 /// Specific value of the Gamma function.
@@ -379,7 +379,7 @@ struct gammaComputer {
 template <typename Real>
 Real nonTemplateGammaComputer(int twoS) {
     if (twoS == 1) {
-        return SQRTPI;
+        return HELPME_SQRTPI;
     } else if (twoS == 2) {
         return 1;
     } else if (twoS <= 0 && twoS % 2 == 0) {
