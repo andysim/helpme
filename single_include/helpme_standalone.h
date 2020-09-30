@@ -579,7 +579,7 @@ class Matrix {
             ptr_ += stride_;
             return *this;
         }
-        const Real& operator[](size_t index) { return *(begin_ + index); }
+        const Real& operator[](size_t index) const { return *(begin_ + index); }
         size_t size() const { return std::distance(begin_, end_) / stride_; }
         void assertSameSize(const sliceIterator& other) const {
             if (size() != other.size())
@@ -894,6 +894,23 @@ class Matrix {
      * \return the sum of this matrix and the matrix other.
      */
     Matrix operator+=(const Matrix& other) { return this->incrementWith(other); }
+
+    /*!
+     * \brief increment every element of this matrix by a constant another, returning a new matrix containing the sum.
+     * \param other the right hand side of the matrix sum.
+     * \return the sum of this matrix and the matrix other.
+     */
+    Matrix incrementWith(const Real& shift) {
+        std::for_each(begin(), end(), [shift](Real& a) { a += shift; });
+        return *this;
+    }
+
+    /*!
+     * \brief a wrapper around the incrementWith() function.
+     * \param shift the scalar to increment each value by
+     * \return the sum of this matrix and the matrix other.
+     */
+    Matrix operator+=(const Real& shift) { return this->incrementWith(shift); }
 
     /*!
      * \brief almostEquals checks that two matrices have all elements the same, within some specificied tolerance.
@@ -3898,6 +3915,33 @@ class PMEInstance {
         return boxVecs_(0, 0) * boxVecs_(1, 1) * boxVecs_(2, 2) - boxVecs_(0, 0) * boxVecs_(1, 2) * boxVecs_(2, 1) +
                boxVecs_(0, 1) * boxVecs_(1, 2) * boxVecs_(2, 0) - boxVecs_(0, 1) * boxVecs_(1, 0) * boxVecs_(2, 2) +
                boxVecs_(0, 2) * boxVecs_(1, 0) * boxVecs_(2, 1) - boxVecs_(0, 2) * boxVecs_(1, 1) * boxVecs_(2, 0);
+    }
+
+    /*!
+     * \brief minimumImageDeltaR Computes deltaR = positionJ - positionI, applying the minimum image convention to the
+     * result \param positionI \param positionJ \return minimum image deltaR
+     */
+    std::array<Real, 3> minimumImageDeltaR(const typename helpme::Matrix<Real>::sliceIterator &positionI,
+                                           const typename helpme::Matrix<Real>::sliceIterator &positionJ) {
+        // This implementation could be specialized for orthorhombic unit cells, but we stick with a general
+        // implementation for now. The difference in real (R) space
+        Real dxR = positionJ[0] - positionI[0];
+        Real dyR = positionJ[1] - positionI[1];
+        Real dzR = positionJ[2] - positionI[2];
+        // Convert to fractional coordinate (S) space
+        Real dxS = recVecs_[0][0] * dxR + recVecs_[0][1] * dyR + recVecs_[0][2] * dzR;
+        Real dyS = recVecs_[1][0] * dxR + recVecs_[1][1] * dyR + recVecs_[1][2] * dzR;
+        Real dzS = recVecs_[2][0] * dxR + recVecs_[2][1] * dyR + recVecs_[2][2] * dzR;
+        // Apply translations in fractional coordinates to find the shift vectors
+        Real sxS = std::floor(dxS + 0.5f);
+        Real syS = std::floor(dyS + 0.5f);
+        Real szS = std::floor(dzS + 0.5f);
+        // Convert fractional coordinate shifts to real space
+        Real sxR = boxVecs_[0][0] * sxS + boxVecs_[0][1] * syS + boxVecs_[0][2] * szS;
+        Real syR = boxVecs_[1][0] * sxS + boxVecs_[1][1] * syS + boxVecs_[1][2] * szS;
+        Real szR = boxVecs_[2][0] * sxS + boxVecs_[2][1] * syS + boxVecs_[2][2] * szS;
+        // Shift the difference vector to find the minimum image
+        return {dxR - sxR, dyR - syR, dzR - szR};
     }
 
     /*!

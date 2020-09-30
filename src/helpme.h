@@ -1513,6 +1513,33 @@ class PMEInstance {
     }
 
     /*!
+     * \brief minimumImageDeltaR Computes deltaR = positionJ - positionI, applying the minimum image convention to the
+     * result \param positionI \param positionJ \return minimum image deltaR
+     */
+    std::array<Real, 3> minimumImageDeltaR(const typename helpme::Matrix<Real>::sliceIterator &positionI,
+                                           const typename helpme::Matrix<Real>::sliceIterator &positionJ) {
+        // This implementation could be specialized for orthorhombic unit cells, but we stick with a general
+        // implementation for now. The difference in real (R) space
+        Real dxR = positionJ[0] - positionI[0];
+        Real dyR = positionJ[1] - positionI[1];
+        Real dzR = positionJ[2] - positionI[2];
+        // Convert to fractional coordinate (S) space
+        Real dxS = recVecs_[0][0] * dxR + recVecs_[0][1] * dyR + recVecs_[0][2] * dzR;
+        Real dyS = recVecs_[1][0] * dxR + recVecs_[1][1] * dyR + recVecs_[1][2] * dzR;
+        Real dzS = recVecs_[2][0] * dxR + recVecs_[2][1] * dyR + recVecs_[2][2] * dzR;
+        // Apply translations in fractional coordinates to find the shift vectors
+        Real sxS = std::floor(dxS + 0.5f);
+        Real syS = std::floor(dyS + 0.5f);
+        Real szS = std::floor(dzS + 0.5f);
+        // Convert fractional coordinate shifts to real space
+        Real sxR = boxVecs_[0][0] * sxS + boxVecs_[0][1] * syS + boxVecs_[0][2] * szS;
+        Real syR = boxVecs_[1][0] * sxS + boxVecs_[1][1] * syS + boxVecs_[1][2] * szS;
+        Real szR = boxVecs_[2][0] * sxS + boxVecs_[2][1] * syS + boxVecs_[2][2] * szS;
+        // Shift the difference vector to find the minimum image
+        return {dxR - sxR, dyR - syR, dzR - szR};
+    }
+
+    /*!
      * \brief Sets the unit cell lattice vectors, with units consistent with those used to specify coordinates.
      * \param A the A lattice parameter in units consistent with the coordinates.
      * \param B the B lattice parameter in units consistent with the coordinates.

@@ -90,6 +90,9 @@ TEST_CASE("test the matrix class.") {
         helpme::Matrix<double> mat3({{2, 2, 2}, {3, 3, 3}, {4, 4, 4}});
         mat1 += mat2;
         REQUIRE(mat1.almostEquals(mat3));
+        helpme::Matrix<double> mat4({{4.5, 4.5, 4.5}, {5.5, 5.5, 5.5}, {6.5, 6.5, 6.5}});
+        mat3 += 2.5;
+        REQUIRE(mat3.almostEquals(mat4));
     }
 
     SECTION("Slicing") {
