@@ -323,10 +323,10 @@ class PMEInstance {
         if (angMomIterator_.size() >= expectedNTerms) return;
 
         angMomIterator_.resize(expectedNTerms);
-        for (short l = 0, count = 0; l <= L; ++l) {
-            for (short lz = 0; lz <= l; ++lz) {
-                for (short ly = 0; ly <= l - lz; ++ly) {
-                    short lx = l - ly - lz;
+        for (int l = 0, count = 0; l <= L; ++l) {
+            for (int lz = 0; lz <= l; ++lz) {
+                for (int ly = 0; ly <= l - lz; ++ly) {
+                    int lx = l - ly - lz;
                     angMomIterator_[count] = {{static_cast<short>(lx), static_cast<short>(ly), static_cast<short>(lz)}};
                     ++count;
                 }
