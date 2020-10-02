@@ -14,6 +14,7 @@ set( SOURCES_UNITTESTS_TESTS
     unittest-lattice.cpp
     unittest-latticeupdates.cpp
     unittest-matrix.cpp
+    unittest-minimumimage.cpp
     unittest-powers.cpp
     unittest-potential.cpp
     unittest-splines.cpp

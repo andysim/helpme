@@ -9,7 +9,7 @@ extraction:
   cpp:
     prepare:
       packages:
-        - g++-6
+        - g++-7
         - cmake
         - libblas-dev
         - libfftw3-dev

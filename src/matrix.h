@@ -119,7 +119,7 @@ class Matrix {
             ptr_ += stride_;
             return *this;
         }
-        const Real& operator[](size_t index) { return *(begin_ + index); }
+        const Real& operator[](size_t index) const { return *(begin_ + index); }
         size_t size() const { return std::distance(begin_, end_) / stride_; }
         void assertSameSize(const sliceIterator& other) const {
             if (size() != other.size())
@@ -434,6 +434,23 @@ class Matrix {
      * \return the sum of this matrix and the matrix other.
      */
     Matrix operator+=(const Matrix& other) { return this->incrementWith(other); }
+
+    /*!
+     * \brief increment every element of this matrix by a constant another, returning a new matrix containing the sum.
+     * \param other the right hand side of the matrix sum.
+     * \return the sum of this matrix and the matrix other.
+     */
+    Matrix incrementWith(const Real& shift) {
+        std::for_each(begin(), end(), [shift](Real& a) { a += shift; });
+        return *this;
+    }
+
+    /*!
+     * \brief a wrapper around the incrementWith() function.
+     * \param shift the scalar to increment each value by
+     * \return the sum of this matrix and the matrix other.
+     */
+    Matrix operator+=(const Real& shift) { return this->incrementWith(shift); }
 
     /*!
      * \brief almostEquals checks that two matrices have all elements the same, within some specificied tolerance.
