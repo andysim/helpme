@@ -71,7 +71,7 @@ TEST_CASE("check potential (and derivatives thereof) code.") {
             {5.1, 0.9, 3.3},
             {2.1, 2.1, 2.3},
         });
-        helpme::Matrix<double> charges({-0.834, 0.417, 0.417, -0.834, 0.417, 0.417});
+        helpme::Matrix<double> charges({-0.834, 0.417, 0.417, -0.834, 0.417, 0.417, -0.834, 0.417, 0.417});
         double scaleFactor = 332.0637128;
         int gridPts = 96;
         // First, make sure the resulting potential is invariant to the attenuation parameter

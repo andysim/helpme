@@ -2567,7 +2567,7 @@ class PMEInstance {
 
     void computePAtAtomicSites(const RealMat &charges, const RealMat &coordinates, RealMat &potential,
                                Real sphericalCutoff) {
-        std::cout << " nthread " << nThreads_ << std::endl;
+        sanityChecks(0, charges, coordinates);
         // The minumum image convention requires that the cutoff be less than half the minumum box width
         checkMinimumImageCutoff(sphericalCutoff);
         size_t nAtoms = coordinates.nRows();
