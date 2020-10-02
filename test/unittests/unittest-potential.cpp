@@ -84,8 +84,39 @@ TEST_CASE("check potential (and derivatives thereof) code.") {
         helpme::Matrix<double> potential4(9, 1);
         pme3.computePAtAtomicSites(charges, coords, potential3, 15);
         pme4.computePAtAtomicSites(charges, coords, potential4, 15);
-        std::cout << potential3 << std::endl;
-        std::cout << potential4 << std::endl;
+        REQUIRE(potential3.almostEquals(potential4));
+        // Now make sure that it throws an error if the cutoff is too large
+        REQUIRE_THROWS_WITH(pme3.computePAtAtomicSites(charges, coords, potential3, 25),
+                            Catch::Contains("The cutoff used must be less than"));
+    }
+
+    SECTION("charge only potential at atomic sites, orthorhombic, compressed") {
+        // Place a few atoms near the boundaries so they get wrapped by the minimum image code
+        helpme::Matrix<double> coords({
+            {1.1, 1.2, 1.3},
+            {10.1, 5.2, 3.3},
+            {18.1, 18.1, 18.3},
+            {0.1, 4.2, 2.3},
+            {10.1, 3.2, 2.3},
+            {26.1, 27.0, 20.3},
+            {20.1, 28.2, 24.3},
+            {5.1, 0.9, 3.3},
+            {2.1, 2.1, 2.3},
+        });
+        helpme::Matrix<double> charges({-0.834, 0.417, 0.417, -0.834, 0.417, 0.417, -0.834, 0.417, 0.417});
+        double scaleFactor = 332.0637128;
+        int gridPts = 96;
+        int kMax = 25;
+        // First, make sure the resulting potential is invariant to the attenuation parameter
+        helpme::PMEInstance<double> pme3, pme4;
+        pme3.setupCompressed(1, 0.4, 8, gridPts, gridPts, gridPts, kMax, kMax, kMax, scaleFactor, 1);
+        pme4.setupCompressed(1, 0.5, 8, gridPts, gridPts, gridPts, kMax, kMax, kMax, scaleFactor, 1);
+        pme3.setLatticeVectors(34, 33, 35, 90, 90, 90, helpme::PMEInstance<double>::LatticeType::XAligned);
+        pme4.setLatticeVectors(34, 33, 35, 90, 90, 90, helpme::PMEInstance<double>::LatticeType::XAligned);
+        helpme::Matrix<double> potential3(9, 1);
+        helpme::Matrix<double> potential4(9, 1);
+        pme3.computePAtAtomicSites(charges, coords, potential3, 15);
+        pme4.computePAtAtomicSites(charges, coords, potential4, 15);
         REQUIRE(potential3.almostEquals(potential4));
         // Now make sure that it throws an error if the cutoff is too large
         REQUIRE_THROWS_WITH(pme3.computePAtAtomicSites(charges, coords, potential3, 25),
