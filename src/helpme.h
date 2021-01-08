@@ -28,7 +28,9 @@
 #include <stdexcept>
 #include <string>
 #include <tuple>
+#ifndef _WIN32
 #include <unistd.h>
+#endif
 #include <vector>
 
 #include "cartesiantransform.h"
@@ -37,13 +39,18 @@
 #include "gridsize.h"
 #include "matrix.h"
 #if HAVE_MKL == 1
-#include "mkl.h"
+#include <mkl.h>
 #endif
 #include "memory.h"
 #if HAVE_MPI == 1
 #include "mpi_wrapper.h"
 #endif
 #include "powers.h"
+
+#ifndef M_PI
+    #define M_PI 3.14159265358979323846
+#endif
+
 #include "splines.h"
 #include "string_utils.h"
 #include "tensor_utils.h"
@@ -128,7 +135,7 @@ class PMEInstance {
     /*!
      * \brief The different conventions for orienting a lattice constructed from input parameters.
      */
-    enum class LatticeType : int { Undefined = 0, XAligned = 1, ShapeMatrix = 2 };
+    enum class LatticeType : int { Undefined = 0, XAligned = 1, ShapeMatrix = 2 , ExplicitMatrix = 3 };
 
     /*!
      * \brief The different conventions for numbering nodes.
@@ -1104,7 +1111,11 @@ class PMEInstance {
             rPower_ = rPower;
             algorithmType_ = algorithm;
             splineOrder_ = splineOrder;
+#ifdef _WIN32
+            cacheLineSizeInReals_ = static_cast<Real>(4096 / sizeof(Real));
+#else
             cacheLineSizeInReals_ = static_cast<Real>(sysconf(_SC_PAGESIZE) / sizeof(Real));
+#endif
             requestedNumberOfThreads_ = nThreads;
 #ifdef _OPENMP
             nThreads_ = nThreads ? nThreads : omp_get_max_threads();
@@ -1533,9 +1544,9 @@ class PMEInstance {
      * \return volume in units consistent with those used to define the lattice vectors.
      */
     Real cellVolume() {
-        return boxVecs_(0, 0) * boxVecs_(1, 1) * boxVecs_(2, 2) - boxVecs_(0, 0) * boxVecs_(1, 2) * boxVecs_(2, 1) +
-               boxVecs_(0, 1) * boxVecs_(1, 2) * boxVecs_(2, 0) - boxVecs_(0, 1) * boxVecs_(1, 0) * boxVecs_(2, 2) +
-               boxVecs_(0, 2) * boxVecs_(1, 0) * boxVecs_(2, 1) - boxVecs_(0, 2) * boxVecs_(1, 1) * boxVecs_(2, 0);
+        return std::abs(boxVecs_(0, 0) * boxVecs_(1, 1) * boxVecs_(2, 2) - boxVecs_(0, 0) * boxVecs_(1, 2) * boxVecs_(2, 1) +
+                        boxVecs_(0, 1) * boxVecs_(1, 2) * boxVecs_(2, 0) - boxVecs_(0, 1) * boxVecs_(1, 0) * boxVecs_(2, 2) +
+                        boxVecs_(0, 2) * boxVecs_(1, 0) * boxVecs_(2, 1) - boxVecs_(0, 2) * boxVecs_(1, 1) * boxVecs_(2, 0));
     }
 
     /*!
@@ -1565,6 +1576,33 @@ class PMEInstance {
         return {dxR - sxR, dyR - syR, dzR - szR};
     }
 
+    /*!
+     * \brief Sets the unit cell lattice vectors, with units consistent with those used to specify coordinates.
+     * \param boxVecs Lattice parameters in the matrix form.
+     */
+    void setLattice(RealMat &boxVecs) {
+        if (boxVecs_(0,0) != boxVecs(0,0) || boxVecs_(0,1) != boxVecs(0,1) || boxVecs_(0,2) != boxVecs(0,2) ||
+            boxVecs_(1,0) != boxVecs(1,0) || boxVecs_(1,1) != boxVecs(1,1) || boxVecs_(1,2) != boxVecs(1,2) ||
+            boxVecs_(2,0) != boxVecs(2,0) || boxVecs_(2,1) != boxVecs(2,1) || boxVecs_(2,2) != boxVecs(2,2) ||
+            latticeType_ != LatticeType::ExplicitMatrix) {
+            boxVecs_ = boxVecs;
+            recVecs_ = boxVecs_.inverse();
+            scaledRecVecs_ = recVecs_.clone();
+            scaledRecVecs_.row(0) *= gridDimensionA_;
+            scaledRecVecs_.row(1) *= gridDimensionB_;
+            scaledRecVecs_.row(2) *= gridDimensionC_;
+            cellA_ = 0;
+            cellB_ = 0;
+            cellC_ = 0;
+            cellAlpha_ = 0;
+            cellBeta_ = 0;
+            cellGamma_ = 0;
+            latticeType_ = LatticeType::ExplicitMatrix;
+            unitCellHasChanged_ = true;
+        } else {
+            unitCellHasChanged_ = false;
+        }
+    }
     /*!
      * \brief Sets the unit cell lattice vectors, with units consistent with those used to specify coordinates.
      * \param A the A lattice parameter in units consistent with the coordinates.
