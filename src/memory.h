@@ -12,7 +12,11 @@
 #include <stdexcept>
 #include <vector>
 
+#if HAVE_MKL
+#include <fftw/fftw3.h>
+#else
 #include <fftw3.h>
+#endif
 
 namespace helpme {
 

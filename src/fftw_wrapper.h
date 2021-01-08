@@ -15,7 +15,11 @@
 #include <stdexcept>
 #include <type_traits>
 
+#if HAVE_MKL
+#include <fftw/fftw3.h>
+#else
 #include <fftw3.h>
+#endif
 #include "memory.h"
 
 namespace helpme {
