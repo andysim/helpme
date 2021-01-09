@@ -1544,9 +1544,10 @@ class PMEInstance {
      * \return volume in units consistent with those used to define the lattice vectors.
      */
     Real cellVolume() {
-        return std::abs(boxVecs_(0, 0) * boxVecs_(1, 1) * boxVecs_(2, 2) - boxVecs_(0, 0) * boxVecs_(1, 2) * boxVecs_(2, 1) +
-                        boxVecs_(0, 1) * boxVecs_(1, 2) * boxVecs_(2, 0) - boxVecs_(0, 1) * boxVecs_(1, 0) * boxVecs_(2, 2) +
-                        boxVecs_(0, 2) * boxVecs_(1, 0) * boxVecs_(2, 1) - boxVecs_(0, 2) * boxVecs_(1, 1) * boxVecs_(2, 0));
+        return std::abs(
+            boxVecs_(0, 0) * boxVecs_(1, 1) * boxVecs_(2, 2) - boxVecs_(0, 0) * boxVecs_(1, 2) * boxVecs_(2, 1) +
+            boxVecs_(0, 1) * boxVecs_(1, 2) * boxVecs_(2, 0) - boxVecs_(0, 1) * boxVecs_(1, 0) * boxVecs_(2, 2) +
+            boxVecs_(0, 2) * boxVecs_(1, 0) * boxVecs_(2, 1) - boxVecs_(0, 2) * boxVecs_(1, 1) * boxVecs_(2, 0));
     }
 
     /*!
