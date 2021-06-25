@@ -1744,7 +1744,7 @@ TEST_CASE("Full run with a small toy system, comprising two water molecules with
         REQUIRE(fractionalParams.almostEquals(refFractionalParamsD, TOL));
 
         pmeD->filterAtomsAndBuildSplineCache(5, coordsD);
-        auto realGrid = pmeD->spreadParameters(4, fractionalParams);
+        auto realGrid = pmeD->spreadParameters(4, paramsD);
         helpme::Matrix<double> chargeGrid(realGrid, nfftz * nffty, nfftx);
         REQUIRE(refChargeGridD.almostEquals(chargeGrid, TOL));
 
@@ -1759,7 +1759,7 @@ TEST_CASE("Full run with a small toy system, comprising two water molecules with
         helpme::Matrix<double> potentialGrid(realGrid, nfftz * nffty, nfftx);
         REQUIRE(refPotentialGridD.almostEquals(potentialGrid, TOL));
 
-        pmeD->probeGrid(realGrid, 4, fractionalParams, forcesD);
+        pmeD->probeGrid(realGrid, 4, paramsD, forcesD);
         REQUIRE(refForcesD.almostEquals(forcesD, TOL));
         REQUIRE(refRecEnergy == Approx(energy).margin(TOL));
     }
@@ -1779,7 +1779,7 @@ TEST_CASE("Full run with a small toy system, comprising two water molecules with
         REQUIRE(fractionalParams.almostEquals(refFractionalParamsD.cast<float>(), TOL));
 
         pmeF->filterAtomsAndBuildSplineCache(5, coordsD.cast<float>());
-        auto realGrid = pmeF->spreadParameters(4, fractionalParams);
+        auto realGrid = pmeF->spreadParameters(4, paramsD.cast<float>());
         helpme::Matrix<float> chargeGrid(realGrid, nfftz * nffty, nfftx);
         REQUIRE(refChargeGridD.cast<float>().almostEquals(chargeGrid, TOL));
 
@@ -1794,7 +1794,7 @@ TEST_CASE("Full run with a small toy system, comprising two water molecules with
         helpme::Matrix<float> potentialGrid(realGrid, nfftz * nffty, nfftx);
         REQUIRE(refPotentialGridD.cast<float>().almostEquals(potentialGrid, TOL));
 
-        pmeF->probeGrid(realGrid, 4, fractionalParams, forcesF);
+        pmeF->probeGrid(realGrid, 4, paramsD.cast<float>(), forcesF);
         REQUIRE(refForcesD.cast<float>().almostEquals(forcesF, TOL));
         REQUIRE(refRecEnergy == Approx(energy).margin(TOL));
     }

@@ -1,7 +1,10 @@
 # Add any new tests to this list or the one below!
 set( SOURCES_UNITTESTS_TESTS
     unittest-cartesiantransform.cpp
+    unittest-cdq-field-findif.cpp
     unittest-coulombkappasweep.cpp
+    unittest-d-field-kappasweep.cpp
+    unittest-dipolereference.cpp
     unittest-dispersionkappasweep.cpp
     unittest-fft.cpp
     unittest-fletcher.cpp
