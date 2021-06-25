@@ -516,9 +516,11 @@ class PMEInstance {
      * \param splineB the BSpline object for the B direction.
      * \param splineC the BSpline object for the C direction.
      * \param phiPtr a scratch array of length nForceComponents, to store the fractional potential.
-     * \param parameters the list of parameters associated with each atom (charges, C6 coefficients, multipoles,
-     * etc...). For a parameter with angular momentum L, a matrix of dimension nAtoms x nL is expected, where nL =
-     * (L+1)*(L+2)*(L+3)/6 and the fast running index nL has the ordering
+     * \param fracParameters the list of parameters associated with the current atom, in
+     * the scaled fraction coordinate basis (charges, C6 coefficients,
+     * multipoles, etc...). For a parameter with angular momentum L, a matrix
+     * of dimension nAtoms x nL is expected, where
+     * nL = (L+1)*(L+2)*(L+3)/6 and the fast running index nL has the ordering
      *
      * 0 X Y Z XX XY YY XZ YZ ZZ XXX XXY XYY YYY XXZ XYZ YYZ XZZ YZZ ZZZ ...
      *
@@ -533,13 +535,13 @@ class PMEInstance {
      */
     void probeGridImpl(const int &atom, const Real *potentialGrid, const int &nComponents, const int &nForceComponents,
                        const Spline &splineA, const Spline &splineB, const Spline &splineC, Real *phiPtr,
-                       const RealMat &parameters, Real *forces) {
+                       const Real *fracParameters, Real *forces) {
         std::fill(phiPtr, phiPtr + nForceComponents, 0);
         probeGridImpl(potentialGrid, nForceComponents, splineA, splineB, splineC, phiPtr);
 
         Real fracForce[3] = {0, 0, 0};
         for (int component = 0; component < nComponents; ++component) {
-            Real param = parameters(atom, component);
+            Real param = fracParameters[component];
             const auto &quanta = angMomIterator_[component];
             short lx = quanta[0];
             short ly = quanta[1];
@@ -1367,6 +1369,14 @@ class PMEInstance {
         Real *realGrid = reinterpret_cast<Real *>(workSpace1_.data());
         updateAngMomIterator(parameterAngMom);
 
+        // We need to figure out whether the incoming parameters need to be transformed to scaled fractional
+        // coordinates or not, which is only needed for angular momentum higher than zero.
+        RealMat tempParams;
+        if (parameterAngMom) {
+            tempParams = cartesianTransform(parameterAngMom, false, scaledRecVecs_.transpose(), parameters);
+        }
+        const auto &fractionalParameters = parameterAngMom ? tempParams : parameters;
+
         int nComponents = nCartesian(parameterAngMom);
         size_t numBA = (size_t)myGridDimensionB_ * myGridDimensionA_;
 #pragma omp parallel num_threads(nThreads_)
@@ -1385,7 +1395,8 @@ class PMEInstance {
                 const auto &splineA = cacheEntry.aSpline;
                 const auto &splineB = cacheEntry.bSpline;
                 const auto &splineC = cacheEntry.cSpline;
-                spreadParametersImpl(atom, realGrid, nComponents, splineA, splineB, splineC, parameters, threadID);
+                spreadParametersImpl(atom, realGrid, nComponents, splineA, splineB, splineC, fractionalParameters,
+                                     threadID);
             }
         }
         return realGrid;
@@ -2186,8 +2197,10 @@ class PMEInstance {
      *              Lx  = L - Ly - Lz
      * \endcode
      * \param forces a Nx3 matrix of the forces, ordered in memory as {Fx1,Fy1,Fz1,Fx2,Fy2,Fz2,....FxN,FyN,FzN}.
+     * \param virial pointer to the virial vector if needed
      */
-    void probeGrid(const Real *potentialGrid, int parameterAngMom, const RealMat &parameters, RealMat &forces) {
+    void probeGrid(const Real *potentialGrid, int parameterAngMom, const RealMat &parameters, RealMat &forces,
+                   Real *virial = nullptr) {
         updateAngMomIterator(parameterAngMom + 1);
         int nComponents = nCartesian(parameterAngMom);
         int nForceComponents = nCartesian(parameterAngMom + 1);
@@ -2197,6 +2210,17 @@ class PMEInstance {
         size_t rowSize = std::ceil(nForceComponents / cacheLineSizeInReals_) * cacheLineSizeInReals_;
         if (fractionalPhis_.nRows() != nThreads_ || fractionalPhis_.nCols() != rowSize) {
             fractionalPhis_ = RealMat(nThreads_, rowSize);
+        }
+        RealMat fractionalParams;
+        Real cartPhi[3];
+        if (parameterAngMom) {
+            fractionalParams = cartesianTransform(parameterAngMom, false, scaledRecVecs_.transpose(), parameters);
+            if (virial) {
+                if (parameterAngMom > 1) {
+                    // The structure factor derivatives below are only implemented up to dipoles for now
+                    throw std::runtime_error("Only multipoles up to L=1 are supported if the virial is requested");
+                }
+            }
         }
         size_t nAtoms = std::accumulate(numAtomsPerThread_.begin(), numAtomsPerThread_.end(), 0);
 #pragma omp parallel num_threads(nThreads_)
@@ -2216,7 +2240,20 @@ class PMEInstance {
                 if (parameterAngMom) {
                     Real *myScratch = fractionalPhis_[threadID % nThreads_];
                     probeGridImpl(absAtom, potentialGrid, nComponents, nForceComponents, splineA, splineB, splineC,
-                                  myScratch, parameters, forces[absAtom]);
+                                  myScratch, fractionalParams[absAtom], forces[absAtom]);
+                    // Add extra virial terms coming from the derivative of the structure factor.
+                    // See eq. 2.16 of https://doi.org/10.1063/1.1630791 for details
+                    if (virial) {
+                        // Get the potential in the Cartesian basis
+                        matrixVectorProduct(scaledRecVecs_, &myScratch[1], &cartPhi[0]);
+                        const Real *parm = parameters[absAtom];
+                        virial[0] += cartPhi[0] * parm[1];
+                        virial[1] += 0.5f * (cartPhi[0] * parm[2] + cartPhi[1] * parm[1]);
+                        virial[2] += cartPhi[1] * parm[2];
+                        virial[3] += 0.5f * (cartPhi[0] * parm[3] + cartPhi[2] * parm[1]);
+                        virial[4] += 0.5f * (cartPhi[1] * parm[3] + cartPhi[2] * parm[2]);
+                        virial[5] += cartPhi[2] * parm[3];
+                    }
                 } else {
                     probeGridImpl(potentialGrid, splineA, splineB, splineC, paramPtr[absAtom], forces[absAtom]);
                 }
@@ -2276,7 +2313,7 @@ class PMEInstance {
      */
     Real computeEDir(const Matrix<short> &pairList, int parameterAngMom, const RealMat &parameters,
                      const RealMat &coordinates) {
-        if (parameterAngMom) throw std::runtime_error("Multipole self terms have not been coded yet.");
+        if (parameterAngMom) throw std::runtime_error("Multipole direct terms have not been coded yet.");
         sanityChecks(parameterAngMom, parameters, coordinates);
 
         Real energy = 0;
@@ -2672,7 +2709,7 @@ class PMEInstance {
         std::fill(workSpace1_.begin(), workSpace1_.end(), 0);
         updateAngMomIterator(parameterAngMom);
         auto fractionalParameters =
-            cartesianTransform(parameterAngMom, onlyOneShellForInput, scaledRecVecs_, parameters);
+            cartesianTransform(parameterAngMom, onlyOneShellForInput, scaledRecVecs_.transpose(), parameters);
         int nComponents = nCartesian(parameterAngMom) - cartesianOffset;
         size_t nAtoms = coordinates.nRows();
         for (size_t atom = 0; atom < nAtoms; ++atom) {
@@ -2728,6 +2765,7 @@ class PMEInstance {
         }
 
         auto fracPotential = potential.clone();
+        fracPotential.setZero();
         cartesianOffset = onlyOneShellForOutput ? nCartesian(derivativeLevel - 1) : 0;
         int nPotentialComponents = nCartesian(derivativeLevel) - cartesianOffset;
         size_t nPoints = gridPoints.nRows();
@@ -2786,6 +2824,7 @@ class PMEInstance {
      */
     Real computeERec(int parameterAngMom, const RealMat &parameters, const RealMat &coordinates) {
         sanityChecks(parameterAngMom, parameters, coordinates);
+
         filterAtomsAndBuildSplineCache(parameterAngMom, coordinates);
         auto realGrid = spreadParameters(parameterAngMom, parameters);
         Real energy;
@@ -2886,7 +2925,7 @@ class PMEInstance {
             auto gridAddress = forwardTransform(realGrid);
             energy = convolveEV(gridAddress, virial);
             auto potentialGrid = inverseTransform(gridAddress);
-            probeGrid(potentialGrid, parameterAngMom, parameters, forces);
+            probeGrid(potentialGrid, parameterAngMom, parameters, forces, virial[0]);
         } else if (algorithmType_ == AlgorithmType::CompressedPME) {
             auto gridAddress = compressedForwardTransform(realGrid);
             Real *convolvedGrid;

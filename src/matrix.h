@@ -417,6 +417,17 @@ class Matrix {
     Matrix operator*(const Matrix& other) const { return this->multiply(other); }
 
     /*!
+     * \brief operator * scale a copy of this matrix by a constant, leaving the orignal untouched.
+     * \param scaleFac the scale factor to apply.
+     * \return the scaled version of this matrix.
+     */
+    Matrix operator*(Real scaleFac) const {
+        auto scaled = this->clone();
+        scaled.applyOperationToEachElement([&](Real& element) { element *= scaleFac; });
+        return scaled;
+    }
+
+    /*!
      * \brief increment this matrix with another, returning a new matrix containing the sum.
      * \param other the right hand side of the matrix sum.
      * \return the sum of this matrix and the matrix other.

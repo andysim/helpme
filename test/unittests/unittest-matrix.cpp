@@ -150,6 +150,13 @@ TEST_CASE("test the matrix class.") {
         REQUIRE(product.almostEquals(L * R));
     }
 
+    SECTION("Scaling ") {
+        helpme::Matrix<double> mat({{3, 4, 2}, {-4, 1, 2}});
+        helpme::Matrix<double> mat2({{6, 8, 4}, {-8, 2, 4}});
+        std::cout << mat * 2.0 << std::endl;
+        REQUIRE(mat2.almostEquals(mat * 2.0));
+    }
+
     SECTION("Dot product ") {
         helpme::Matrix<double> mat1({{3.5, 3, 2}});
         helpme::Matrix<double> mat2({{3, 1.5, 2.1}});
