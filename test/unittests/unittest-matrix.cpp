@@ -153,7 +153,6 @@ TEST_CASE("test the matrix class.") {
     SECTION("Scaling ") {
         helpme::Matrix<double> mat({{3, 4, 2}, {-4, 1, 2}});
         helpme::Matrix<double> mat2({{6, 8, 4}, {-8, 2, 4}});
-        std::cout << mat * 2.0 << std::endl;
         REQUIRE(mat2.almostEquals(mat * 2.0));
     }
 

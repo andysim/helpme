@@ -2739,10 +2739,10 @@ class PMEInstance {
         if (angMomIterator_.size() >= expectedNTerms) return;
 
         angMomIterator_.resize(expectedNTerms);
-        for (short l = 0, count = 0; l <= L; ++l) {
-            for (short lz = 0; lz <= l; ++lz) {
-                for (short ly = 0; ly <= l - lz; ++ly) {
-                    short lx = l - ly - lz;
+        for (int l = 0, count = 0; l <= L; ++l) {
+            for (int lz = 0; lz <= l; ++lz) {
+                for (int ly = 0; ly <= l - lz; ++ly) {
+                    int lx = l - ly - lz;
                     angMomIterator_[count] = {{static_cast<short>(lx), static_cast<short>(ly), static_cast<short>(lz)}};
                     ++count;
                 }
@@ -5011,13 +5011,13 @@ class PMEInstance {
 
     /*!
      * \brief Computes the full electrostatic potential at atomic sites due to point charges located at those same
-     * sites. The site located at each probe location is neglected, to avoid the resulting singularity \param charges
-     * the list of point charges (in e) associated with each particle. \param coordinates the cartesian coordinates,
-     * ordered in memory as {x1,y1,z1,x2,y2,z2,....xN,yN,zN}. \param potential the array holding the potential.  This is
-     * a matrix of dimensions  nAtoms x 1 \param sphericalCutoff the cutoff (in A) applied to the real space summations,
-     * which must be no more than half of the box dimensions
+     * sites. The site located at each probe location is neglected, to avoid the resulting singularity.
+     * \param charges * the list of point charges (in e) associated with each particle.
+     * \param coordinates the cartesian coordinates, ordered in memory as {x1,y1,z1,x2,y2,z2,....xN,yN,zN}.
+     * \param potential the array holding the potential.  This is * a matrix of dimensions  nAtoms x 1.
+     * \param sphericalCutoff the cutoff (in A) applied to the real space summations,
+     * which must be no more than half of the box dimensions.
      */
-
     void computePAtAtomicSites(const RealMat &charges, const RealMat &coordinates, RealMat &potential,
                                Real sphericalCutoff) {
         sanityChecks(0, charges, coordinates);
@@ -5107,7 +5107,6 @@ class PMEInstance {
      * information about ordering of derivative components. N.B. this array is incremented with the potential, not
      * assigned, so take care to zero it first if only the current results are desired.
      */
-
     void computePRec(int parameterAngMom, const RealMat &parameters, const RealMat &coordinates,
                      const RealMat &gridPoints, int derivativeLevel, RealMat &potential) {
         bool onlyOneShellForInput = parameterAngMom < 0;
