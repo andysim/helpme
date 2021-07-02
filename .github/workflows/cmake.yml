@@ -105,7 +105,7 @@ jobs:
            bash <(curl -s https://codecov.io/bash) || echo "Codecov did not collect coverage reports"
 
 
-  format check:
+  formatcheck:
     name:  clang-format check
     runs-on: ubuntu-20.04
 
