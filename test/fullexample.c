@@ -10,11 +10,17 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdlib.h>
 
 #include "helpme.h"
 #include "print_results.h"
 
 int main(int argc, char *argv[]) {
+
+    char* valstr = getenv("HELPME_TESTS_NTHREADS");
+    int numThreads = valstr != NULL ? atoi(valstr) : 1;
+    printf("Num Threads: %d\n", numThreads);
+
     int atom;
 
     /*
@@ -45,7 +51,7 @@ int main(int argc, char *argv[]) {
     double potentialAndGradientD[24] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
     PMEInstance *pmeD = helpme_createD();
-    helpme_setupD(pmeD, 1, 0.3, 5, 32, 32, 32, scaleFactorD, 1);
+    helpme_setupD(pmeD, 1, 0.3, 5, 32, 32, 32, scaleFactorD, numThreads);
     helpme_set_lattice_vectorsD(pmeD, 20, 20, 20, 90, 90, 90, XAligned);
     // Compute just the energy
     print_resultsD(6, "Before E_recD", energyD, forcesD, virialD);
@@ -77,7 +83,7 @@ int main(int argc, char *argv[]) {
     memset(virialD, 0, 6 * sizeof(double));
     memset(potentialAndGradientD, 0, 24 * sizeof(double));
     printf("\nCOMPRESSED\n\n");
-    helpme_setup_compressedD(pmeD, 1, 0.3, 5, 32, 32, 32, 9, 9, 9, scaleFactorD, 1);
+    helpme_setup_compressedD(pmeD, 1, 0.3, 5, 32, 32, 32, 9, 9, 9, scaleFactorD, numThreads);
     helpme_set_lattice_vectorsD(pmeD, 20, 20, 20, 90, 90, 90, XAligned);
     // Compute just the energy
     print_resultsD(6, "Before E_recD", energyD, forcesD, virialD);
@@ -117,7 +123,7 @@ int main(int argc, char *argv[]) {
     float potentialAndGradientF[24] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
     PMEInstance *pmeF = helpme_createF();
-    helpme_setupF(pmeF, 1, 0.3, 5, 32, 32, 32, scaleFactorF, 1);
+    helpme_setupF(pmeF, 1, 0.3, 5, 32, 32, 32, scaleFactorF, numThreads);
     helpme_set_lattice_vectorsF(pmeF, 20, 20, 20, 90, 90, 90, XAligned);
     // Compute just the energy
     print_resultsF(6, "Before E_recF", energyF, forcesF, virialF);
@@ -150,7 +156,7 @@ int main(int argc, char *argv[]) {
     memset(potentialAndGradientF, 0, 24 * sizeof(float));
     printf("\nCOMPRESSED\n\n");
     printf("TPE %f\n", scaleFactorF);
-    helpme_setup_compressedF(pmeF, 1, 0.3, 5, 32, 32, 32, 9, 9, 9, scaleFactorF, 1);
+    helpme_setup_compressedF(pmeF, 1, 0.3, 5, 32, 32, 32, 9, 9, 9, scaleFactorF, numThreads);
     helpme_set_lattice_vectorsF(pmeF, 20, 20, 20, 90, 90, 90, XAligned);
     // Compute just the energy
     print_resultsF(6, "Before E_recF", energyF, forcesF, virialF);

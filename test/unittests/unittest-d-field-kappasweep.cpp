@@ -12,7 +12,12 @@
 #include <map>
 
 #include "helpme.h"
+#include <cstdlib>
 #include <iomanip>
+#include <iostream>
+
+const char* valstr = std::getenv("HELPME_TESTS_NTHREADS");
+int numThreads = valstr != NULL ? std::atoi(valstr) : 1;
 
 const double DELTAR = 1e-4;
 const double SQRTPI = std::sqrt(std::acos(-1.0));
@@ -52,6 +57,8 @@ helpme::Matrix<double> computeRealField(double kappa, const helpme::Matrix<doubl
 }
 
 TEST_CASE("dipole kappa sweep.") {
+    std::cout << "Num Threads: " << numThreads << std::endl;
+
     helpme::Matrix<double> coords_an({{2.0, 2.5, 3.0}, {0.0, 0.0, 0.0}});
     const auto& crd = coords_an;
     helpme::Matrix<double> potential_an(2, 4);
@@ -75,7 +82,7 @@ TEST_CASE("dipole kappa sweep.") {
         int gridPts = 64;
         double kappa = 0.4;
         helpme::PMEInstance<double> pme;
-        pme.setup(1, kappa, 8, gridPts, gridPts, gridPts, scaleFactor, 1);
+        pme.setup(1, kappa, 8, gridPts, gridPts, gridPts, scaleFactor, numThreads);
         pme.setLatticeVectors(22, 25, 27, 80, 90, 100, helpme::PMEInstance<double>::LatticeType::XAligned);
         pme.computePRec(0, params_fd, coords_fd, coords_an, 1, potential_fd);
         pme.computePRec(1, params_an, coords_an, coords_an, 1, potential_an);
@@ -88,7 +95,7 @@ TEST_CASE("dipole kappa sweep.") {
         helpme::PMEInstance<double> pme3;
         auto selfPrefac3 = -scaleFactor * 4 * std::pow(0.3, 3) / (3 * SQRTPI);
         potential3 += params_an * selfPrefac3;
-        pme3.setup(1, 0.3, 8, gridPts, gridPts, gridPts, scaleFactor, 1);
+        pme3.setup(1, 0.3, 8, gridPts, gridPts, gridPts, scaleFactor, numThreads);
         pme3.setLatticeVectors(35, 35, 35, 85, 90, 95, helpme::PMEInstance<double>::LatticeType::XAligned);
         pme3.computePRec(1, params_an, coords_an, coords_an, 1, potential3);
 
@@ -96,7 +103,7 @@ TEST_CASE("dipole kappa sweep.") {
         helpme::PMEInstance<double> pme4;
         auto selfPrefac4 = -scaleFactor * 4 * std::pow(0.4, 3) / (3 * SQRTPI);
         potential4 += params_an * selfPrefac4;
-        pme4.setup(1, 0.4, 9, gridPts, gridPts, gridPts, scaleFactor, 1);
+        pme4.setup(1, 0.4, 9, gridPts, gridPts, gridPts, scaleFactor, numThreads);
         pme4.setLatticeVectors(35, 35, 35, 85, 90, 95, helpme::PMEInstance<double>::LatticeType::XAligned);
         pme4.computePRec(1, params_an, coords_an, coords_an, 1, potential4);
         REQUIRE(potential3.almostEquals(potential4, TOL));
@@ -105,7 +112,7 @@ TEST_CASE("dipole kappa sweep.") {
         helpme::PMEInstance<double> pme5;
         auto selfPrefac5 = -scaleFactor * 4 * std::pow(0.5, 3) / (3 * SQRTPI);
         potential5 += params_an * selfPrefac5;
-        pme5.setup(1, 0.5, 10, gridPts, gridPts, gridPts, scaleFactor, 1);
+        pme5.setup(1, 0.5, 10, gridPts, gridPts, gridPts, scaleFactor, numThreads);
         pme5.setLatticeVectors(35, 35, 35, 85, 90, 95, helpme::PMEInstance<double>::LatticeType::XAligned);
         pme5.computePRec(1, params_an, coords_an, coords_an, 1, potential5);
         REQUIRE(potential4.almostEquals(potential5, TOL));
@@ -114,14 +121,14 @@ TEST_CASE("dipole kappa sweep.") {
     SECTION("check invariance of E w.r.t. kappa") {
         double gridPts = 128;
         helpme::PMEInstance<double> pme3;
-        pme3.setup(1, 0.3, 8, gridPts, gridPts, gridPts, scaleFactor, 1);
+        pme3.setup(1, 0.3, 8, gridPts, gridPts, gridPts, scaleFactor, numThreads);
         pme3.setLatticeVectors(35, 35, 35, 85, 90, 95, helpme::PMEInstance<double>::LatticeType::XAligned);
         auto E3 = pme3.computeEDir(pairList, 0, params_fd, coords_fd);
         E3 -= scaleFactor * (mu1_z * mu1_z + mu2_z * mu2_z) * 2 * std::pow(0.3, 3) / (3 * SQRTPI);
         E3 += pme3.computeERec(1, params_an, coords_an);
 
         helpme::PMEInstance<double> pme4;
-        pme4.setup(1, 0.4, 9, gridPts, gridPts, gridPts, scaleFactor, 1);
+        pme4.setup(1, 0.4, 9, gridPts, gridPts, gridPts, scaleFactor, numThreads);
         pme4.setLatticeVectors(35, 35, 35, 85, 90, 95, helpme::PMEInstance<double>::LatticeType::XAligned);
         auto E4 = pme4.computeEDir(pairList, 0, params_fd, coords_fd);
         E4 -= scaleFactor * (mu1_z * mu1_z + mu2_z * mu2_z) * 2 * std::pow(0.4, 3) / (3 * SQRTPI);
@@ -129,7 +136,7 @@ TEST_CASE("dipole kappa sweep.") {
         REQUIRE(E3 == Approx(E4).margin(TOL));
 
         helpme::PMEInstance<double> pme5;
-        pme5.setup(1, 0.5, 10, gridPts, gridPts, gridPts, scaleFactor, 1);
+        pme5.setup(1, 0.5, 10, gridPts, gridPts, gridPts, scaleFactor, numThreads);
         pme5.setLatticeVectors(35, 35, 35, 85, 90, 95, helpme::PMEInstance<double>::LatticeType::XAligned);
         auto E5 = pme5.computeEDir(pairList, 0, params_fd, coords_fd);
         E5 -= scaleFactor * (mu1_z * mu1_z + mu2_z * mu2_z) * 2 * std::pow(0.5, 3) / (3 * SQRTPI);
@@ -140,7 +147,7 @@ TEST_CASE("dipole kappa sweep.") {
     SECTION("check invariance of EF w.r.t. kappa") {
         double gridPts = 128;
         helpme::PMEInstance<double> pme3;
-        pme3.setup(1, 0.3, 8, gridPts, gridPts, gridPts, scaleFactor, 1);
+        pme3.setup(1, 0.3, 8, gridPts, gridPts, gridPts, scaleFactor, numThreads);
         pme3.setLatticeVectors(35, 35, 35, 85, 90, 95, helpme::PMEInstance<double>::LatticeType::XAligned);
         helpme::Matrix<double> forces3(2, 3), forces3_fd(4, 3);
         auto E3 = pme3.computeEFDir(pairList, 0, params_fd, coords_fd, forces3_fd);
@@ -154,7 +161,7 @@ TEST_CASE("dipole kappa sweep.") {
         E3 += pme3.computeEFRec(1, params_an, coords_an, forces3);
 
         helpme::PMEInstance<double> pme4;
-        pme4.setup(1, 0.4, 9, gridPts, gridPts, gridPts, scaleFactor, 1);
+        pme4.setup(1, 0.4, 9, gridPts, gridPts, gridPts, scaleFactor, numThreads);
         pme4.setLatticeVectors(35, 35, 35, 85, 90, 95, helpme::PMEInstance<double>::LatticeType::XAligned);
         helpme::Matrix<double> forces4(2, 3), forces4_fd(4, 3);
         auto E4 = pme4.computeEFDir(pairList, 0, params_fd, coords_fd, forces4_fd);
@@ -170,7 +177,7 @@ TEST_CASE("dipole kappa sweep.") {
         REQUIRE(forces3.almostEquals(forces4, TOL));
 
         helpme::PMEInstance<double> pme5;
-        pme5.setup(1, 0.5, 10, gridPts, gridPts, gridPts, scaleFactor, 1);
+        pme5.setup(1, 0.5, 10, gridPts, gridPts, gridPts, scaleFactor, numThreads);
         pme5.setLatticeVectors(35, 35, 35, 85, 90, 95, helpme::PMEInstance<double>::LatticeType::XAligned);
         helpme::Matrix<double> forces5(2, 3), forces5_fd(4, 3);
         auto E5 = pme5.computeEFDir(pairList, 0, params_fd, coords_fd, forces5_fd);
@@ -191,7 +198,7 @@ TEST_CASE("dipole kappa sweep.") {
         auto dR = coords_an.row(1) - coords_an.row(0);
 
         helpme::PMEInstance<double> pme3;
-        pme3.setup(1, 0.3, 8, gridPts, gridPts, gridPts, scaleFactor, 1);
+        pme3.setup(1, 0.3, 8, gridPts, gridPts, gridPts, scaleFactor, numThreads);
         pme3.setLatticeVectors(35, 35, 35, 85, 90, 95, helpme::PMEInstance<double>::LatticeType::XAligned);
         helpme::Matrix<double> forces3(2, 3), forces3_fd(4, 3), virial3(6, 1);
         auto E3 = pme3.computeEFDir(pairList, 0, params_fd, coords_fd, forces3_fd);
@@ -214,7 +221,7 @@ TEST_CASE("dipole kappa sweep.") {
         E3 += pme3.computeEFVRec(1, params_an, coords_an, forces3, virial3);
 
         helpme::PMEInstance<double> pme4;
-        pme4.setup(1, 0.4, 9, gridPts, gridPts, gridPts, scaleFactor, 1);
+        pme4.setup(1, 0.4, 9, gridPts, gridPts, gridPts, scaleFactor, numThreads);
         pme4.setLatticeVectors(35, 35, 35, 85, 90, 95, helpme::PMEInstance<double>::LatticeType::XAligned);
         helpme::Matrix<double> forces4(2, 3), forces4_fd(4, 3), virial4(6, 1);
         auto E4 = pme4.computeEFDir(pairList, 0, params_fd, coords_fd, forces4_fd);
@@ -240,7 +247,7 @@ TEST_CASE("dipole kappa sweep.") {
         REQUIRE(virial3.almostEquals(virial4, TOL));
 
         helpme::PMEInstance<double> pme5;
-        pme5.setup(1, 0.5, 10, gridPts, gridPts, gridPts, scaleFactor, 1);
+        pme5.setup(1, 0.5, 10, gridPts, gridPts, gridPts, scaleFactor, numThreads);
         pme5.setLatticeVectors(35, 35, 35, 85, 90, 95, helpme::PMEInstance<double>::LatticeType::XAligned);
         helpme::Matrix<double> forces5(2, 3), forces5_fd(4, 3), virial5(6, 1);
         auto E5 = pme5.computeEFDir(pairList, 0, params_fd, coords_fd, forces5_fd);

@@ -1,3 +1,4 @@
+import os
 import unittest
 
 import helpmelib as pme
@@ -16,6 +17,8 @@ def print_results(label, e, f, v):
 
 class TestHelpme(unittest.TestCase):
     def setUp(self):
+        self.numThreads = os.getenv("HELPME_TESTS_NTHREADS", default=1)
+        print(f"Num Threads: {self.numThreads}")
         self.toleranceD = 1e-8;
         self.toleranceF = 1e-4;
         self.expectedEnergy = 5.864957414;
@@ -62,7 +65,7 @@ class TestHelpme(unittest.TestCase):
         potentialAndGradient = np.zeros((6,4),dtype=np.float64)
 
         pmeD = pme.PMEInstanceD()
-        pmeD.setup(1, 0.3, 5, 32, 32, 32, 332.0716, 1)
+        pmeD.setup(1, 0.3, 5, 32, 32, 32, 332.0716, self.numThreads)
         mat = pme.MatrixD
         pmeD.set_lattice_vectors(20, 20, 20, 90, 90, 90, pmeD.LatticeType.XAligned)
         # Compute just the energy
@@ -93,7 +96,7 @@ class TestHelpme(unittest.TestCase):
         potentialAndGradient = np.zeros((6,4),dtype=np.float64)
 
         pmeD = pme.PMEInstanceD()
-        pmeD.setup_compressed(1, 0.3, 5, 32, 32, 32, 9, 9, 9, 332.0716, 1)
+        pmeD.setup_compressed(1, 0.3, 5, 32, 32, 32, 9, 9, 9, 332.0716, self.numThreads)
         mat = pme.MatrixD
         pmeD.set_lattice_vectors(20, 20, 20, 90, 90, 90, pmeD.LatticeType.XAligned)
         # Compute just the energy
@@ -125,7 +128,7 @@ class TestHelpme(unittest.TestCase):
         potentialAndGradient = np.zeros((6,4),dtype=np.float32)
 
         pmeF = pme.PMEInstanceF()
-        pmeF.setup(1, 0.3, 5, 32, 32, 32, 332.0716, 1)
+        pmeF.setup(1, 0.3, 5, 32, 32, 32, 332.0716, self.numThreads)
         mat = pme.MatrixF
         pmeF.set_lattice_vectors(20, 20, 20, 90, 90, 90, pmeF.LatticeType.XAligned)
         # Compute just the energy
@@ -156,7 +159,7 @@ class TestHelpme(unittest.TestCase):
         potentialAndGradient = np.zeros((6,4),dtype=np.float32)
 
         pmeF = pme.PMEInstanceF()
-        pmeF.setup_compressed(1, 0.3, 5, 32, 32, 32, 9, 9, 9, 332.0716, 1)
+        pmeF.setup_compressed(1, 0.3, 5, 32, 32, 32, 9, 9, 9, 332.0716, self.numThreads)
         mat = pme.MatrixF
         pmeF.set_lattice_vectors(20, 20, 20, 90, 90, 90, pmeF.LatticeType.XAligned)
         # Compute just the energy

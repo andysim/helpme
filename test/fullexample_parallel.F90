@@ -63,14 +63,23 @@ program testfortran
 
     type(c_ptr) :: pmeS, pmeP
     real(c_double) :: alpha
-    integer(c_int) :: rPower, splineOrder, aDim, bDim, cDim, angMom
+    integer(c_int) :: rPower, splineOrder, aDim, bDim, cDim, angMom, numThreads, stat
     integer(c_size_t) :: nAtoms
     real(c_double), allocatable, target :: coords(:,:), charges(:), forcesS(:,:), nodeForces(:,:), parallelForces(:,:)
     real(c_double) :: scaleFactor, energyS, nodeEnergy, parallelEnergy
     real(c_double), target :: virialS(6), parallelVirial(6), nodeVirial(6), tolerance
     character(len=20) :: tmp
+    character(len=255) :: envStr
 
     integer :: argc, error, numNodes, myRank, nx, ny, nz
+
+    envStr = ''
+    call getenv("HELPME_TESTS_NTHREADS", envStr)
+    if (envStr .eq. '') then
+        numThreads = 1
+    else
+        read(envStr, *, iostat=stat)  numThreads
+    endif
 
     call MPI_Init(error)
     call MPI_Comm_size(MPI_COMM_WORLD, numNodes, error)
@@ -105,9 +114,10 @@ program testfortran
     forcesS = 0d0
     virialS = 0d0
     if(myRank .eq. 0) then
+        write(*,*) "Num Threads:", numThreads
         ! Generate a serial benchmark first
         pmeS = helpme_createD()
-        call helpme_setupD(pmeS, rPower, alpha, splineOrder, aDim, bDim, cDim, scaleFactor, 1)
+        call helpme_setupD(pmeS, rPower, alpha, splineOrder, aDim, bDim, cDim, scaleFactor, numThreads)
         call helpme_set_lattice_vectorsD(pmeS, 20d0, 20d0, 20d0, 90d0, 90d0, 90d0, XAligned)
         energyS = helpme_compute_EFV_recD(pmeS, nAtoms, angMom, c_loc(charges), c_loc(coords),&
                                           c_loc(forcesS), c_loc(virialS))

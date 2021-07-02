@@ -113,13 +113,23 @@ program testfortran
     type(c_ptr) :: pmeD, pmeF
     real(c_float) :: alphaF
     real(c_double) :: alphaD
-    integer(c_int) :: rPower, splineOrder, aDim, bDim, cDim, angMom
+    integer(c_int) :: rPower, splineOrder, aDim, bDim, cDim, angMom, numThreads, stat
     integer(c_size_t) :: nAtoms, atom
     real(c_float), allocatable, target :: coordsF(:,:), chargesF(:), forcesF(:,:), potentialAndGradientF(:,:)
     real(c_double), allocatable, target :: coordsD(:,:), chargesD(:), forcesD(:,:), potentialAndGradientD(:,:)
     real(c_float), target :: scaleFactorF, energyF, virialF(6,1), toleranceF
     real(c_double), target :: scaleFactorD, energyD, virialD(6,1), toleranceD
     real(c_double) expectedEnergy, expectedForces(3,6), expectedVirial(6,1), expectedPotential(4,6)
+    character(len=255) :: envStr
+
+    envStr = ''
+    call getenv("HELPME_TESTS_NTHREADS", envStr)
+    if (envStr .eq. '') then
+        numThreads = 1
+    else
+        read(envStr, *, iostat=stat)  numThreads
+    endif
+    write(*,*) "Num Threads:", numThreads
 
     !
     ! Some reference values for testing purposes
@@ -170,7 +180,7 @@ program testfortran
     potentialAndGradientD = 0d0
 
     pmeD = helpme_createD()
-    call helpme_setupD(pmeD, rPower, alphaD, splineOrder, aDim, bDim, cDim, scaleFactorD, 1)
+    call helpme_setupD(pmeD, rPower, alphaD, splineOrder, aDim, bDim, cDim, scaleFactorD, numThreads)
     call helpme_set_lattice_vectorsD(pmeD, 20d0, 20d0, 20d0, 90d0, 90d0, 90d0, XAligned)
     call print_results_D(nAtoms, "Before helpme_compute_E_recD", energyD, forcesD, virialD)
     energyD = helpme_compute_E_recD(pmeD, nAtoms, angMom, c_loc(chargesD), c_loc(coordsD))
@@ -201,7 +211,7 @@ program testfortran
     virialD = 0d0
     forcesD = 0d0
     potentialAndGradientD = 0d0
-    call helpme_setup_compressedD(pmeD, rPower, alphaD, splineOrder, aDim, bDim, cDim, 9, 9, 9, scaleFactorD, 1)
+    call helpme_setup_compressedD(pmeD, rPower, alphaD, splineOrder, aDim, bDim, cDim, 9, 9, 9, scaleFactorD, numThreads)
     call helpme_set_lattice_vectorsD(pmeD, 20d0, 20d0, 20d0, 90d0, 90d0, 90d0, XAligned)
     call print_results_D(nAtoms, "Before helpme_compute_E_recD", energyD, forcesD, virialD)
     energyD = helpme_compute_E_recD(pmeD, nAtoms, angMom, c_loc(chargesD), c_loc(coordsD))
@@ -244,7 +254,7 @@ program testfortran
     potentialAndGradientF = 0.0
 
     pmeF = helpme_createF()
-    call helpme_setupF(pmeF, rPower, alphaF, splineOrder, aDim, bDim, cDim, scaleFactorF, 1)
+    call helpme_setupF(pmeF, rPower, alphaF, splineOrder, aDim, bDim, cDim, scaleFactorF, numThreads)
     call helpme_set_lattice_vectorsF(pmeF, 20.0, 20.0, 20.0, 90.0, 90.0, 90.0, XAligned)
     call print_results_F(nAtoms, "Before helpme_compute_E_recF", energyF, forcesF, virialF)
     energyF = helpme_compute_E_recF(pmeF, nAtoms, angMom, c_loc(chargesF), c_loc(coordsF))
@@ -276,7 +286,7 @@ program testfortran
     virialF = 0d0
     forcesF = 0d0
     potentialAndGradientF = 0d0
-    call helpme_setup_compressedF(pmeF, rPower, alphaF, splineOrder, aDim, bDim, cDim, 9, 9, 9, scaleFactorF, 1)
+    call helpme_setup_compressedF(pmeF, rPower, alphaF, splineOrder, aDim, bDim, cDim, 9, 9, 9, scaleFactorF, numThreads)
     call helpme_set_lattice_vectorsF(pmeF, 20.0, 20.0, 20.0, 90.0, 90.0, 90.0, XAligned)
     call print_results_F(nAtoms, "Before helpme_compute_E_recF", energyF, forcesF, virialF)
     energyF = helpme_compute_E_recF(pmeF, nAtoms, angMom, c_loc(chargesF), c_loc(coordsF))
