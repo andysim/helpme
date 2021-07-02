@@ -20,6 +20,9 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
+    - uses: actions/setup-python@v2
+      with: 
+        python-version: '3.6'
 
     - name: Install Dependencies
       run: sudo apt-get -y install libfftw3-dev openmpi-bin libopenmpi-dev clang-format
