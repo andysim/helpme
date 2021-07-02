@@ -81,7 +81,7 @@ while changes_made:
                     replacement_text = [f"// original file: {helpme_filename}\n\n"]
                     replacement_text.extend(cleanup_file(helpme_file))
                     output_array[abs_line_number:abs_line_number+1] = replacement_text
-                    already_added.append(helpme_filename)
+                    already_added.append(helpme_file)
                 changes_made = True
                 offset = abs_line_number
                 break
