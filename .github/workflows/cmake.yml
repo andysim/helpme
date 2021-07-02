@@ -85,6 +85,7 @@ jobs:
       run: >
            cmake -B ${{github.workspace}}/build 
            -DCMAKE_BUILD_TYPE=Debug
+           -DENABLE_CODE_COVERAGE=ON
            -DCMAKE_CXX_COMPILER=mpicxx
            -DCMAKE_C_COMPILER=mpicc
            -DCMAKE_Fortran_COMPILER=mpif90
@@ -100,7 +101,6 @@ jobs:
     - name: Upload CodeCov
       working-directory: ${{github.workspace}}/build
       run: |
-           ls
            lcov --directory . --capture --output-file coverage.info # capture coverage info
            lcov --remove coverage.info '/usr/*' '*single_include*'  --output-file coverage.info # filter out system
            lcov --list coverage.info #debug info
@@ -112,11 +112,12 @@ jobs:
     runs-on: ubuntu-20.04
 
     steps:
+    - uses: actions/checkout@v2
+
     - name: Install Dependencies
       run: sudo apt-get -y install clang-format
 
     - name: Test
       working-directory: ${{github.workspace}}
       run: |
-         ls
          ./tools/check_style.sh 
