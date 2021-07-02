@@ -25,7 +25,7 @@ jobs:
            cmake -B ${{github.workspace}}/build 
            -DCMAKE_BUILD_TYPE=Release
            -DCMAKE_CXX_COMPILER=clang++-11
-           -DCMAKE_CXX_FLAGS="-fPIC"
+           -DCMAKE_CXX_FLAGS="-fPIC -fopenmp=libomp"
            -DCMAKE_C_COMPILER=clang-11
            -DCMAKE_Fortran_COMPILER=gfortran
            -DPYTHON_EXECUTABLE=`which python`
