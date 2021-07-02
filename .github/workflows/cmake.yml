@@ -8,7 +8,7 @@ on:
 
 jobs:
   build1:
-    name:  Clang 12 Py3.8 Release
+    name:  Clang 11 Py3.8 Release
     # The CMake configure and build commands are platform agnostic and should work equally
     # well on Windows or Mac.  You can convert this to a matrix build if you need
     # cross-platform coverage.
@@ -22,7 +22,7 @@ jobs:
         python-version: '3.8'
 
     - name: Install Dependencies
-      run: sudo apt-get -y install libfftw3-dev clang-12 libomp-12-dev
+      run: sudo apt-get -y install libfftw3-dev clang-11 libomp-11-dev
 
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
@@ -30,8 +30,8 @@ jobs:
       run: >
            cmake -B ${{github.workspace}}/build 
            -DCMAKE_BUILD_TYPE=Release
-           -DCMAKE_CXX_COMPILER=clang++-12
-           -DCMAKE_C_COMPILER=clang-12
+           -DCMAKE_CXX_COMPILER=clang++-11
+           -DCMAKE_C_COMPILER=clang-11
            -DCMAKE_Fortran_COMPILER=gfortran
            -DPYTHON_EXECUTABLE=`which python`
 
