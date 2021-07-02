@@ -36,6 +36,7 @@ jobs:
            -DCMAKE_CXX_COMPILER=mpicxx
            -DCMAKE_C_COMPILER=mpicc
            -DCMAKE_Fortran_COMPILER=mpif90
+           -DPYTHON_EXECUTABLE=`which python`
 
     - name: Build
       # Build your program with the given configuration
