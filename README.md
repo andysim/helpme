@@ -1,5 +1,5 @@
 <p align="center">
-<a href="https://travis-ci.org/andysim/helpme"> <img src="https://travis-ci.org/andysim/helpme.svg?branch=master" /></a>
+<a href="https://github.com/andysim/helpme/actions"> <img src="https://github.com/andysim/helpme/actions/workflows/cmake.yml/badge.svg?branch=master" /></a>
 <a href="https://codecov.io/gh/andysim/helpme"> <img src="https://img.shields.io/codecov/c/github/andysim/helpme/master.svg" /></a>
 <a href="https://lgtm.com/projects/g/andysim/helpme/context:cpp"><img alt="Language grade: C/C++" src="https://img.shields.io/lgtm/grade/cpp/g/andysim/helpme.svg?logo=lgtm&logoWidth=18"/></a>
 <a href="https://lgtm.com/projects/g/andysim/helpme/context:python"><img alt="Language grade: Python" src="https://img.shields.io/lgtm/grade/python/g/andysim/helpme.svg?logo=lgtm&logoWidth=18"/></a>
