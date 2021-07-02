@@ -8,7 +8,7 @@ on:
 
 jobs:
   build1:
-    name:  Clang 11 Py3.8 Release
+    name:  Linux Clang 11 Py3.8 Release
     runs-on: ubuntu-20.04
 
     steps:
@@ -36,8 +36,9 @@ jobs:
       working-directory: ${{github.workspace}}/build
       run: ctest -VV -C ${{env.BUILD_TYPE}}
 
+
   build2:
-    name:  GCC 10 Py3.9 Release
+    name:  Linux GCC 10 Py3.9 Release
     runs-on: ubuntu-20.04
 
     steps:
@@ -65,8 +66,9 @@ jobs:
       working-directory: ${{github.workspace}}/build
       run: ctest -VV -C ${{env.BUILD_TYPE}}
 
+
   build3:
-    name:  OpenMPI Py3.7 Debug
+    name: Linux OpenMPI Py3.7 Debug
     runs-on: ubuntu-20.04
 
     steps:
@@ -76,7 +78,7 @@ jobs:
         python-version: '3.7'
 
     - name: Install Dependencies
-      run: sudo apt-get -y install libfftw3-dev openmpi-bin libopenmpi-dev clang-format
+      run: sudo apt-get -y install libfftw3-dev openmpi-bin libopenmpi-dev clang-format lcov
 
     - name: Configure CMake
       run: >
@@ -101,3 +103,16 @@ jobs:
            lcov --remove coverage.info '/usr/*' '*single_include*'  --output-file coverage.info # filter out system
            lcov --list coverage.info #debug info
            bash <(curl -s https://codecov.io/bash) || echo "Codecov did not collect coverage reports"
+
+
+  format check:
+    name:  clang-format check
+    runs-on: ubuntu-20.04
+
+    steps:
+    - name: Install Dependencies
+      run: sudo apt-get -y install clang-format
+
+    - name: Test
+      working-directory: ${{github.workspace}}
+      run: ./tools/check_style.sh 
