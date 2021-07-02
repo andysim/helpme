@@ -45,7 +45,6 @@ jobs:
       # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
       run: ctest -VV -C ${{env.BUILD_TYPE}}
 
-jobs:
   build2:
     name:  OpenMPI Py3.7 Debug
     # The CMake configure and build commands are platform agnostic and should work equally
