@@ -101,6 +101,7 @@ jobs:
     - name: Upload CodeCov
       working-directory: ${{github.workspace}}/build
       run: |
+           ls
            lcov --directory . --capture --output-file coverage.info # capture coverage info
            lcov --remove coverage.info '/usr/*' '*single_include*'  --output-file coverage.info # filter out system
            lcov --list coverage.info #debug info
