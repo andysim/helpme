@@ -17,7 +17,6 @@ const char* valstr = std::getenv("HELPME_TESTS_NTHREADS");
 int numThreads = valstr != NULL ? std::atoi(valstr) : 1;
 
 TEST_CASE("check that updates of kappa and unit cell parameters give the correct behavior.") {
-
     std::cout << "Num Threads: " << std::endl;
 
     constexpr double TOL = 1e-7;

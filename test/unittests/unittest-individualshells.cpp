@@ -17,7 +17,6 @@ const char* valstr = std::getenv("HELPME_TESTS_NTHREADS");
 int numThreads = valstr != NULL ? std::atoi(valstr) : 1;
 
 TEST_CASE("test reciprocal space computations using only partial shells") {
-
     std::cout << "Num Threads: " << numThreads << std::endl;
 
     // Setup parameters and reference values.

@@ -19,7 +19,6 @@ const char* valstr = std::getenv("HELPME_TESTS_NTHREADS");
 int numThreads = valstr != NULL ? std::atoi(valstr) : 1;
 
 TEST_CASE("make sure lattice vectors are created correctly.") {
-
     std::cout << "Num Threads: " << numThreads << std::endl;
 
     SECTION("double precision tests") {

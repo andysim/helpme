@@ -17,7 +17,7 @@
 #include "helpme.h"
 #endif
 
-int main(int argc, char *argv[]) {
+int main(int argc, char* argv[]) {
     const char* valstr = std::getenv("HELPME_TESTS_NTHREADS");
     int numThreads = valstr != NULL ? std::atoi(valstr) : 1;
 

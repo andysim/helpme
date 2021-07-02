@@ -16,7 +16,6 @@
 #include <iomanip>
 #include <iostream>
 
-
 const char* valstr = std::getenv("HELPME_TESTS_NTHREADS");
 int numThreads = valstr != NULL ? std::atoi(valstr) : 1;
 
@@ -66,7 +65,7 @@ TEST_CASE("check field by finite differences.") {
     const double DELTA = 0.00001;
     const double TOL = 1e-8;
     for (int atom = 0; atom < 6; ++atom) {
-        double *pC = coords[atom];
+        double* pC = coords[atom];
         for (int xyz = 0; xyz < 3; ++xyz) {
             // Numerically differentiate the potential w.r.t. geometry to get the field
             // Plus 1

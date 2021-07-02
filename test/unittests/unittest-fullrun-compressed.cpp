@@ -13,7 +13,7 @@
 #include <cstdlib>
 #include <iostream>
 
-const char* valstr = std::getenv("HELPME_TESTS_NTHREADS");
+const char *valstr = std::getenv("HELPME_TESTS_NTHREADS");
 int numThreads = valstr != NULL ? std::atoi(valstr) : 1;
 
 TEST_CASE("Full run with a small toy system, comprising two water molecules.") {

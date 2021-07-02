@@ -80,7 +80,6 @@ std::tuple<Real, helpme::Matrix<Real>, helpme::Matrix<Real>> coulombKappaSweepHe
 
 TEST_CASE(
     "check invariance of energy, force and virial, with respect to attenuation parameter, for a toy Coulomb system.") {
-
     std::cout << "Num Threads: " << numThreads << std::endl;
 
     SECTION("EFV routine tests") {
