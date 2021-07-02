@@ -16,6 +16,9 @@
 #include "print_results.h"
 
 int main(int argc, char *argv[]) {
+    char* valstr = getenv("HELPME_TESTS_NTHREADS");
+    int numThreads = valstr != NULL ? atoi(valstr) : 1;
+
     MPI_Init(NULL, NULL);
     int numNodes;
     MPI_Comm_size(MPI_COMM_WORLD, &numNodes);
@@ -48,9 +51,10 @@ int main(int argc, char *argv[]) {
     double virialS[6] = {0, 0, 0, 0, 0, 0};
 
     if (myRank == 0) {
+        printf("Num Threads: %d\n", numThreads);
         // Generate a serial benchmark first
         PMEInstance *pmeS = helpme_createD();
-        helpme_setupD(pmeS, 1, kappa, splineOrder, gridX, gridY, gridZ, scaleFactor, 1);
+        helpme_setupD(pmeS, 1, kappa, splineOrder, gridX, gridY, gridZ, scaleFactor, numThreads);
         helpme_set_lattice_vectorsD(pmeS, 20, 20, 20, 90, 90, 90, XAligned);
         // Compute the energy, forces, and virial
         energyS = helpme_compute_EFV_recD(pmeS, 6, 0, &charges[0], &coords[0], &forcesS[0], &virialS[0]);

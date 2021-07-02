@@ -18,6 +18,9 @@
 #endif
 
 int main(int argc, char *argv[]) {
+    const char* valstr = std::getenv("HELPME_TESTS_NTHREADS");
+    int numThreads = valstr != NULL ? std::atoi(valstr) : 1;
+
     MPI_Init(NULL, NULL);
     int numNodes;
     MPI_Comm_size(MPI_COMM_WORLD, &numNodes);
@@ -45,8 +48,9 @@ int main(int argc, char *argv[]) {
     // Generate a serial benchmark first
     double energyS;
     if (myRank == 0) {
+        std::cout << "Num Threads " << numThreads << std::endl;
         auto pme = std::unique_ptr<PMEInstanceD>(new PMEInstanceD());
-        pme->setup(1, kappa, splineOrder, gridX, gridY, gridZ, scaleFactor, 1);
+        pme->setup(1, kappa, splineOrder, gridX, gridY, gridZ, scaleFactor, numThreads);
         pme->setLatticeVectors(20, 20, 20, 90, 90, 90, PMEInstanceD::LatticeType::XAligned);
         energyS = pme->computeEFVRec(0, charges, coords, serialForces, serialVirial);
         std::cout << "Serial results:" << std::endl;

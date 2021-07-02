@@ -10,8 +10,16 @@
 #include "catch.hpp"
 
 #include "helpme.h"
+#include <cstdlib>
+#include <iostream>
+
+const char* valstr = std::getenv("HELPME_TESTS_NTHREADS");
+int numThreads = valstr != NULL ? std::atoi(valstr) : 1;
 
 TEST_CASE("Full run with a small toy system, comprising two water molecules.") {
+
+    std::cout << "Num Threads: " << numThreads << std::endl;
+
     // Setup parameters and reference values.
     helpme::Matrix<double> coordsD(
         {{2.0, 2.0, 2.0}, {2.5, 2.0, 3.0}, {1.5, 2.0, 3.0}, {0.0, 0.0, 0.0}, {0.5, 0.0, 1.0}, {-0.5, 0.0, 1.0}});
@@ -408,7 +416,7 @@ TEST_CASE("Full run with a small toy system, comprising two water molecules.") {
         double ccelec = 332.0716;
 
         auto pmeD = std::unique_ptr<PMEInstanceD>(new PMEInstanceD);
-        pmeD->setup(1, 0.3, splineOrder, nfftx, nffty, nfftz, ccelec, 1);
+        pmeD->setup(1, 0.3, splineOrder, nfftx, nffty, nfftz, ccelec, numThreads);
         pmeD->setLatticeVectors(20, 20, 20, 90, 90, 90, PMEInstanceD::LatticeType::XAligned);
         pmeD->filterAtomsAndBuildSplineCache(1, coordsD);
         auto realGrid = pmeD->spreadParameters(0, chargesD);
@@ -438,7 +446,7 @@ TEST_CASE("Full run with a small toy system, comprising two water molecules.") {
         double ccelec = 332.0716;
 
         auto pmeD = std::unique_ptr<PMEInstanceD>(new PMEInstanceD);
-        pmeD->setup(1, 0.3, splineOrder, nfftx, nffty, nfftz, ccelec, 1);
+        pmeD->setup(1, 0.3, splineOrder, nfftx, nffty, nfftz, ccelec, numThreads);
         pmeD->setLatticeVectors(20, 20, 20, 90, 90, 90, PMEInstanceD::LatticeType::XAligned);
         pmeD->filterAtomsAndBuildSplineCache(1, coordsD);
         auto realGrid = pmeD->spreadParameters(0, chargesD);
@@ -470,7 +478,7 @@ TEST_CASE("Full run with a small toy system, comprising two water molecules.") {
         float ccelec = 332.0716f;
 
         auto pmeF = std::unique_ptr<PMEInstanceF>(new PMEInstanceF);
-        pmeF->setup(1, 0.3, splineOrder, nfftx, nffty, nfftz, ccelec, 1);
+        pmeF->setup(1, 0.3, splineOrder, nfftx, nffty, nfftz, ccelec, numThreads);
         pmeF->setLatticeVectors(20, 20, 20, 90, 90, 90, PMEInstanceF::LatticeType::XAligned);
 
         pmeF->filterAtomsAndBuildSplineCache(1, coordsD.cast<float>());
@@ -501,7 +509,7 @@ TEST_CASE("Full run with a small toy system, comprising two water molecules.") {
         float ccelec = 332.0716f;
 
         auto pmeF = std::unique_ptr<PMEInstanceF>(new PMEInstanceF);
-        pmeF->setup(1, 0.3, splineOrder, nfftx, nffty, nfftz, ccelec, 1);
+        pmeF->setup(1, 0.3, splineOrder, nfftx, nffty, nfftz, ccelec, numThreads);
         pmeF->setLatticeVectors(20, 20, 20, 90, 90, 90, PMEInstanceF::LatticeType::XAligned);
         pmeF->filterAtomsAndBuildSplineCache(1, coordsD.cast<float>());
         auto realGrid = pmeF->spreadParameters(0, chargesD.cast<float>());

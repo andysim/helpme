@@ -10,8 +10,15 @@
 #include "catch.hpp"
 
 #include "helpme.h"
+#include <cstdlib>
+#include <iostream>
+
+const char* valstr = std::getenv("HELPME_TESTS_NTHREADS");
+int numThreads = valstr != NULL ? std::atoi(valstr) : 1;
 
 TEST_CASE("Full run with a small toy system, comprising two water molecules with multipoles.") {
+
+    std::cout << "Num Threads: " << numThreads << std::endl;
     // Setup parameters and reference values.
     helpme::Matrix<double> coordsD(
         {{2.0, 2.0, 2.0}, {2.5, 2.0, 3.0}, {1.5, 2.0, 3.0}, {0.0, 0.0, 0.0}, {0.5, 0.0, 1.0}, {-0.5, 0.0, 1.0}});
@@ -1737,7 +1744,7 @@ TEST_CASE("Full run with a small toy system, comprising two water molecules with
         double ccelec = 332.0716;
 
         auto pmeD = std::unique_ptr<PMEInstanceD>(new PMEInstanceD);
-        pmeD->setup(1, 0.3, splineOrder, nfftx, nffty, nfftz, ccelec, 1);
+        pmeD->setup(1, 0.3, splineOrder, nfftx, nffty, nfftz, ccelec, numThreads);
         pmeD->setLatticeVectors(A, B, C, 90, 90, 90, PMEInstanceD::LatticeType::XAligned);
 
         auto fractionalParams = helpme::cartesianTransform(4, false, scaledRecVecsD, paramsD);
@@ -1771,7 +1778,7 @@ TEST_CASE("Full run with a small toy system, comprising two water molecules with
         float ccelec = 332.0716f;
 
         auto pmeF = std::unique_ptr<PMEInstanceF>(new PMEInstanceF);
-        pmeF->setup(1, 0.3, splineOrder, nfftx, nffty, nfftz, ccelec, 1);
+        pmeF->setup(1, 0.3, splineOrder, nfftx, nffty, nfftz, ccelec, numThreads);
         pmeF->setLatticeVectors(A, B, C, 90, 90, 90, PMEInstanceF::LatticeType::XAligned);
 
         auto fractionalParams =

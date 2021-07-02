@@ -12,11 +12,18 @@
 #include <map>
 
 #include "helpme.h"
+#include <cstdlib>
 #include <iomanip>
+#include <iostream>
+
+const char* valstr = std::getenv("HELPME_TESTS_NTHREADS");
+int numThreads = valstr != NULL ? std::atoi(valstr) : 1;
 
 const double TOL = 1e-8;
 
 TEST_CASE("check small systems against reference values.") {
+    std::cout << "Num Threads: " << numThreads << std::endl;
+
     // The reference values here are taken from Table 1 of https://doi.org/10.1063/1.481216
     helpme::Matrix<double> coords({{-0.5, 0.0, 0.0}, {0.5, 0.0, 0.0}});
 
@@ -33,7 +40,7 @@ TEST_CASE("check small systems against reference values.") {
         helpme::Matrix<double> potential(2, 4);
         helpme::Matrix<double> charges({1.0, -1.0});
         helpme::PMEInstance<double> pme;
-        pme.setup(1, kappa, splineOrder, gridPts, gridPts, gridPts, 1.0, 1);
+        pme.setup(1, kappa, splineOrder, gridPts, gridPts, gridPts, 1.0, numThreads);
         pme.setLatticeVectors(10, 10, 10, 90, 90, 90, helpme::PMEInstance<double>::LatticeType::XAligned);
 
         // Potential
@@ -67,7 +74,7 @@ TEST_CASE("check small systems against reference values.") {
         helpme::Matrix<double> potential(2, 4);
         helpme::Matrix<double> dipoles({{0.0, 1.0, 0.0, 0.0}, {0.0, 1.0, 0.0, 0.0}});
         helpme::PMEInstance<double> pme;
-        pme.setup(1, kappa, splineOrder, gridPts, gridPts, gridPts, 1.0, 1);
+        pme.setup(1, kappa, splineOrder, gridPts, gridPts, gridPts, 1.0, numThreads);
         pme.setLatticeVectors(10, 10, 10, 90, 90, 90, helpme::PMEInstance<double>::LatticeType::XAligned);
 
         // Potential

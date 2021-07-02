@@ -12,9 +12,17 @@
 #include <map>
 
 #include "helpme.h"
+#include <cstdlib>
 #include <iomanip>
+#include <iostream>
+
+
+const char* valstr = std::getenv("HELPME_TESTS_NTHREADS");
+int numThreads = valstr != NULL ? std::atoi(valstr) : 1;
 
 TEST_CASE("check field by finite differences.") {
+    std::cout << "Num Threads: " << numThreads << std::endl;
+
     // N.B. This test only passes for cubic test cases right now.  It's possible
     // the discrepancy is in the h0 term; more investigation needed!
     helpme::Matrix<double> coords(
@@ -36,7 +44,7 @@ TEST_CASE("check field by finite differences.") {
     int gridPts = 64;
 
     helpme::PMEInstance<double> pme;
-    pme.setup(1, kappa, 8, gridPts, gridPts, gridPts, scaleFactor, 1);
+    pme.setup(1, kappa, 8, gridPts, gridPts, gridPts, scaleFactor, numThreads);
     pme.setLatticeVectors(25, 25, 25, 90, 90, 90, helpme::PMEInstance<double>::LatticeType::XAligned);
     helpme::Matrix<double> potential_an(6, 10);
     helpme::Matrix<double> potentialtmp(6, 1);

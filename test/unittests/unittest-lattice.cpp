@@ -9,14 +9,22 @@
 
 #include "catch.hpp"
 
+#include <cstdlib>
+#include <iostream>
 #include <map>
 
 #include "helpme.h"
 
+const char* valstr = std::getenv("HELPME_TESTS_NTHREADS");
+int numThreads = valstr != NULL ? std::atoi(valstr) : 1;
+
 TEST_CASE("make sure lattice vectors are created correctly.") {
+
+    std::cout << "Num Threads: " << numThreads << std::endl;
+
     SECTION("double precision tests") {
         auto pmeD = std::unique_ptr<PMEInstanceD>(new PMEInstanceD());
-        pmeD->setup(1, 0.3, 6, 64, 64, 64, 1.9, 1);
+        pmeD->setup(1, 0.3, 6, 64, 64, 64, 1.9, numThreads);
         pmeD->setLatticeVectors(20, 22, 25, 70, 85, 100, PMEInstanceD::LatticeType::XAligned);
     }
 
