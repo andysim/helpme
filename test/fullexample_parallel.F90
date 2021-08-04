@@ -84,7 +84,8 @@ program testfortran
         call get_command_argument(4, tmp)
         read(tmp, *) numThreads
     else
-        write(*,*) "This test should be run with exactly 4 arguments describing the number of X,Y and Z nodes, and number of threads."
+        write(*,*) "This test should be run with exactly 4 arguments describing &
+                  &the number of X,Y and Z nodes, and number of threads."
         stop 1
     endif
 
