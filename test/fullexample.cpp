@@ -29,8 +29,7 @@ void printResults(std::string label, T e, const helpme::Matrix<T> &f, const help
 }
 
 int main(int argc, char *argv[]) {
-    const char *valstr = std::getenv("HELPME_TESTS_NTHREADS");
-    int numThreads = valstr != NULL ? std::atoi(valstr) : 1;
+    int numThreads = argc > 1 ? atoi(argv[1]) : 1;
     std::cout << "Num Threads " << numThreads << std::endl;
 
     /*

@@ -120,14 +120,12 @@ program testfortran
     real(c_float), target :: scaleFactorF, energyF, virialF(6,1), toleranceF
     real(c_double), target :: scaleFactorD, energyD, virialD(6,1), toleranceD
     real(c_double) expectedEnergy, expectedForces(3,6), expectedVirial(6,1), expectedPotential(4,6)
-    character(len=255) :: envStr
+    character(len=255) :: argstr
 
-    envStr = ''
-    call getenv("HELPME_TESTS_NTHREADS", envStr)
-    if (envStr .eq. '') then
-        numThreads = 1
-    else
-        read(envStr, *, iostat=stat)  numThreads
+    numThreads = 1
+    if (command_argument_count() .ge. 1) then
+        call get_command_argument(1, argstr)
+        read(argStr, *, iostat=stat)  numThreads
     endif
     write(*,*) "Num Threads:", numThreads
 

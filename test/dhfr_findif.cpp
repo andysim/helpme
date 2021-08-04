@@ -12,6 +12,7 @@
 #include <chrono>
 #include <stdlib.h>
 #include <getopt.h>
+#include <iostream>
 
 int main(int argc, char *argv[]) {
     // Defaults!
@@ -28,19 +29,23 @@ int main(int argc, char *argv[]) {
     int numNodesX;
     int numNodesY;
     int numNodesZ;
+    int numThreads;
     int maxNumAtomsToTest;
-    if (argc == 4) {
+    if (argc == 5) {
         numNodesX = ::atoi(argv[1]);
         numNodesY = ::atoi(argv[2]);
         numNodesZ = ::atoi(argv[3]);
+        numThreads = ::atoi(argv[4]);
         maxNumAtomsToTest = 0;
-    } else if (argc == 5) {
+    } else if (argc == 6) {
         numNodesX = ::atoi(argv[1]);
         numNodesY = ::atoi(argv[2]);
         numNodesZ = ::atoi(argv[3]);
-        maxNumAtomsToTest = ::atoi(argv[4]);
+        numThreads = ::atoi(argv[4]);
+        maxNumAtomsToTest = ::atoi(argv[5]);
     } else {
-        std::cout << "You must provide numNodesX numNodesY numNodesZ [maxNumAtoms] as arguments!" << std::endl;
+        std::cout << "You must provide numNodesX numNodesY numNodesZ numThreads [maxNumAtoms] as arguments!"
+                  << std::endl;
         exit(1);
     }
 
@@ -80,6 +85,7 @@ int main(int argc, char *argv[]) {
     double myBoxDimZ = boxDimZ / numNodesZ;
 
     if (myRank == 0) {
+        std::cout << "Threads per node: " << numThreads << std::endl;
         std::cout << "Algorithm: " << (doCompressed ? "Compressed" : "Conventional") << std::endl;
         std::cout << "Box Size: " << boxDimX << " x " << boxDimY << " x " << boxDimZ << std::endl;
         std::cout << "Number of Atoms " << nAtoms << std::endl;

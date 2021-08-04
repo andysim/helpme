@@ -18,8 +18,21 @@
 #endif
 
 int main(int argc, char* argv[]) {
-    const char* valstr = std::getenv("HELPME_TESTS_NTHREADS");
-    int numThreads = valstr != NULL ? std::atoi(valstr) : 1;
+    int nx;
+    int ny;
+    int nz;
+    int numThreads;
+    if (argc == 5) {
+        nx = atoi(argv[1]);
+        ny = atoi(argv[2]);
+        nz = atoi(argv[3]);
+        numThreads = atoi(argv[4]);
+    } else {
+        printf(
+            "This test should be run with exactly 4 arguments describing the number of X,Y and Z nodes and number of "
+            "threads.");
+        exit(1);
+    }
 
     MPI_Init(NULL, NULL);
     int numNodes;
@@ -61,59 +74,51 @@ int main(int argc, char* argv[]) {
 
     // Now the parallel version
     auto pmeP = std::unique_ptr<PMEInstanceD>(new PMEInstanceD());
-    if (argc == 4) {
-        int nx = ::atoi(argv[1]);
-        int ny = ::atoi(argv[2]);
-        int nz = ::atoi(argv[3]);
-        double parallelEnergy, nodeEnergy;
-        helpme::Matrix<double> nodeForces(6, 3);
-        helpme::Matrix<double> nodeVirial(6, 1);
-        helpme::Matrix<double> parallelForces(6, 3);
-        helpme::Matrix<double> parallelVirial(6, 1);
+    double parallelEnergy, nodeEnergy;
+    helpme::Matrix<double> nodeForces(6, 3);
+    helpme::Matrix<double> nodeVirial(6, 1);
+    helpme::Matrix<double> parallelForces(6, 3);
+    helpme::Matrix<double> parallelVirial(6, 1);
 
-        nodeForces.setZero();
-        nodeVirial.setZero();
-        pmeP->setupParallel(1, kappa, splineOrder, gridX, gridY, gridZ, scaleFactor, 1, MPI_COMM_WORLD,
-                            PMEInstanceD::NodeOrder::ZYX, nx, ny, nz);
-        pmeP->setLatticeVectors(20, 20, 20, 90, 90, 90, PMEInstanceD::LatticeType::XAligned);
-        nodeEnergy = pmeP->computeEFVRec(0, charges, coords, nodeForces, nodeVirial);
-        MPI_Reduce(&nodeEnergy, &parallelEnergy, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-        MPI_Reduce(nodeForces[0], parallelForces[0], 6 * 3, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-        MPI_Reduce(nodeVirial[0], parallelVirial[0], 6, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-        if (myRank == 0) {
-            std::cout << "Parallel results (nProcs = " << nx << ", " << ny << ", " << nz << "):" << std::endl;
-            std::cout << "Total rec energy " << parallelEnergy << std::endl;
-            std::cout << "Total forces " << std::endl << parallelForces << std::endl;
-            std::cout << "Total virial " << std::endl << parallelVirial << std::endl;
+    nodeForces.setZero();
+    nodeVirial.setZero();
+    pmeP->setupParallel(1, kappa, splineOrder, gridX, gridY, gridZ, scaleFactor, 1, MPI_COMM_WORLD,
+                        PMEInstanceD::NodeOrder::ZYX, nx, ny, nz);
+    pmeP->setLatticeVectors(20, 20, 20, 90, 90, 90, PMEInstanceD::LatticeType::XAligned);
+    nodeEnergy = pmeP->computeEFVRec(0, charges, coords, nodeForces, nodeVirial);
+    MPI_Reduce(&nodeEnergy, &parallelEnergy, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(nodeForces[0], parallelForces[0], 6 * 3, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(nodeVirial[0], parallelVirial[0], 6, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+    if (myRank == 0) {
+        std::cout << "Parallel results (nProcs = " << nx << ", " << ny << ", " << nz << "):" << std::endl;
+        std::cout << "Total rec energy " << parallelEnergy << std::endl;
+        std::cout << "Total forces " << std::endl << parallelForces << std::endl;
+        std::cout << "Total virial " << std::endl << parallelVirial << std::endl;
 
-            assert((std::abs(energyS - parallelEnergy) < tolerance));
-            assert((serialForces.almostEquals(parallelForces, tolerance)));
-            assert((serialVirial.almostEquals(parallelVirial, tolerance)));
-        }
-        // Now the compressed version
-        nodeForces.setZero();
-        nodeVirial.setZero();
-        pmeP->setupCompressedParallel(1, kappa, splineOrder, gridX, gridY, gridZ, kMaxX, kMaxY, kMaxZ, scaleFactor, 1,
-                                      MPI_COMM_WORLD, PMEInstanceD::NodeOrder::ZYX, nx, ny, nz);
-        pmeP->setLatticeVectors(20, 20, 20, 90, 90, 90, PMEInstanceD::LatticeType::XAligned);
-        nodeEnergy = pmeP->computeEFVRec(0, charges, coords, nodeForces, nodeVirial);
-        MPI_Reduce(&nodeEnergy, &parallelEnergy, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-        MPI_Reduce(nodeForces[0], parallelForces[0], 6 * 3, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-        MPI_Reduce(nodeVirial[0], parallelVirial[0], 6, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-        if (myRank == 0) {
-            std::cout << std::endl << "Compressed" << std::endl;
-            std::cout << "Parallel results (nProcs = " << nx << ", " << ny << ", " << nz << "):" << std::endl;
-            std::cout << "Total rec energy " << parallelEnergy << std::endl;
-            std::cout << "Total forces " << std::endl << parallelForces << std::endl;
-            std::cout << "Total virial " << std::endl << parallelVirial << std::endl;
+        assert((std::abs(energyS - parallelEnergy) < tolerance));
+        assert((serialForces.almostEquals(parallelForces, tolerance)));
+        assert((serialVirial.almostEquals(parallelVirial, tolerance)));
+    }
+    // Now the compressed version
+    nodeForces.setZero();
+    nodeVirial.setZero();
+    pmeP->setupCompressedParallel(1, kappa, splineOrder, gridX, gridY, gridZ, kMaxX, kMaxY, kMaxZ, scaleFactor, 1,
+                                  MPI_COMM_WORLD, PMEInstanceD::NodeOrder::ZYX, nx, ny, nz);
+    pmeP->setLatticeVectors(20, 20, 20, 90, 90, 90, PMEInstanceD::LatticeType::XAligned);
+    nodeEnergy = pmeP->computeEFVRec(0, charges, coords, nodeForces, nodeVirial);
+    MPI_Reduce(&nodeEnergy, &parallelEnergy, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(nodeForces[0], parallelForces[0], 6 * 3, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(nodeVirial[0], parallelVirial[0], 6, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+    if (myRank == 0) {
+        std::cout << std::endl << "Compressed" << std::endl;
+        std::cout << "Parallel results (nProcs = " << nx << ", " << ny << ", " << nz << "):" << std::endl;
+        std::cout << "Total rec energy " << parallelEnergy << std::endl;
+        std::cout << "Total forces " << std::endl << parallelForces << std::endl;
+        std::cout << "Total virial " << std::endl << parallelVirial << std::endl;
 
-            assert((std::abs(energyS - parallelEnergy) < tolerance));
-            assert((serialForces.almostEquals(parallelForces, tolerance)));
-            assert((serialVirial.almostEquals(parallelVirial, tolerance)));
-        }
-    } else {
-        throw std::runtime_error(
-            "This test should be run with exactly 3 arguments describing the number of X,Y and Z nodes.");
+        assert((std::abs(energyS - parallelEnergy) < tolerance));
+        assert((serialForces.almostEquals(parallelForces, tolerance)));
+        assert((serialVirial.almostEquals(parallelVirial, tolerance)));
     }
     pmeP.reset();  // This ensures that the PME object cleans up its MPI data BEFORE MPI_Finalize is called;
 

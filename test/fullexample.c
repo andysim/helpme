@@ -16,9 +16,7 @@
 #include "print_results.h"
 
 int main(int argc, char *argv[]) {
-
-    char* valstr = getenv("HELPME_TESTS_NTHREADS");
-    int numThreads = valstr != NULL ? atoi(valstr) : 1;
+    int numThreads = argc > 1 ? atoi(argv[1]) : 1;
     printf("Num Threads: %d\n", numThreads);
 
     int atom;
