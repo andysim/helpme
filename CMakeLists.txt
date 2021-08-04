@@ -52,6 +52,7 @@ endif()
 # Build options
 #
 include(optionsTools)
+option_with_default(TEST_NTHREADS "Number of tests used in threaded tests, if OpenMP is used" 2)
 option_with_print(ENABLE_OPENMP "Enables OpenMP parallelization" ON)
 option_with_print(ENABLE_MPI "Enables MPI parallelization" ON)
 option_with_print(ENABLE_BLAS "Enables BLAS usage" ON)
@@ -156,8 +157,8 @@ endif()
 set(EXTERNAL_LIBRARIES ${BLAS_LIBRARIES} ${FFTW_LIBRARIES} ${cpplib})
 
 # Find Python
-set(Python_ADDITIONAL_VERSIONS 3.7 3.6 3.5)
-find_package(PythonLibsNew 2.7 REQUIRED)
+set(Python_ADDITIONAL_VERSIONS 3.9 3.8 3.7 3.6)
+find_package(PythonLibsNew 3.6 REQUIRED)
 message(STATUS "${Cyan}Found Python ${PYTHON_VERSION_MAJOR}.${PYTHON_VERSION_MINOR}${ColourReset}: ${PYTHON_EXECUTABLE} (found version ${PYTHON_VERSION_STRING})")
 set(Python_ENABLED ON) # For now, we just always assume this is on
 add_subdirectory(external/pybind11)
