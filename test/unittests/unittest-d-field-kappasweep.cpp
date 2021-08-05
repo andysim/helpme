@@ -16,8 +16,7 @@
 #include <iomanip>
 #include <iostream>
 
-const char* valstr = std::getenv("HELPME_TESTS_NTHREADS");
-int numThreads = valstr != NULL ? std::atoi(valstr) : 1;
+int numThreads = HELPME_TESTS_NTHREADS;
 
 const double DELTAR = 1e-4;
 const double SQRTPI = std::sqrt(std::acos(-1.0));

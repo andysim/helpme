@@ -88,7 +88,7 @@ foreach( name ${TARGETS_UNITTESTS_PARALLEL_TESTS} )
     add_executable( ${name} ${name}.cpp $<TARGET_OBJECTS:CatchMain> ${HEADER_DIR}/catch.hpp )
     set_target_properties(${name} PROPERTIES COMPILE_FLAGS "${MPI_CXX_COMPILE_FLAGS}")
     target_link_libraries( ${name} PRIVATE ${EXTERNAL_LIBRARIES} ${MPI_CXX_LIBRARIES})
-    target_compile_definitions(${name} PRIVATE "-DHAVE_MPI=1")
+    target_compile_definitions(${name} PRIVATE "-DHELPME_TESTS_NTHREADS=${TEST_NTHREADS}" "-DHAVE_MPI=1")
     target_include_directories(${name} PRIVATE "${MPI_CXX_INCLUDE_PATH}")
     add_test(NAME ${name}
              COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./${name} ${MPIEXEC_POSTFLAGS}
@@ -98,6 +98,7 @@ endforeach()
 foreach( name ${TARGETS_UNITTESTS_TESTS} )
     add_executable( ${name} ${name}.cpp $<TARGET_OBJECTS:CatchMain> ${HEADER_DIR}/catch.hpp )
     target_link_libraries( ${name} PRIVATE ${EXTERNAL_LIBRARIES})
+    target_compile_definitions(${name} PRIVATE "-DHELPME_TESTS_NTHREADS=${TEST_NTHREADS}")
     add_test(NAME ${name}
              COMMAND ${name} 
              WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/test/unittests)

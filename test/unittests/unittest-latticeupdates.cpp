@@ -13,8 +13,7 @@
 #include <cstdlib>
 #include <iostream>
 
-const char* valstr = std::getenv("HELPME_TESTS_NTHREADS");
-int numThreads = valstr != NULL ? std::atoi(valstr) : 1;
+int numThreads = HELPME_TESTS_NTHREADS;
 
 TEST_CASE("check that updates of kappa and unit cell parameters give the correct behavior.") {
     std::cout << "Num Threads: " << std::endl;

@@ -15,8 +15,7 @@
 
 #include "helpme.h"
 
-const char* valstr = std::getenv("HELPME_TESTS_NTHREADS");
-int numThreads = valstr != NULL ? std::atoi(valstr) : 1;
+int numThreads = HELPME_TESTS_NTHREADS;
 
 enum CalcType { E, EF, EFV };
 
