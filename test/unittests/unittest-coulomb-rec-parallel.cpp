@@ -9,10 +9,13 @@
 
 #include "catch.hpp"
 
+#include <iostream>
 #include <map>
 #include "mpihelper.h"
 #include "mpi_wrapper.h"
 #include "helpme.h"
+
+int numThreads = HELPME_TESTS_NTHREADS;
 
 enum CalcType { E, EF, EFV };
 
@@ -38,7 +41,7 @@ std::tuple<Real, helpme::Matrix<Real>, helpme::Matrix<Real>> runTest(int nx, int
 
     bool serialRun = nx == 1 && ny == 1 && nz == 1;
     if (serialRun) {
-        pme->setup(1, kappa, splineOrder, gridX, gridY, gridZ, scaleFactor, 1);
+        pme->setup(1, kappa, splineOrder, gridX, gridY, gridZ, scaleFactor, numThreads);
     } else {
         pme->setupParallel(1, kappa, splineOrder, gridX, gridY, gridZ, scaleFactor, 1, MPI_COMM_WORLD,
                            PMEInstanceR::NodeOrder::ZYX, nx, ny, nz);
@@ -74,6 +77,9 @@ std::tuple<Real, helpme::Matrix<Real>, helpme::Matrix<Real>> runTest(int nx, int
 
 TEST_CASE("check consistency between serial and parallel results, for a toy Coulomb system.") {
     MPIHelper mpi;
+    if (mpi.myRank_ == 0) {
+        std::cout << "Num Threads: " << numThreads << std::endl;
+    }
 
     SECTION("Double precision tests") {
         double TOL = 1e-8;

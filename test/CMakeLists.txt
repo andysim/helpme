@@ -78,28 +78,48 @@ if(HAVE_MPI AND NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
 endif()
 
 # DHFR finite difference test
+set(NUM_FINDIF 30)
+configure_file(data/dhfr_charges.txt . COPYONLY)
+configure_file(data/dhfr_coords.txt . COPYONLY)
+add_executable (DHFRFiniteDifference dhfr_findif.cpp)
+target_link_libraries(DHFRFiniteDifference ${EXTERNAL_LIBRARIES})
+add_test(NAME RunDHFRFiniteDifferenceTest COMMAND DHFRFiniteDifference 1 1 1 1 ${NUM_FINDIF})
 if(HAVE_MPI)
-    configure_file(data/dhfr_charges.txt . COPYONLY)
-    configure_file(data/dhfr_coords.txt . COPYONLY)
-    add_executable (DHFRFiniteDifference dhfr_findif.cpp)
-    target_link_libraries(DHFRFiniteDifference ${EXTERNAL_LIBRARIES})
-    set(NUM_FINDIF 30)
-    add_test(NAME RunDHFRFiniteDifferenceTest COMMAND DHFRFiniteDifference 1 1 1 ${NUM_FINDIF})
     add_test(NAME RunDHFRFiniteDifferenceTestX
              WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/test"
-             COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./DHFRFiniteDifference 2 1 1 ${NUM_FINDIF} ${MPIEXEC_POSTFLAGS})
+             COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./DHFRFiniteDifference 2 1 1 1 ${NUM_FINDIF} ${MPIEXEC_POSTFLAGS})
     add_test(NAME RunDHFRFiniteDifferenceTestY
              WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/test"
-             COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./DHFRFiniteDifference 1 2 1 ${NUM_FINDIF} ${MPIEXEC_POSTFLAGS})
+             COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./DHFRFiniteDifference 1 2 1 1 ${NUM_FINDIF} ${MPIEXEC_POSTFLAGS})
     add_test(NAME RunDHFRFiniteDifferenceTestZ
              WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/test"
-             COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./DHFRFiniteDifference 1 1 2 ${NUM_FINDIF} ${MPIEXEC_POSTFLAGS})
+             COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./DHFRFiniteDifference 1 1 2 1 ${NUM_FINDIF} ${MPIEXEC_POSTFLAGS})
+    if(OPENMP_FOUND)
+        add_test(NAME RunDHFRFiniteDifferenceTestXWithThreads
+                 WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/test"
+                 COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./DHFRFiniteDifference 2 1 1 ${TEST_NTHREADS} ${NUM_FINDIF} ${MPIEXEC_POSTFLAGS})
+        add_test(NAME RunDHFRFiniteDifferenceTestYWithThreads
+                 WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/test"
+                 COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./DHFRFiniteDifference 1 2 1 ${TEST_NTHREADS} ${NUM_FINDIF} ${MPIEXEC_POSTFLAGS})
+        add_test(NAME RunDHFRFiniteDifferenceTestZWithThreads
+                 WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/test"
+                 COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./DHFRFiniteDifference 1 1 2 ${TEST_NTHREADS} ${NUM_FINDIF} ${MPIEXEC_POSTFLAGS})
+    endif()
+else()
+    if(OPENMP_FOUND)
+        add_test(NAME RunDHFRFiniteDifferenceTestWithThreads
+                 WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/test"
+                 COMMAND ./DHFRFiniteDifference 1 1 1 ${TEST_NTHREADS} ${NUM_FINDIF})
+    endif()
 endif()
 
 # CXX example
 add_executable (RunCXXWrapper fullexample.cpp)
 target_link_libraries(RunCXXWrapper ${EXTERNAL_LIBRARIES})
 add_test(NAME CXXWrapperTest COMMAND RunCXXWrapper)
+if(OPENMP_FOUND)
+    add_test(NAME CXXWrapperTestWithThreads COMMAND RunCXXWrapper ${TEST_NTHREADS})
+endif()
 
 # CXX example using standalone header file
 add_executable (RunCXXWrapperStandalone fullexample.cpp)
@@ -107,6 +127,9 @@ add_dependencies(RunCXXWrapperStandalone SingleHeader)
 target_link_libraries(RunCXXWrapperStandalone ${EXTERNAL_LIBRARIES})
 target_compile_definitions(RunCXXWrapperStandalone PRIVATE "BUILD_STANDALONE=1")
 add_test(NAME CXXWrapperStandaloneTest COMMAND RunCXXWrapperStandalone)
+if(OPENMP_FOUND)
+    add_test(NAME CXXWrapperStandaloneTestWithThreads COMMAND RunCXXWrapperStandalone ${TEST_NTHREADS})
+endif()
 
 # CXX MPI
 if(HAVE_MPI)
@@ -114,22 +137,38 @@ if(HAVE_MPI)
     add_executable (RunCXXMPIWrapper fullexample_parallel.cpp)
     target_link_libraries(RunCXXMPIWrapper ${EXTERNAL_LIBRARIES})
     add_test(NAME CXXMPIWrapperTestX
-             COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./RunCXXMPIWrapper 2 1 1 ${MPIEXEC_POSTFLAGS})
+             COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./RunCXXMPIWrapper 2 1 1 1 ${MPIEXEC_POSTFLAGS})
     add_test(NAME CXXMPIWrapperTestY
-             COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./RunCXXMPIWrapper 1 2 1 ${MPIEXEC_POSTFLAGS})
+             COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./RunCXXMPIWrapper 1 2 1 1 ${MPIEXEC_POSTFLAGS})
     add_test(NAME CXXMPIWrapperTestZ
-             COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./RunCXXMPIWrapper 1 1 2 ${MPIEXEC_POSTFLAGS})
+             COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./RunCXXMPIWrapper 1 1 2 1 ${MPIEXEC_POSTFLAGS})
+    if(OPENMP_FOUND)
+        add_test(NAME CXXMPIWrapperTestXWithThreads
+                 COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./RunCXXMPIWrapper 2 1 1 ${TEST_NTHREADS} ${MPIEXEC_POSTFLAGS})
+        add_test(NAME CXXMPIWrapperTestYWithThreads
+                 COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./RunCXXMPIWrapper 1 2 1 ${TEST_NTHREADS} ${MPIEXEC_POSTFLAGS})
+        add_test(NAME CXXMPIWrapperTestZWithThreads
+                 COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./RunCXXMPIWrapper 1 1 2 ${TEST_NTHREADS} ${MPIEXEC_POSTFLAGS})
+    endif()
 
     # C example
     add_executable (RunCMPIWrapper fullexample_parallel.c)
     target_link_libraries(RunCMPIWrapper helpmestatic ${EXTERNAL_LIBRARIES})
     set_target_properties(RunCMPIWrapper PROPERTIES LINKER_LANGUAGE CXX)
     add_test(NAME CMPIWrapperTestX
-             COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./RunCMPIWrapper 2 1 1 ${MPIEXEC_POSTFLAGS})
+             COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./RunCMPIWrapper 2 1 1 1 ${MPIEXEC_POSTFLAGS})
     add_test(NAME CMPIWrapperTestY
-             COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./RunCMPIWrapper 1 2 1 ${MPIEXEC_POSTFLAGS})
+             COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./RunCMPIWrapper 1 2 1 1 ${MPIEXEC_POSTFLAGS})
     add_test(NAME CMPIWrapperTestZ
-             COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./RunCMPIWrapper 1 1 2 ${MPIEXEC_POSTFLAGS})
+             COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./RunCMPIWrapper 1 1 2 1 ${MPIEXEC_POSTFLAGS})
+    if(OPENMP_FOUND)
+        add_test(NAME CMPIWrapperTestXWithThreads
+                 COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./RunCMPIWrapper 2 1 1 ${TEST_NTHREADS} ${MPIEXEC_POSTFLAGS})
+        add_test(NAME CMPIWrapperTestYWithThreads
+                 COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./RunCMPIWrapper 1 2 1 ${TEST_NTHREADS} ${MPIEXEC_POSTFLAGS})
+        add_test(NAME CMPIWrapperTestZWithThreads
+                 COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./RunCMPIWrapper 1 1 2 ${TEST_NTHREADS} ${MPIEXEC_POSTFLAGS})
+    endif()
 
     # Fortran example
     if(Fortran_ENABLED)
@@ -138,11 +177,19 @@ if(HAVE_MPI)
         set_target_properties(RunFortranMPIWrapper PROPERTIES LINKER_LANGUAGE Fortran)
         target_link_libraries(RunFortranMPIWrapper helpmestatic ${cpplib} ${EXTERNAL_LIBRARIES})
         add_test(NAME FortranMPIWrapperTestX
-                 COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./RunFortranMPIWrapper 2 1 1 ${MPIEXEC_POSTFLAGS})
+                 COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./RunFortranMPIWrapper 2 1 1 1 ${MPIEXEC_POSTFLAGS})
         add_test(NAME FortranMPIWrapperTestY
-                 COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./RunFortranMPIWrapper 1 2 1 ${MPIEXEC_POSTFLAGS})
+                 COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./RunFortranMPIWrapper 1 2 1 1 ${MPIEXEC_POSTFLAGS})
         add_test(NAME FortranMPIWrapperTestZ
-                 COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./RunFortranMPIWrapper 1 1 2 ${MPIEXEC_POSTFLAGS})
+                 COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./RunFortranMPIWrapper 1 1 2 1 ${MPIEXEC_POSTFLAGS})
+        if(OPENMP_FOUND)
+            add_test(NAME FortranMPIWrapperTestXWithThreads
+                     COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./RunFortranMPIWrapper 2 1 1 ${TEST_NTHREADS} ${MPIEXEC_POSTFLAGS})
+            add_test(NAME FortranMPIWrapperTestYWithThreads
+                     COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./RunFortranMPIWrapper 1 2 1 ${TEST_NTHREADS} ${MPIEXEC_POSTFLAGS})
+            add_test(NAME FortranMPIWrapperTestZWithThreads
+                     COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./RunFortranMPIWrapper 1 1 2 ${TEST_NTHREADS} ${MPIEXEC_POSTFLAGS})
+        endif()
     endif()
 endif()
 
@@ -152,11 +199,14 @@ if(Fortran_ENABLED)
     target_link_libraries(RunFortranWrapper helpmestatic ${cpplib} ${EXTERNAL_LIBRARIES})
     set_target_properties(RunFortranWrapper PROPERTIES LINKER_LANGUAGE Fortran)
     add_test(NAME FortranWrapper COMMAND RunFortranWrapper)
+    if(OPENMP_FOUND)
+        add_test(NAME FortranWrapperTestWithThreads COMMAND RunFortranWrapper ${TEST_NTHREADS})
+    endif()
 endif()
 
 # Add python tests
 if(Python_ENABLED)
-    add_test(NAME PythonWrappers
+    add_test(NAME RunPythonWrapper
         COMMAND ${PYTHON_EXECUTABLE} setup.py test
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/../python
     )

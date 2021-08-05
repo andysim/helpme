@@ -16,9 +16,18 @@
 import io
 import os
 import re
+import sys
 
 includere = re.compile(r'\s*#\s*include\s*[<"](.*)[">]\s*')
 headerguardre = re.compile(r'\s*#((define)|(ifndef)) _HELPME_(.*)_H_')
+
+if len(sys.argv) > 1 and sys.argv[1] == '--check':
+    # Run a check from the top level directory
+    checkonly = True
+    relpath = "."
+else:
+    checkonly = False
+    relpath = ".."
 
 warning = u"""
 //
@@ -29,8 +38,8 @@ warning = u"""
 
 def canonicalize_include(name):
     """ Look to see if this include exists in the helPME source """
-    if os.path.isfile('../src/' + name):
-        return "../src/" + name
+    if os.path.isfile(f'{relpath}/src/' + name):
+        return f"src/{name}"
     else:
         return None
 
@@ -49,8 +58,8 @@ def cleanup_file(name):
 #
 # Make the partially inlined version of the header, which still needs Eigen
 #
-output_array = ["// original file: ../src/helpme.h\n\n"]
-output_array.extend(cleanup_file('../src/helpme.h'))
+output_array = ["// original file: src/helpme.h\n\n"]
+output_array.extend(cleanup_file(f'{relpath}/src/helpme.h'))
 
 offset = 0
 changes_made = True
@@ -63,22 +72,28 @@ while changes_made:
         if incmatch:
             helpme_filename = canonicalize_include(incmatch.group(1))
             if helpme_filename:
-                if helpme_filename in already_added:
+                helpme_file = f"{relpath}/{helpme_filename}"
+                if helpme_file in already_added:
                     # Just comment out this include; it's already been included
                     output_array[abs_line_number] = "// " + line
                 else:
                     # We need to include this header
-                    replacement_text = ["// original file: %s\n\n" % helpme_filename]
-                    replacement_text.extend(cleanup_file(helpme_filename))
+                    replacement_text = [f"// original file: {helpme_filename}\n\n"]
+                    replacement_text.extend(cleanup_file(helpme_file))
                     output_array[abs_line_number:abs_line_number+1] = replacement_text
-                    already_added.append(helpme_filename)
+                    already_added.append(helpme_file)
                 changes_made = True
                 offset = abs_line_number
                 break
 
 thistext = warning + '\n\n' + "".join(output_array)
-existingtext = "".join(io.open('../single_include/helpme_standalone.h', 'r', encoding="utf-8").readlines())
+existingtext = "".join(io.open(f'{relpath}/single_include/helpme_standalone.h', 'r', encoding="utf-8").readlines())
 
-if(thistext != existingtext):
-    with io.open('../single_include/helpme_standalone.h', 'w', encoding="utf-8") as fp:
+has_changed = thistext != existingtext
+
+if checkonly:
+    sys.exit(has_changed)
+
+if has_changed:
+    with io.open(f'{relpath}/single_include/helpme_standalone.h', 'w', encoding="utf-8") as fp:
         fp.write(thistext)

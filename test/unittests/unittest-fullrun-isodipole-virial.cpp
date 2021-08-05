@@ -10,8 +10,14 @@
 #include "catch.hpp"
 
 #include "helpme.h"
+#include <cstdlib>
+#include <iostream>
+
+int numThreads = HELPME_TESTS_NTHREADS;
 
 TEST_CASE("Full run with a small toy system, comprising two water molecules with multipoles.") {
+    std::cout << "Num Threads: " << numThreads << std::endl;
+
     short nfftx = 32;
     short nffty = 32;
     short nfftz = 32;
@@ -49,7 +55,7 @@ TEST_CASE("Full run with a small toy system, comprising two water molecules with
             double ccelec = 332.0637128;
 
             auto pmeD = std::unique_ptr<PMEInstanceD>(new PMEInstanceD);
-            pmeD->setup(1, 0.3, splineOrder, nfftx, nffty, nfftz, ccelec, 1);
+            pmeD->setup(1, 0.3, splineOrder, nfftx, nffty, nfftz, ccelec, numThreads);
             pmeD->setLatticeVectors(A, B, C, 90, 90, 90, PMEInstanceD::LatticeType::XAligned);
             double energy = pmeD->computeEFVRecIsotropicInducedDipoles(
                 0, paramsD, inducedDipolesD, PMEInstanceD::PolarizationType::Mutual, coordsD, forcesD, virialD);
@@ -66,7 +72,7 @@ TEST_CASE("Full run with a small toy system, comprising two water molecules with
             double ccelec = 332.0637128;
 
             auto pmeF = std::unique_ptr<PMEInstanceF>(new PMEInstanceF);
-            pmeF->setup(1, 0.3, splineOrder, nfftx, nffty, nfftz, ccelec, 1);
+            pmeF->setup(1, 0.3, splineOrder, nfftx, nffty, nfftz, ccelec, numThreads);
             pmeF->setLatticeVectors(A, B, C, 90, 90, 90, PMEInstanceF::LatticeType::XAligned);
             double energy = pmeF->computeEFVRecIsotropicInducedDipoles(
                 0, paramsD.cast<float>(), inducedDipolesD.cast<float>(), PMEInstanceF::PolarizationType::Mutual,
@@ -108,7 +114,7 @@ TEST_CASE("Full run with a small toy system, comprising two water molecules with
             double ccelec = 332.0637128;
 
             auto pmeD = std::unique_ptr<PMEInstanceD>(new PMEInstanceD);
-            pmeD->setup(1, 0.3, splineOrder, nfftx, nffty, nfftz, ccelec, 1);
+            pmeD->setup(1, 0.3, splineOrder, nfftx, nffty, nfftz, ccelec, numThreads);
             pmeD->setLatticeVectors(A, B, C, 75, 80, 85, PMEInstanceD::LatticeType::XAligned);
             double energy = pmeD->computeEFVRecIsotropicInducedDipoles(
                 0, paramsD, inducedDipolesD, PMEInstanceD::PolarizationType::Mutual, coordsD, forcesD, virialD);
@@ -125,7 +131,7 @@ TEST_CASE("Full run with a small toy system, comprising two water molecules with
             double ccelec = 332.0637128;
 
             auto pmeF = std::unique_ptr<PMEInstanceF>(new PMEInstanceF);
-            pmeF->setup(1, 0.3, splineOrder, nfftx, nffty, nfftz, ccelec, 1);
+            pmeF->setup(1, 0.3, splineOrder, nfftx, nffty, nfftz, ccelec, numThreads);
             pmeF->setLatticeVectors(A, B, C, 75, 80, 85, PMEInstanceF::LatticeType::XAligned);
             double energy = pmeF->computeEFVRecIsotropicInducedDipoles(
                 0, paramsD.cast<float>(), inducedDipolesD.cast<float>(), PMEInstanceF::PolarizationType::Mutual,

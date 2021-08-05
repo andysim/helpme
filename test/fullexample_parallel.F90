@@ -63,20 +63,35 @@ program testfortran
 
     type(c_ptr) :: pmeS, pmeP
     real(c_double) :: alpha
-    integer(c_int) :: rPower, splineOrder, aDim, bDim, cDim, angMom
+    integer(c_int) :: rPower, splineOrder, aDim, bDim, cDim, angMom, numThreads, stat
     integer(c_size_t) :: nAtoms
     real(c_double), allocatable, target :: coords(:,:), charges(:), forcesS(:,:), nodeForces(:,:), parallelForces(:,:)
     real(c_double) :: scaleFactor, energyS, nodeEnergy, parallelEnergy
     real(c_double), target :: virialS(6), parallelVirial(6), nodeVirial(6), tolerance
     character(len=20) :: tmp
+    character(len=255) :: argstr
 
     integer :: argc, error, numNodes, myRank, nx, ny, nz
+
+    argc = command_argument_count()
+    if(argc .eq. 4) then
+        call get_command_argument(1, tmp)
+        read(tmp, *) nx
+        call get_command_argument(2, tmp)
+        read(tmp, *) ny
+        call get_command_argument(3, tmp)
+        read(tmp, *) nz
+        call get_command_argument(4, tmp)
+        read(tmp, *) numThreads
+    else
+        write(*,*) "This test should be run with exactly 4 arguments describing &
+                  &the number of X,Y and Z nodes, and number of threads."
+        stop 1
+    endif
 
     call MPI_Init(error)
     call MPI_Comm_size(MPI_COMM_WORLD, numNodes, error)
     call MPI_Comm_rank(MPI_COMM_WORLD, myRank, error)
-
-    argc = command_argument_count()
 
     angMom = 0
     rPower = 1
@@ -105,9 +120,10 @@ program testfortran
     forcesS = 0d0
     virialS = 0d0
     if(myRank .eq. 0) then
+        write(*,*) "Num Threads:", numThreads
         ! Generate a serial benchmark first
         pmeS = helpme_createD()
-        call helpme_setupD(pmeS, rPower, alpha, splineOrder, aDim, bDim, cDim, scaleFactor, 1)
+        call helpme_setupD(pmeS, rPower, alpha, splineOrder, aDim, bDim, cDim, scaleFactor, numThreads)
         call helpme_set_lattice_vectorsD(pmeS, 20d0, 20d0, 20d0, 90d0, 90d0, 90d0, XAligned)
         energyS = helpme_compute_EFV_recD(pmeS, nAtoms, angMom, c_loc(charges), c_loc(coords),&
                                           c_loc(forcesS), c_loc(virialS))
@@ -117,58 +133,47 @@ program testfortran
 
     ! Now the parallel version
     pmeP = helpme_createD()
-    if(argc .eq. 3) then
-        call get_command_argument(1, tmp)
-        read(tmp, *) nx
-        call get_command_argument(2, tmp)
-        read(tmp, *) ny
-        call get_command_argument(3, tmp)
-        read(tmp, *) nz
-        nodeForces = 0d0
-        nodeVirial = 0d0
-        call helpme_setup_parallelD(pmeP, rPower, alpha, splineOrder, aDim, bDim, cDim, scaleFactor, 1,&
-                                    MPI_COMM_WORLD, ZYX, nx, ny, nz)
-        call helpme_set_lattice_vectorsD(pmeP, 20d0, 20d0, 20d0, 90d0, 90d0, 90d0, XAligned)
-        nodeEnergy = helpme_compute_EFV_recD(pmeP, nAtoms, angMom, c_loc(charges), c_loc(coords),&
-                                             c_loc(nodeForces), c_loc(nodeVirial))
-        call MPI_Reduce(nodeEnergy, parallelEnergy, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD, error)
-        call MPI_Reduce(nodeForces, parallelForces, 6 * 3, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD, error)
-        call MPI_Reduce(nodeVirial, parallelVirial, 6, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD, error)
-        if(myRank .eq. 0) then
-            call print_results_D(nAtoms, "Parallel Results:", parallelEnergy, parallelForces, parallelVirial)
-            call check_value_D(parallelEnergy, energyS, tolerance,&
-                              __FILE__, __LINE__)
-            call check_matrix_D(3, 6, parallelForces, forcesS, tolerance,&
-                              __FILE__, __LINE__)
-            call check_matrix_D(6, 1, parallelVirial, virialS, tolerance,&
-                              __FILE__, __LINE__)
-        endif
+    nodeForces = 0d0
+    nodeVirial = 0d0
+    call helpme_setup_parallelD(pmeP, rPower, alpha, splineOrder, aDim, bDim, cDim, scaleFactor, 1,&
+                                MPI_COMM_WORLD, ZYX, nx, ny, nz)
+    call helpme_set_lattice_vectorsD(pmeP, 20d0, 20d0, 20d0, 90d0, 90d0, 90d0, XAligned)
+    nodeEnergy = helpme_compute_EFV_recD(pmeP, nAtoms, angMom, c_loc(charges), c_loc(coords),&
+                                         c_loc(nodeForces), c_loc(nodeVirial))
+    call MPI_Reduce(nodeEnergy, parallelEnergy, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD, error)
+    call MPI_Reduce(nodeForces, parallelForces, 6 * 3, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD, error)
+    call MPI_Reduce(nodeVirial, parallelVirial, 6, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD, error)
+    if(myRank .eq. 0) then
+        call print_results_D(nAtoms, "Parallel Results:", parallelEnergy, parallelForces, parallelVirial)
+        call check_value_D(parallelEnergy, energyS, tolerance,&
+                          __FILE__, __LINE__)
+        call check_matrix_D(3, 6, parallelForces, forcesS, tolerance,&
+                          __FILE__, __LINE__)
+        call check_matrix_D(6, 1, parallelVirial, virialS, tolerance,&
+                          __FILE__, __LINE__)
+    endif
 
-        ! Now do the compressed version
-        nodeForces = 0d0
-        nodeVirial = 0d0
-        call helpme_setup_compressed_parallelD(pmeP, rPower, alpha, splineOrder, aDim, bDim, cDim, 9, 9, 9,&
-                                               scaleFactor, 1, MPI_COMM_WORLD, ZYX, nx, ny, nz)
-        call helpme_set_lattice_vectorsD(pmeP, 20d0, 20d0, 20d0, 90d0, 90d0, 90d0, XAligned)
-        nodeEnergy = helpme_compute_EFV_recD(pmeP, nAtoms, angMom, c_loc(charges), c_loc(coords),&
-                                             c_loc(nodeForces), c_loc(nodeVirial))
-        call MPI_Reduce(nodeEnergy, parallelEnergy, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD, error)
-        call MPI_Reduce(nodeForces, parallelForces, 6 * 3, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD, error)
-        call MPI_Reduce(nodeVirial, parallelVirial, 6, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD, error)
-        if(myRank .eq. 0) then
-            write(*,*)
-            write(*,*) "Compressed"
-            call print_results_D(nAtoms, "Parallel Results:", parallelEnergy, parallelForces, parallelVirial)
-            call check_value_D(parallelEnergy, energyS, tolerance,&
-                              __FILE__, __LINE__)
-            call check_matrix_D(3, 6, parallelForces, forcesS, tolerance,&
-                              __FILE__, __LINE__)
-            call check_matrix_D(6, 1, parallelVirial, virialS, tolerance,&
-                              __FILE__, __LINE__)
-        endif
-    else
-        write(*,*) "This test should be run with exactly 3 arguments describing the number of X,Y and Z nodes."
-        stop 1
+    ! Now do the compressed version
+    nodeForces = 0d0
+    nodeVirial = 0d0
+    call helpme_setup_compressed_parallelD(pmeP, rPower, alpha, splineOrder, aDim, bDim, cDim, 9, 9, 9,&
+                                           scaleFactor, 1, MPI_COMM_WORLD, ZYX, nx, ny, nz)
+    call helpme_set_lattice_vectorsD(pmeP, 20d0, 20d0, 20d0, 90d0, 90d0, 90d0, XAligned)
+    nodeEnergy = helpme_compute_EFV_recD(pmeP, nAtoms, angMom, c_loc(charges), c_loc(coords),&
+                                         c_loc(nodeForces), c_loc(nodeVirial))
+    call MPI_Reduce(nodeEnergy, parallelEnergy, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD, error)
+    call MPI_Reduce(nodeForces, parallelForces, 6 * 3, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD, error)
+    call MPI_Reduce(nodeVirial, parallelVirial, 6, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD, error)
+    if(myRank .eq. 0) then
+        write(*,*)
+        write(*,*) "Compressed"
+        call print_results_D(nAtoms, "Parallel Results:", parallelEnergy, parallelForces, parallelVirial)
+        call check_value_D(parallelEnergy, energyS, tolerance,&
+                          __FILE__, __LINE__)
+        call check_matrix_D(3, 6, parallelForces, forcesS, tolerance,&
+                          __FILE__, __LINE__)
+        call check_matrix_D(6, 1, parallelVirial, virialS, tolerance,&
+                          __FILE__, __LINE__)
     endif
     call helpme_destroyD(pmeP)
 

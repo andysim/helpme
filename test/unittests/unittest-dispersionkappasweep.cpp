@@ -9,9 +9,13 @@
 
 #include "catch.hpp"
 
+#include <cstdlib>
+#include <iostream>
 #include <map>
 
 #include "helpme.h"
+
+int numThreads = HELPME_TESTS_NTHREADS;
 
 enum CalcType { E, EF, EFV };
 
@@ -52,7 +56,7 @@ std::tuple<Real, helpme::Matrix<Real>, helpme::Matrix<Real>> dispersionKappaSwee
     auto excludedPairs = helpme::Matrix<short>(excludedList.data(), excludedList.size() / 2, 2);
     int gridPts = kappa < 0.4f ? 64 : 96;
     helpme::PMEInstance<Real> pme;
-    pme.setup(6, kappa, 8, gridPts, gridPts, gridPts, scaleFactor, 1);
+    pme.setup(6, kappa, 8, gridPts, gridPts, gridPts, scaleFactor, numThreads);
     pme.setLatticeVectors(20, 22, 25, 70, 85, 100, helpme::PMEInstance<Real>::LatticeType::XAligned);
 
     Real energy = 0;
@@ -75,6 +79,7 @@ std::tuple<Real, helpme::Matrix<Real>, helpme::Matrix<Real>> dispersionKappaSwee
 
 TEST_CASE(
     "check invariance of energy, force and virial, with respect to attenuation parameter, for a toy Coulomb system.") {
+    std::cout << "Num Threads: " << numThreads << std::endl;
     SECTION("EFV routine tests") {
         double TOL = 1e-8;
 

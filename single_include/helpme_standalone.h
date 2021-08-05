@@ -5,7 +5,7 @@
 //
 
 
-// original file: ../src/helpme.h
+// original file: src/helpme.h
 
 // BEGINLICENSE
 //
@@ -40,7 +40,7 @@
 #include <unistd.h>
 #include <vector>
 
-// original file: ../src/cartesiantransform.h
+// original file: src/cartesiantransform.h
 
 // BEGINLICENSE
 //
@@ -53,7 +53,7 @@
 #ifndef _HELPME_STANDALONE_CARTESIANTRANSFORM_H_
 #define _HELPME_STANDALONE_CARTESIANTRANSFORM_H_
 
-// original file: ../src/matrix.h
+// original file: src/matrix.h
 
 // BEGINLICENSE
 //
@@ -78,7 +78,7 @@
 #include <stdexcept>
 #include <tuple>
 
-// original file: ../src/lapack_wrapper.h
+// original file: src/lapack_wrapper.h
 
 // BEGINLICENSE
 //
@@ -316,7 +316,7 @@ void JacobiCyclicDiagonalization(Real *eigenvalues, Real *eigenvectors, const Re
 
 }  // Namespace helpme
 #endif  // Header guard
-// original file: ../src/string_utils.h
+// original file: src/string_utils.h
 
 // BEGINLICENSE
 //
@@ -391,7 +391,7 @@ std::string stringify(T *data, size_t size, size_t rowDim, int width = 14, int p
 }  // Namespace helpme
 
 #endif  // Header guard
-// original file: ../src/memory.h
+// original file: src/memory.h
 
 // BEGINLICENSE
 //
@@ -1175,7 +1175,7 @@ Matrix<Real> cartesianTransform(int maxAngularMomentum, bool transformOnlyThisSh
 
 }  // Namespace helpme
 #endif  // Header guard
-// original file: ../src/fftw_wrapper.h
+// original file: src/fftw_wrapper.h
 
 // BEGINLICENSE
 //
@@ -1421,7 +1421,7 @@ class FFTWWrapper {
 
 }  // Namespace helpme
 #endif  // Header guard
-// original file: ../src/gamma.h
+// original file: src/gamma.h
 
 // BEGINLICENSE
 //
@@ -1818,7 +1818,7 @@ Real nonTemplateGammaComputer(int twoS) {
 
 }  // Namespace helpme
 #endif  // Header guard
-// original file: ../src/gridsize.h
+// original file: src/gridsize.h
 
 // BEGINLICENSE
 //
@@ -1896,7 +1896,7 @@ int findGridSize(T inputSize, const std::initializer_list<T> &requiredDivisors) 
 #endif
 // #include "memory.h"
 #if HAVE_MPI == 1
-// original file: ../src/mpi_wrapper.h
+// original file: src/mpi_wrapper.h
 
 // BEGINLICENSE
 //
@@ -2096,7 +2096,7 @@ std::ostream& operator<<(std::ostream& os, const std::unique_ptr<MPIWrapper<Real
 }  // Namespace helpme
 #endif  // Header guard
 #endif
-// original file: ../src/powers.h
+// original file: src/powers.h
 
 // BEGINLICENSE
 //
@@ -2171,7 +2171,7 @@ struct raiseNormToIntegerPower {
 }  // Namespace helpme
 
 #endif  // Header guard
-// original file: ../src/splines.h
+// original file: src/splines.h
 
 // BEGINLICENSE
 //
@@ -2342,7 +2342,7 @@ class BSpline {
 }  // Namespace helpme
 #endif  // Header guard
 // #include "string_utils.h"
-// original file: ../src/tensor_utils.h
+// original file: src/tensor_utils.h
 
 // BEGINLICENSE
 //

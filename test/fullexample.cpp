@@ -18,6 +18,7 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include <cstdlib>
 
 template <typename T>
 void printResults(std::string label, T e, const helpme::Matrix<T> &f, const helpme::Matrix<T> &v) {
@@ -28,6 +29,9 @@ void printResults(std::string label, T e, const helpme::Matrix<T> &f, const help
 }
 
 int main(int argc, char *argv[]) {
+    int numThreads = argc > 1 ? atoi(argv[1]) : 1;
+    std::cout << "Num Threads " << numThreads << std::endl;
+
     /*
      * Some reference values for testing
      */
@@ -62,7 +66,7 @@ int main(int argc, char *argv[]) {
     helpme::Matrix<double> potentialAndGradientD(6, 4);
 
     auto pmeD = std::unique_ptr<PMEInstanceD>(new PMEInstanceD);
-    pmeD->setup(1, 0.3, 5, 32, 32, 32, scaleFactorD, 1);
+    pmeD->setup(1, 0.3, 5, 32, 32, 32, scaleFactorD, numThreads);
     pmeD->setLatticeVectors(20, 20, 20, 90, 90, 90, PMEInstanceD::LatticeType::XAligned);
     // Compute just the energy
     printResults("Before computeEFRec double", energyD, forcesD, virialD);
@@ -90,7 +94,7 @@ int main(int argc, char *argv[]) {
     virialD.setZero();
     potentialAndGradientD.setZero();
     std::cout << std::endl << "COMPRESSED" << std::endl << std::endl;
-    pmeD->setupCompressed(1, 0.3, 5, 32, 32, 32, 9, 9, 9, scaleFactorD, 1);
+    pmeD->setupCompressed(1, 0.3, 5, 32, 32, 32, 9, 9, 9, scaleFactorD, numThreads);
     pmeD->setLatticeVectors(20, 20, 20, 90, 90, 90, PMEInstanceD::LatticeType::XAligned);
     // Compute just the energy
     printResults("Before computeEFRec double", energyD, forcesD, virialD);
@@ -126,7 +130,7 @@ int main(int argc, char *argv[]) {
     helpme::Matrix<float> potentialAndGradientF(6, 4);
 
     auto pmeF = std::unique_ptr<PMEInstanceF>(new PMEInstanceF);
-    pmeF->setup(1, 0.3, 5, 32, 32, 32, scaleFactorF, 1);
+    pmeF->setup(1, 0.3, 5, 32, 32, 32, scaleFactorF, numThreads);
     pmeF->setLatticeVectors(20, 20, 20, 90, 90, 90, PMEInstanceF::LatticeType::XAligned);
     // Compute just the energy
     printResults("Before computeEFRec float", energyF, forcesF, virialF);
@@ -154,7 +158,7 @@ int main(int argc, char *argv[]) {
     virialF.setZero();
     potentialAndGradientF.setZero();
     std::cout << std::endl << "COMPRESSED" << std::endl << std::endl;
-    pmeF->setupCompressed(1, 0.3, 5, 32, 32, 32, 9, 9, 9, scaleFactorF, 1);
+    pmeF->setupCompressed(1, 0.3, 5, 32, 32, 32, 9, 9, 9, scaleFactorF, numThreads);
     pmeF->setLatticeVectors(20, 20, 20, 90, 90, 90, PMEInstanceF::LatticeType::XAligned);
     // Compute just the energy
     printResults("Before computeEFRec float", energyF, forcesF, virialF);

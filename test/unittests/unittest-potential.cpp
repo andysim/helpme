@@ -12,9 +12,14 @@
 #include <map>
 
 #include "helpme.h"
+#include <cstdlib>
 #include <iomanip>
+#include <iostream>
+
+int numThreads = HELPME_TESTS_NTHREADS;
 
 TEST_CASE("check potential (and derivatives thereof) code.") {
+    std::cout << "Num Threads: " << numThreads << std::endl;
     SECTION("potential tests up to field hessians") {
         helpme::Matrix<double> TinkerRef(
             {{1.24501399,  -0.73040252, -0.91060258, 7.74291464, 0.27864536, 0.17715017, 0.13197391,
@@ -43,7 +48,7 @@ TEST_CASE("check potential (and derivatives thereof) code.") {
         int gridPts = 64;
 
         helpme::PMEInstance<double> pme;
-        pme.setup(1, kappa, 6, gridPts, gridPts, gridPts, scaleFactor, 1);
+        pme.setup(1, kappa, 6, gridPts, gridPts, gridPts, scaleFactor, numThreads);
         pme.setLatticeVectors(20, 22, 25, 70, 85, 100, helpme::PMEInstance<double>::LatticeType::XAligned);
         double energy = pme.computeERec(0, charges, coords);
         helpme::Matrix<double> potential(6, 20);
@@ -69,7 +74,7 @@ TEST_CASE("check potential (and derivatives thereof) code.") {
         int gridPts = 64;
 
         helpme::PMEInstance<double> pme;
-        pme.setup(1, kappa, 6, gridPts, gridPts, gridPts, scaleFactor, 1);
+        pme.setup(1, kappa, 6, gridPts, gridPts, gridPts, scaleFactor, numThreads);
         pme.setLatticeVectors(20, 22, 25, 70, 85, 100, helpme::PMEInstance<double>::LatticeType::XAligned);
         double Eall = pme.computeEAll(pairs, empty, 0, charges, coords);
         helpme::Matrix<double> potential(6, 1);
@@ -96,8 +101,8 @@ TEST_CASE("check potential (and derivatives thereof) code.") {
         int gridPts = 96;
         // First, make sure the resulting potential is invariant to the attenuation parameter
         helpme::PMEInstance<double> pme3, pme4;
-        pme3.setup(1, 0.4, 8, gridPts, gridPts, gridPts, scaleFactor, 1);
-        pme4.setup(1, 0.5, 8, gridPts, gridPts, gridPts, scaleFactor, 1);
+        pme3.setup(1, 0.4, 8, gridPts, gridPts, gridPts, scaleFactor, numThreads);
+        pme4.setup(1, 0.5, 8, gridPts, gridPts, gridPts, scaleFactor, numThreads);
         pme3.setLatticeVectors(34, 33, 35, 80, 85, 100, helpme::PMEInstance<double>::LatticeType::XAligned);
         pme4.setLatticeVectors(34, 33, 35, 80, 85, 100, helpme::PMEInstance<double>::LatticeType::XAligned);
         helpme::Matrix<double> potential3(9, 1);
@@ -129,8 +134,8 @@ TEST_CASE("check potential (and derivatives thereof) code.") {
         int kMax = 25;
         // First, make sure the resulting potential is invariant to the attenuation parameter
         helpme::PMEInstance<double> pme3, pme4;
-        pme3.setupCompressed(1, 0.4, 8, gridPts, gridPts, gridPts, kMax, kMax, kMax, scaleFactor, 1);
-        pme4.setupCompressed(1, 0.5, 8, gridPts, gridPts, gridPts, kMax, kMax, kMax, scaleFactor, 1);
+        pme3.setupCompressed(1, 0.4, 8, gridPts, gridPts, gridPts, kMax, kMax, kMax, scaleFactor, numThreads);
+        pme4.setupCompressed(1, 0.5, 8, gridPts, gridPts, gridPts, kMax, kMax, kMax, scaleFactor, numThreads);
         pme3.setLatticeVectors(34, 33, 35, 90, 90, 90, helpme::PMEInstance<double>::LatticeType::XAligned);
         pme4.setLatticeVectors(34, 33, 35, 90, 90, 90, helpme::PMEInstance<double>::LatticeType::XAligned);
         helpme::Matrix<double> potential3(9, 1);

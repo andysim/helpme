@@ -10,8 +10,14 @@
 #include "catch.hpp"
 
 #include "helpme.h"
+#include <cstdlib>
+#include <iostream>
+
+int numThreads = HELPME_TESTS_NTHREADS;
 
 TEST_CASE("test reciprocal space computations using only partial shells") {
+    std::cout << "Num Threads: " << numThreads << std::endl;
+
     // Setup parameters and reference values.
     helpme::Matrix<double> coords(
         {{2.0, 2.0, 2.0}, {2.5, 2.0, 3.0}, {1.5, 2.0, 3.0}, {0.0, 0.0, 0.0}, {0.5, 0.0, 1.0}, {-0.5, 0.0, 1.0}});
@@ -41,14 +47,14 @@ TEST_CASE("test reciprocal space computations using only partial shells") {
 
         helpme::Matrix<double> refPotentialAndField(6, 4);
         auto refpme = std::unique_ptr<PMEInstanceD>(new PMEInstanceD);
-        refpme->setup(1, 0.3, splineOrder, nfftx, nffty, nfftz, ccelec, 1);
+        refpme->setup(1, 0.3, splineOrder, nfftx, nffty, nfftz, ccelec, numThreads);
         refpme->setLatticeVectors(A, B, C, 90, 90, 90, PMEInstanceD::LatticeType::XAligned);
         refpme->computePRec(1, zeroChargeAndDipole, coords, coords, 1, refPotentialAndField);
 
         SECTION("full potential and field from dipoles only") {
             helpme::Matrix<double> fullPotentialAndField(6, 4);
             auto pme = std::unique_ptr<PMEInstanceD>(new PMEInstanceD);
-            pme->setup(1, 0.3, splineOrder, nfftx, nffty, nfftz, ccelec, 1);
+            pme->setup(1, 0.3, splineOrder, nfftx, nffty, nfftz, ccelec, numThreads);
             pme->setLatticeVectors(A, B, C, 90, 90, 90, PMEInstanceD::LatticeType::XAligned);
             pme->computePRec(-1, dipolesOnly, coords, coords, 1, fullPotentialAndField);
             REQUIRE(fullPotentialAndField.almostEquals(refPotentialAndField, TOL));
@@ -57,7 +63,7 @@ TEST_CASE("test reciprocal space computations using only partial shells") {
         SECTION("field only from dipoles only") {
             helpme::Matrix<double> fieldOnly(6, 3);
             auto pme = std::unique_ptr<PMEInstanceD>(new PMEInstanceD);
-            pme->setup(1, 0.3, splineOrder, nfftx, nffty, nfftz, ccelec, 1);
+            pme->setup(1, 0.3, splineOrder, nfftx, nffty, nfftz, ccelec, numThreads);
             pme->setLatticeVectors(A, B, C, 90, 90, 90, PMEInstanceD::LatticeType::XAligned);
             pme->computePRec(-1, dipolesOnly, coords, coords, -1, fieldOnly);
             for (int atom = 0; atom < 6; ++atom) {
@@ -70,7 +76,7 @@ TEST_CASE("test reciprocal space computations using only partial shells") {
         SECTION("full potential and field from full parameters with zero charges") {
             helpme::Matrix<double> fullPotentialAndField(6, 4);
             auto pme = std::unique_ptr<PMEInstanceD>(new PMEInstanceD);
-            pme->setup(1, 0.3, splineOrder, nfftx, nffty, nfftz, ccelec, 1);
+            pme->setup(1, 0.3, splineOrder, nfftx, nffty, nfftz, ccelec, numThreads);
             pme->setLatticeVectors(A, B, C, 90, 90, 90, PMEInstanceD::LatticeType::XAligned);
             pme->computePRec(1, zeroChargeAndDipole, coords, coords, 1, fullPotentialAndField);
             REQUIRE(fullPotentialAndField.almostEquals(refPotentialAndField, TOL));

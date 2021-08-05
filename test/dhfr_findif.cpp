@@ -12,6 +12,7 @@
 #include <chrono>
 #include <stdlib.h>
 #include <getopt.h>
+#include <iostream>
 
 int main(int argc, char *argv[]) {
     // Defaults!
@@ -28,27 +29,33 @@ int main(int argc, char *argv[]) {
     int numNodesX;
     int numNodesY;
     int numNodesZ;
+    int numThreads;
     int maxNumAtomsToTest;
-    if (argc == 4) {
+    if (argc == 5) {
         numNodesX = ::atoi(argv[1]);
         numNodesY = ::atoi(argv[2]);
         numNodesZ = ::atoi(argv[3]);
+        numThreads = ::atoi(argv[4]);
         maxNumAtomsToTest = 0;
-    } else if (argc == 5) {
+    } else if (argc == 6) {
         numNodesX = ::atoi(argv[1]);
         numNodesY = ::atoi(argv[2]);
         numNodesZ = ::atoi(argv[3]);
-        maxNumAtomsToTest = ::atoi(argv[4]);
+        numThreads = ::atoi(argv[4]);
+        maxNumAtomsToTest = ::atoi(argv[5]);
     } else {
-        std::cout << "You must provide numNodesX numNodesY numNodesZ [maxNumAtoms] as arguments!" << std::endl;
+        std::cout << "You must provide numNodesX numNodesY numNodesZ numThreads [maxNumAtoms] as arguments!"
+                  << std::endl;
         exit(1);
     }
 
+    int foundNumNodes = 1;
+    int myRank = 0;
+#if HAVE_MPI == 1
     MPI_Init(NULL, NULL);
-    int foundNumNodes;
     MPI_Comm_size(MPI_COMM_WORLD, &foundNumNodes);
-    int myRank;
     MPI_Comm_rank(MPI_COMM_WORLD, &myRank);
+#endif
 
     bool doCompressed = (2 * maxKA + 1 < gridA) && (2 * maxKB + 1 < gridB) && (2 * maxKC + 1 < gridC);
 
@@ -80,6 +87,7 @@ int main(int argc, char *argv[]) {
     double myBoxDimZ = boxDimZ / numNodesZ;
 
     if (myRank == 0) {
+        std::cout << "Threads per node: " << numThreads << std::endl;
         std::cout << "Algorithm: " << (doCompressed ? "Compressed" : "Conventional") << std::endl;
         std::cout << "Box Size: " << boxDimX << " x " << boxDimY << " x " << boxDimZ << std::endl;
         std::cout << "Number of Atoms " << nAtoms << std::endl;
@@ -98,14 +106,24 @@ int main(int argc, char *argv[]) {
     helpme::Matrix<double> virial(6, 1);
     helpme::Matrix<double> nodeVirial(6, 1);
     double nodeEnergy, energy;
-    pme->setupCompressedParallel(rPower, beta, splineOrder, gridA, gridB, gridC, maxKA, maxKB, maxKC, scaleFactor, 0,
-                                 MPI_COMM_WORLD, PMEInstanceD::NodeOrder::ZYX, numNodesX, numNodesY, numNodesZ);
+    if (numNodes == 1) {
+        pme->setupCompressed(rPower, beta, splineOrder, gridA, gridB, gridC, maxKA, maxKB, maxKC, scaleFactor,
+                             numThreads);
+    } else {
+#if HAVE_MPI == 1
+        pme->setupCompressedParallel(rPower, beta, splineOrder, gridA, gridB, gridC, maxKA, maxKB, maxKC, scaleFactor,
+                                     numThreads, MPI_COMM_WORLD, PMEInstanceD::NodeOrder::ZYX, numNodesX, numNodesY,
+                                     numNodesZ);
+#endif
+    }
     pme->setLatticeVectors(boxDimX, boxDimY, boxDimZ, 90, 90, 90, PMEInstanceD::LatticeType::XAligned);
     nodeEnergy = pme->computeEFVRec(0, paramsD, coordsD, nodeForces, nodeVirial);
 
+#if HAVE_MPI == 1
     MPI_Allreduce(&nodeEnergy, &energy, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     MPI_Allreduce(nodeForces[0], forces[0], nAtoms * 3, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     MPI_Allreduce(nodeVirial[0], virial[0], 6, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+#endif
     if (myRank == 0) {
         std::cout << "Energy: " << std::setw(16) << std::setprecision(12) << energy << std::endl;
         std::cout << "Virial:" << std::endl << virial << std::endl;
@@ -119,7 +137,9 @@ int main(int argc, char *argv[]) {
         for (int n = 0; n < nTerms; ++n) atomList[n] = n;
         std::random_shuffle(atomList.begin(), atomList.end());
     }
+#if HAVE_MPI == 1
     MPI_Bcast(atomList.data(), nTerms, MPI_INT, 0, MPI_COMM_WORLD);
+#endif
 
     helpme::Matrix<double> findifForces(nTerms, 3);
     helpme::Matrix<double> forceErrors(nTerms, 3);
@@ -137,10 +157,13 @@ int main(int argc, char *argv[]) {
             nodeMaxError = std::max(nodeMaxError, std::abs(findifForces[n][xyz] - forces[atom][xyz]));
         }
     }
-
-    MPI_Allreduce(findifForces[0], forceErrors[0], nTerms * 3, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+#if HAVE_MPI == 1
     double maxError = 0;
+    MPI_Allreduce(findifForces[0], forceErrors[0], nTerms * 3, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     MPI_Allreduce(&nodeMaxError, &maxError, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+#else
+    double maxError = nodeMaxError;
+#endif
     if (myRank == 0) {
         for (int n = 0; n < nTerms; ++n) {
             int atom = atomList[n];
@@ -153,6 +176,7 @@ int main(int argc, char *argv[]) {
     }
 
     pme.reset();
-
+#if HAVE_MPI == 1
     MPI_Finalize();
+#endif
 }

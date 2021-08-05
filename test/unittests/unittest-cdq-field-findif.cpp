@@ -12,9 +12,15 @@
 #include <map>
 
 #include "helpme.h"
+#include <cstdlib>
 #include <iomanip>
+#include <iostream>
+
+int numThreads = HELPME_TESTS_NTHREADS;
 
 TEST_CASE("check field by finite differences.") {
+    std::cout << "Num Threads: " << numThreads << std::endl;
+
     // N.B. This test only passes for cubic test cases right now.  It's possible
     // the discrepancy is in the h0 term; more investigation needed!
     helpme::Matrix<double> coords(
@@ -36,7 +42,7 @@ TEST_CASE("check field by finite differences.") {
     int gridPts = 64;
 
     helpme::PMEInstance<double> pme;
-    pme.setup(1, kappa, 8, gridPts, gridPts, gridPts, scaleFactor, 1);
+    pme.setup(1, kappa, 8, gridPts, gridPts, gridPts, scaleFactor, numThreads);
     pme.setLatticeVectors(25, 25, 25, 90, 90, 90, helpme::PMEInstance<double>::LatticeType::XAligned);
     helpme::Matrix<double> potential_an(6, 10);
     helpme::Matrix<double> potentialtmp(6, 1);
@@ -58,7 +64,7 @@ TEST_CASE("check field by finite differences.") {
     const double DELTA = 0.00001;
     const double TOL = 1e-8;
     for (int atom = 0; atom < 6; ++atom) {
-        double *pC = coords[atom];
+        double* pC = coords[atom];
         for (int xyz = 0; xyz < 3; ++xyz) {
             // Numerically differentiate the potential w.r.t. geometry to get the field
             // Plus 1

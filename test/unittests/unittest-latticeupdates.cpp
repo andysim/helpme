@@ -10,8 +10,14 @@
 #include "catch.hpp"
 
 #include "helpme.h"
+#include <cstdlib>
+#include <iostream>
+
+int numThreads = HELPME_TESTS_NTHREADS;
 
 TEST_CASE("check that updates of kappa and unit cell parameters give the correct behavior.") {
+    std::cout << "Num Threads: " << std::endl;
+
     constexpr double TOL = 1e-7;
     double ccelec = 332.0716;
 
@@ -96,7 +102,7 @@ TEST_CASE("check that updates of kappa and unit cell parameters give the correct
         helpme::Matrix<double> virial(1, 6);
 
         auto pme = std::unique_ptr<PMEInstanceD>(new PMEInstanceD);
-        pme->setup(1, 0.3, splineOrder, nfftx, nffty, nfftz, ccelec, 1);
+        pme->setup(1, 0.3, splineOrder, nfftx, nffty, nfftz, ccelec, numThreads);
 
         // Start with random setup
         forces.setZero();
@@ -137,7 +143,7 @@ TEST_CASE("check that updates of kappa and unit cell parameters give the correct
         // Same, but new kappa value
         forces.setZero();
         virial.setZero();
-        pme->setup(1, 0.32, splineOrder, nfftx, nffty, nfftz, ccelec, 1);
+        pme->setup(1, 0.32, splineOrder, nfftx, nffty, nfftz, ccelec, numThreads);
         energy = pme->computeEFVRec(0, charges, coords, forces, virial);
         REQUIRE(energy == Approx(refEnergy3).margin(TOL));
         REQUIRE(forces.almostEquals(refForces3));
@@ -146,7 +152,7 @@ TEST_CASE("check that updates of kappa and unit cell parameters give the correct
         // Adjust the grid slightly
         forces.setZero();
         virial.setZero();
-        pme->setup(1, 0.32, splineOrder, nfftx, nffty + 4, nfftz, ccelec, 1);
+        pme->setup(1, 0.32, splineOrder, nfftx, nffty + 4, nfftz, ccelec, numThreads);
         energy = pme->computeEFVRec(0, charges, coords, forces, virial);
         REQUIRE(energy == Approx(refEnergy4).margin(TOL));
         REQUIRE(forces.almostEquals(refForces4));
@@ -155,7 +161,7 @@ TEST_CASE("check that updates of kappa and unit cell parameters give the correct
         // Adjust the scale factor slightly
         forces.setZero();
         virial.setZero();
-        pme->setup(1, 0.32, splineOrder, nfftx, nffty + 4, nfftz, 1.1 * ccelec, 1);
+        pme->setup(1, 0.32, splineOrder, nfftx, nffty + 4, nfftz, 1.1 * ccelec, numThreads);
         energy = pme->computeEFVRec(0, charges, coords, forces, virial);
         REQUIRE(energy == Approx(refEnergy5).margin(TOL));
         REQUIRE(forces.almostEquals(refForces5));
@@ -164,7 +170,7 @@ TEST_CASE("check that updates of kappa and unit cell parameters give the correct
         // Adjust the scale factor slightly
         forces.setZero();
         virial.setZero();
-        pme->setup(1, 0.32, splineOrder + 1, nfftx, nffty + 4, nfftz, 1.1 * ccelec, 1);
+        pme->setup(1, 0.32, splineOrder + 1, nfftx, nffty + 4, nfftz, 1.1 * ccelec, numThreads);
         energy = pme->computeEFVRec(0, charges, coords, forces, virial);
         REQUIRE(energy == Approx(refEnergy6).margin(TOL));
         REQUIRE(forces.almostEquals(refForces6));
@@ -173,7 +179,7 @@ TEST_CASE("check that updates of kappa and unit cell parameters give the correct
         // Change the physics from coulomb to some weird disperion
         forces.setZero();
         virial.setZero();
-        pme->setup(6, 0.32, splineOrder + 1, nfftx, nffty + 4, nfftz, 1.1 * ccelec, 1);
+        pme->setup(6, 0.32, splineOrder + 1, nfftx, nffty + 4, nfftz, 1.1 * ccelec, numThreads);
         energy = pme->computeEFVRec(0, charges, coords, forces, virial);
         REQUIRE(energy == Approx(refEnergy7).margin(TOL));
         REQUIRE(forces.almostEquals(refForces7));
@@ -185,7 +191,7 @@ TEST_CASE("check that updates of kappa and unit cell parameters give the correct
         helpme::Matrix<double> forces(6, 3);
 
         auto pme = std::unique_ptr<PMEInstanceD>(new PMEInstanceD);
-        pme->setup(1, 0.3, splineOrder, nfftx, nffty, nfftz, ccelec, 1);
+        pme->setup(1, 0.3, splineOrder, nfftx, nffty, nfftz, ccelec, numThreads);
 
         // Start with random setup
         forces.setZero();
@@ -217,34 +223,34 @@ TEST_CASE("check that updates of kappa and unit cell parameters give the correct
 
         // Same, but new kappa value
         forces.setZero();
-        pme->setup(1, 0.32, splineOrder, nfftx, nffty, nfftz, ccelec, 1);
+        pme->setup(1, 0.32, splineOrder, nfftx, nffty, nfftz, ccelec, numThreads);
         energy = pme->computeEFRec(0, charges, coords, forces);
         REQUIRE(energy == Approx(refEnergy3).margin(TOL));
         REQUIRE(forces.almostEquals(refForces3));
         // Adjust the grid slightly
         forces.setZero();
-        pme->setup(1, 0.32, splineOrder, nfftx, nffty + 4, nfftz, ccelec, 1);
+        pme->setup(1, 0.32, splineOrder, nfftx, nffty + 4, nfftz, ccelec, numThreads);
         energy = pme->computeEFRec(0, charges, coords, forces);
         REQUIRE(energy == Approx(refEnergy4).margin(TOL));
         REQUIRE(forces.almostEquals(refForces4));
 
         // Adjust the scale factor slightly
         forces.setZero();
-        pme->setup(1, 0.32, splineOrder, nfftx, nffty + 4, nfftz, 1.1 * ccelec, 1);
+        pme->setup(1, 0.32, splineOrder, nfftx, nffty + 4, nfftz, 1.1 * ccelec, numThreads);
         energy = pme->computeEFRec(0, charges, coords, forces);
         REQUIRE(energy == Approx(refEnergy5).margin(TOL));
         REQUIRE(forces.almostEquals(refForces5));
 
         // Adjust the scale factor slightly
         forces.setZero();
-        pme->setup(1, 0.32, splineOrder + 1, nfftx, nffty + 4, nfftz, 1.1 * ccelec, 1);
+        pme->setup(1, 0.32, splineOrder + 1, nfftx, nffty + 4, nfftz, 1.1 * ccelec, numThreads);
         energy = pme->computeEFRec(0, charges, coords, forces);
         REQUIRE(energy == Approx(refEnergy6).margin(TOL));
         REQUIRE(forces.almostEquals(refForces6));
 
         // Change the physics from coulomb to some weird disperion
         forces.setZero();
-        pme->setup(6, 0.32, splineOrder + 1, nfftx, nffty + 4, nfftz, 1.1 * ccelec, 1);
+        pme->setup(6, 0.32, splineOrder + 1, nfftx, nffty + 4, nfftz, 1.1 * ccelec, numThreads);
         energy = pme->computeEFRec(0, charges, coords, forces);
         REQUIRE(energy == Approx(refEnergy7).margin(TOL));
         REQUIRE(forces.almostEquals(refForces7));
@@ -254,7 +260,7 @@ TEST_CASE("check that updates of kappa and unit cell parameters give the correct
         double energy;
 
         auto pme = std::unique_ptr<PMEInstanceD>(new PMEInstanceD);
-        pme->setup(1, 0.3, splineOrder, nfftx, nffty, nfftz, ccelec, 1);
+        pme->setup(1, 0.3, splineOrder, nfftx, nffty, nfftz, ccelec, numThreads);
 
         // Start with random setup
         pme->setLatticeVectors(21, 22, 20, 93, 92, 90, PMEInstanceD::LatticeType::XAligned);
@@ -277,27 +283,27 @@ TEST_CASE("check that updates of kappa and unit cell parameters give the correct
         REQUIRE(energy == Approx(refEnergy1).margin(TOL));
 
         // Same, but new kappa value
-        pme->setup(1, 0.32, splineOrder, nfftx, nffty, nfftz, ccelec, 1);
+        pme->setup(1, 0.32, splineOrder, nfftx, nffty, nfftz, ccelec, numThreads);
         energy = pme->computeERec(0, charges, coords);
         REQUIRE(energy == Approx(refEnergy3).margin(TOL));
 
         // Adjust the grid slightly
-        pme->setup(1, 0.32, splineOrder, nfftx, nffty + 4, nfftz, ccelec, 1);
+        pme->setup(1, 0.32, splineOrder, nfftx, nffty + 4, nfftz, ccelec, numThreads);
         energy = pme->computeERec(0, charges, coords);
         REQUIRE(energy == Approx(refEnergy4).margin(TOL));
 
         // Adjust the scale factor slightly
-        pme->setup(1, 0.32, splineOrder, nfftx, nffty + 4, nfftz, 1.1 * ccelec, 1);
+        pme->setup(1, 0.32, splineOrder, nfftx, nffty + 4, nfftz, 1.1 * ccelec, numThreads);
         energy = pme->computeERec(0, charges, coords);
         REQUIRE(energy == Approx(refEnergy5).margin(TOL));
 
         // Adjust the scale factor slightly
-        pme->setup(1, 0.32, splineOrder + 1, nfftx, nffty + 4, nfftz, 1.1 * ccelec, 1);
+        pme->setup(1, 0.32, splineOrder + 1, nfftx, nffty + 4, nfftz, 1.1 * ccelec, numThreads);
         energy = pme->computeERec(0, charges, coords);
         REQUIRE(energy == Approx(refEnergy6).margin(TOL));
 
         // Change the physics from coulomb to some weird disperion
-        pme->setup(6, 0.32, splineOrder + 1, nfftx, nffty + 4, nfftz, 1.1 * ccelec, 1);
+        pme->setup(6, 0.32, splineOrder + 1, nfftx, nffty + 4, nfftz, 1.1 * ccelec, numThreads);
         energy = pme->computeERec(0, charges, coords);
         REQUIRE(energy == Approx(refEnergy7).margin(TOL));
     }

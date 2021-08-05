@@ -33,7 +33,14 @@ tmpfile=$(mktemp)
 trap 'rm -f -- "$tmpfile"' INT TERM HUP EXIT
 shopt -s nullglob
 
-echo "Checking C++ file formatting..."
+
+if [[ "$1" == "--fix" ]]
+then
+    echo "Fixing C++ file formatting..."
+else
+    echo "Checking C++ file formatting..."
+fi
+
 returncode=0
 for dir in "${directories[@]}"
 do
@@ -45,19 +52,25 @@ do
             diff $file "$tmpfile" > /dev/null
             if [ $? -ne 0 ]
             then
-                returncode=1
-                echo
-                echo "****************************************************"
-                echo "Formatting problem detected.  Run"
-                echo
-                echo "${CLANGFORMAT} --style=file -i $file"
-                echo
-                echo "from the top directory, or apply the following diff:"
-                echo "----------------------------------------------------"
-                diff $file "$tmpfile"
-                echo "****************************************************"
-                echo
-                echo
+                if [[ "$1" == "--fix" ]]
+                then
+                    echo "${CLANGFORMAT} --style=file -i $file"
+                    ${CLANGFORMAT} --style=file -i $file
+                else
+                    returncode=1
+                    echo
+                    echo "****************************************************"
+                    echo "Formatting problem detected.  Run"
+                    echo
+                    echo "${CLANGFORMAT} --style=file -i $file"
+                    echo
+                    echo "from the top directory, or apply the following diff:"
+                    echo "----------------------------------------------------"
+                    diff $file "$tmpfile"
+                    echo "****************************************************"
+                    echo
+                    echo
+                fi
             fi
         done
     done
