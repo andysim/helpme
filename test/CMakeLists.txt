@@ -109,7 +109,7 @@ else()
     if(OPENMP_FOUND)
         add_test(NAME RunDHFRFiniteDifferenceTestWithThreads
                  WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/test"
-                 COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} ./DHFRFiniteDifference 1 1 2 ${TEST_NTHREADS} ${NUM_FINDIF} ${MPIEXEC_POSTFLAGS})
+                 COMMAND ./DHFRFiniteDifference 1 1 1 ${TEST_NTHREADS} ${NUM_FINDIF})
     endif()
 endif()
 
