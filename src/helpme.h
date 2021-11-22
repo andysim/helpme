@@ -1587,9 +1587,9 @@ class PMEInstance {
         gridAtomList_.resize(gridDimensionC_);
 
 // Classify atoms to their worker threads first, then construct splines for each thread
+#ifdef _OPENMP
 #pragma omp parallel num_threads(nThreads_)
         {
-#ifdef _OPENMP
             int threadID = omp_get_thread_num();
 #else
             int threadID = 0;
@@ -1630,8 +1630,9 @@ class PMEInstance {
                 }
             }
             numAtomsPerThread_[threadID] = myNumAtoms;
+#ifdef _OPENMP
         }
-
+#endif
         // We could intervene here and do some load balancing by inspecting the list.  Currently
         // the lazy approach of just assuming that the atoms are evenly distributed along c is used.
 
@@ -1650,9 +1651,9 @@ class PMEInstance {
             threadOffset[thread] = threadOffset[thread - 1] + numAtomsPerThread_[thread - 1];
         }
 
+#ifdef _OPENMP
 #pragma omp parallel num_threads(nThreads_)
         {
-#ifdef _OPENMP
             int threadID = omp_get_thread_num();
 #else
             int threadID = 0;
@@ -1685,12 +1686,13 @@ class PMEInstance {
                                                splineOrder_, splineDerivativeLevel);
                 }
             }
+#ifdef _OPENMP
         }
-
+#endif
 // Finally, find all of the splines that this thread will need to handle
+#ifdef _OPENMP
 #pragma omp parallel num_threads(nThreads_)
         {
-#ifdef _OPENMP
             int threadID = omp_get_thread_num();
 #else
             int threadID = 0;
@@ -1705,7 +1707,9 @@ class PMEInstance {
                 }
                 ++count;
             }
+#ifdef _OPENMP
         }
+#endif
     }
 
     /*!
