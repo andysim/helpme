@@ -1592,6 +1592,7 @@ class PMEInstance {
         {
             int threadID = omp_get_thread_num();
 #else
+        {
             int threadID = 0;
 #endif
             for (size_t row = threadID; row < gridDimensionC_; row += nThreads_) {
@@ -1630,9 +1631,7 @@ class PMEInstance {
                 }
             }
             numAtomsPerThread_[threadID] = myNumAtoms;
-#ifdef _OPENMP
         }
-#endif
         // We could intervene here and do some load balancing by inspecting the list.  Currently
         // the lazy approach of just assuming that the atoms are evenly distributed along c is used.
 
@@ -1656,6 +1655,7 @@ class PMEInstance {
         {
             int threadID = omp_get_thread_num();
 #else
+        {
             int threadID = 0;
 #endif
             size_t entry = threadOffset[threadID];
@@ -1686,15 +1686,14 @@ class PMEInstance {
                                                splineOrder_, splineDerivativeLevel);
                 }
             }
-#ifdef _OPENMP
         }
-#endif
 // Finally, find all of the splines that this thread will need to handle
 #ifdef _OPENMP
 #pragma omp parallel num_threads(nThreads_)
         {
             int threadID = omp_get_thread_num();
 #else
+        {
             int threadID = 0;
 #endif
             auto &mySplineList = splinesPerThread_[threadID];
@@ -1707,9 +1706,7 @@ class PMEInstance {
                 }
                 ++count;
             }
-#ifdef _OPENMP
         }
-#endif
     }
 
     /*!
@@ -1924,15 +1921,17 @@ class PMEInstance {
         helpme::vector<Complex> buffer(nThreads_ * scratchRowDim);
 
 // A transform, with instant sort to CAB ordering for each local block
+#ifdef _OPENMP
 #pragma omp parallel num_threads(nThreads_)
         {
-#ifdef _OPENMP
             int threadID = omp_get_thread_num();
 #else
             int threadID = 0;
 #endif
             auto scratch = &buffer[threadID * scratchRowDim];
+#ifdef _OPENMP
 #pragma omp for
+#endif
             for (int c = 0; c < subsetOfCAlongA_; ++c) {
                 for (int b = 0; b < myGridDimensionB_; ++b) {
                     Real *gridPtr = realGrid + c * myGridDimensionB_ * gridDimensionA_ + b * gridDimensionA_;
@@ -1945,7 +1944,9 @@ class PMEInstance {
                     }
                 }
             }
+#ifdef _OPENMP
         }
+#endif
 
 #if HAVE_MPI == 1
         // Communicate A back to blocks
