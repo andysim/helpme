@@ -1546,9 +1546,9 @@ class PMEInstance {
 
         int nComponents = nCartesian(parameterAngMom);
         size_t numBA = (size_t)myGridDimensionB_ * myGridDimensionA_;
+#ifdef _OPENMP
 #pragma omp parallel num_threads(nThreads_)
         {
-#ifdef _OPENMP
             int threadID = omp_get_thread_num();
 #else
             int threadID = 0;
@@ -1565,7 +1565,9 @@ class PMEInstance {
                 spreadParametersImpl(atom, realGrid, nComponents, splineA, splineB, splineC, fractionalParameters,
                                      threadID);
             }
+#ifdef _OPENMP
         }
+#endif
         return realGrid;
     }
 
