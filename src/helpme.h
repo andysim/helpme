@@ -2802,7 +2802,9 @@ class PMEInstance {
         // Direct space, using simple O(N^2) algorithm.  This can be improved using a nonbonded list if needed.
         Real cutoffSquared = sphericalCutoff * sphericalCutoff;
         Real kappaSquared = kappa_ * kappa_;
+#ifdef _OPENMP
 #pragma omp parallel for num_threads(nThreads_)
+#endif
         for (size_t i = 0; i < nAtoms; ++i) {
             const auto &coordsI = coordinates.row(i);
             Real *phiPtr = potential[i];
@@ -2834,7 +2836,9 @@ class PMEInstance {
         } else {
             std::logic_error("Unknown algorithm in helpme::computePAtAtomicSites");
         }
+#ifdef _OPENMP
 #pragma omp parallel for num_threads(nThreads_)
+#endif
         for (size_t atom = 0; atom < nAtoms; ++atom) {
             const auto &cacheEntry = splineCache_[atom];
             const auto &absAtom = cacheEntry.absoluteAtomNumber;
