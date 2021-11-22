@@ -817,7 +817,9 @@ class PMEInstance {
         // Exclude m=0 cell.
         int start = (nodeZero ? 1 : 0);
 // Writing the three nested loops in one allows for better load balancing in parallel.
+#ifdef _OPENMP
 #pragma omp parallel for reduction(+ : energy, Vxx, Vxy, Vyy, Vxz, Vyz, Vzz) num_threads(nThreads)
+#endif
         for (size_t yxz = start; yxz < nyxz; ++yxz) {
             size_t xz = yxz % nxz;
             short ky = yxz / nxz;
