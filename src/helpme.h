@@ -1551,6 +1551,7 @@ class PMEInstance {
         {
             int threadID = omp_get_thread_num();
 #else
+        {
             int threadID = 0;
 #endif
             for (size_t row = threadID; row < myGridDimensionC_; row += nThreads_) {
@@ -1565,9 +1566,7 @@ class PMEInstance {
                 spreadParametersImpl(atom, realGrid, nComponents, splineA, splineB, splineC, fractionalParameters,
                                      threadID);
             }
-#ifdef _OPENMP
         }
-#endif
         return realGrid;
     }
 
@@ -1926,6 +1925,7 @@ class PMEInstance {
         {
             int threadID = omp_get_thread_num();
 #else
+        {
             int threadID = 0;
 #endif
             auto scratch = &buffer[threadID * scratchRowDim];
@@ -1944,9 +1944,7 @@ class PMEInstance {
                     }
                 }
             }
-#ifdef _OPENMP
         }
-#endif
 
 #if HAVE_MPI == 1
         // Communicate A back to blocks
@@ -2414,14 +2412,15 @@ class PMEInstance {
                 }
             }
         }
+#ifdef _OPENMP
 #pragma omp parallel num_threads(nThreads_)
         {
-#ifdef _OPENMP
             int threadID = omp_get_thread_num();
+#pragma omp for
 #else
+        {
             int threadID = 0;
 #endif
-#pragma omp for
             for (size_t atom = 0; atom < nAtoms; ++atom) {
                 const auto &cacheEntry = splineCache_[atom];
                 const auto &absAtom = cacheEntry.absoluteAtomNumber;
