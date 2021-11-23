@@ -1608,7 +1608,7 @@ class PMEInstance {
                               atomCoords[2] * recVecs_(2, 2) - EPS;
                 cCoord -= floor(cCoord);
                 short cStartingGridPoint = gridDimensionC_ * cCoord;
-                size_t thisAtomsThread = cStartingGridPoint % nThreads_;
+                int thisAtomsThread = (int)cStartingGridPoint % nThreads_;
                 const auto &cGridIterator = gridIteratorC_[cStartingGridPoint];
                 if (cGridIterator.size() && thisAtomsThread == threadID) {
                     Real aCoord = atomCoords[0] * recVecs_(0, 0) + atomCoords[1] * recVecs_(1, 0) +
