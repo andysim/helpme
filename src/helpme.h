@@ -1037,6 +1037,7 @@ class PMEInstance {
         if (coordinates.nRows() != parameters.nRows())
             throw std::runtime_error(
                 "Inconsistent number of coordinates and parameters; there should be nAtoms of each.");
+        int n_param_cols = nCartesian(parameterAngMom) - cartesianOffset;
         if (n_param_cols < 0 ||
             parameters.nCols() != (size_t)n_param_cols)
             throw std::runtime_error(
