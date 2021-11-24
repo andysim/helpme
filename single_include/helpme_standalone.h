@@ -646,7 +646,7 @@ class Matrix {
     /*!
      * \brief Matrix Constructs an empty matrix.
      */
-    Matrix() : nRows_(0), nCols_(0) {}
+    Matrix() : nRows_(0), nCols_(0), data_(0) {}
 
     /*!
      * \brief Matrix Constructs a new matrix, allocating memory.
@@ -2875,7 +2875,7 @@ class PMEInstance {
             }
         }
 
-        Real *potentialGrid;
+        Real *potentialGrid = 0;
         if (algorithmType_ == AlgorithmType::PME) {
             auto gridAddress = forwardTransform(realGrid);
             if (virial.nRows() == 0 && virial.nCols() == 0) {
