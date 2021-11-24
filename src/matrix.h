@@ -575,7 +575,8 @@ class Matrix {
         unsortedEigenVectors.transposeInPlace();
 
         std::vector<std::pair<Real, const Real*>> eigenPairs;
-        for (size_t val = 0; val < nRows_; ++val) eigenPairs.push_back({eigenValues[val][0], unsortedEigenVectors[val]});
+        for (size_t val = 0; val < nRows_; ++val)
+            eigenPairs.push_back({eigenValues[val][0], unsortedEigenVectors[val]});
         std::sort(eigenPairs.begin(), eigenPairs.end());
         if (order == SortOrder::Descending) std::reverse(eigenPairs.begin(), eigenPairs.end());
         for (size_t val = 0; val < nRows_; ++val) {

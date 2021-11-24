@@ -1038,8 +1038,7 @@ class PMEInstance {
             throw std::runtime_error(
                 "Inconsistent number of coordinates and parameters; there should be nAtoms of each.");
         int n_param_cols = nCartesian(parameterAngMom) - cartesianOffset;
-        if (n_param_cols < 0 ||
-            parameters.nCols() != (size_t)n_param_cols)
+        if (n_param_cols < 0 || parameters.nCols() != (size_t)n_param_cols)
             throw std::runtime_error(
                 "Mismatch in the number of parameters provided and the parameter angular momentum");
     }
@@ -1600,7 +1599,7 @@ class PMEInstance {
                 gridAtomList_[row].clear();
             }
             auto &mySplineList = splinesPerThread_[threadID];
-            //const auto &gridIteratorC = threadedGridIteratorC_[threadID]; FIXME currently unused
+            // const auto &gridIteratorC = threadedGridIteratorC_[threadID]; FIXME currently unused
             mySplineList.clear();
             size_t myNumAtoms = 0;
             for (size_t atom = 0; atom < nAtoms; ++atom) {
