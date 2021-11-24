@@ -1603,7 +1603,7 @@ class PMEInstance {
             //const auto &gridIteratorC = threadedGridIteratorC_[threadID]; FIXME currently unused
             mySplineList.clear();
             size_t myNumAtoms = 0;
-            for (int atom = 0; atom < nAtoms; ++atom) {
+            for (size_t atom = 0; atom < nAtoms; ++atom) {
                 const Real *atomCoords = coords[atom];
                 Real cCoord = atomCoords[0] * recVecs_(0, 2) + atomCoords[1] * recVecs_(1, 2) +
                               atomCoords[2] * recVecs_(2, 2) - EPS;
