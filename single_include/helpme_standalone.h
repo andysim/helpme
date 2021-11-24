@@ -210,7 +210,8 @@ void JacobiCyclicDiagonalization(Real *eigenvalues, Real *eigenvectors, const Re
     Real threshold_norm;
     Real threshold;
     Real tan_phi, sin_phi, cos_phi, tan2_phi, sin2_phi, cos2_phi;
-    Real sin_2phi, cos_2phi, cot_2phi;
+    Real sin_2phi, cot_2phi;
+    //Real cos_2phi;
     Real dum1;
     Real dum2;
     Real dum3;
@@ -263,7 +264,7 @@ void JacobiCyclicDiagonalization(Real *eigenvalues, Real *eigenvectors, const Re
                 if (tan_phi < 0) sin_phi = -sin_phi;
                 cos_phi = sqrt(cos2_phi);
                 sin_2phi = 2 * sin_phi * cos_phi;
-                cos_2phi = cos2_phi - sin2_phi;
+                //cos_2phi = cos2_phi - sin2_phi;
 
                 // Rotate columns k and m for both the matrix A
                 //     and the matrix of eigenvectors.
@@ -793,8 +794,8 @@ class Matrix {
      */
     void assertSymmetric(const Real& threshold = 1e-10f) const {
         assertSquare();
-        for (int row = 0; row < nRows_; ++row) {
-            for (int col = 0; col < row; ++col) {
+        for (size_t row = 0; row < nRows_; ++row) {
+            for (size_t col = 0; col < row; ++col) {
                 if (std::abs(data_[row * nCols_ + col] - data_[col * nCols_ + row]) > threshold)
                     throw std::runtime_error("Unexpected non-symmetric matrix found.");
             }
@@ -821,7 +822,7 @@ class Matrix {
         Matrix evecs = std::get<1>(eigenPairs);
         evalsReal.applyOperationToEachElement(function);
         Matrix evecsT = evecs.transpose();
-        for (int row = 0; row < nRows_; ++row) {
+        for (size_t row = 0; row < nRows_; ++row) {
             Real transformedEigenvalue = evalsReal[row][0];
             std::for_each(evecsT.data_ + row * nCols_, evecsT.data_ + (row + 1) * nCols_,
                           [&](Real& val) { val *= transformedEigenvalue; });
@@ -857,10 +858,10 @@ class Matrix {
             throw std::runtime_error("Attempting to multiply matrices with incompatible dimensions.");
         Matrix product(nRows_, other.nCols_);
         Real* output = product.data_;
-        for (int row = 0; row < nRows_; ++row) {
+        for (size_t row = 0; row < nRows_; ++row) {
             const Real* rowPtr = data_ + row * nCols_;
-            for (int col = 0; col < other.nCols_; ++col) {
-                for (int link = 0; link < nCols_; ++link) {
+            for (size_t col = 0; col < other.nCols_; ++col) {
+                for (size_t link = 0; link < nCols_; ++link) {
                     *output += rowPtr[link] * other.data_[link * other.nCols_ + col];
                 }
                 ++output;
@@ -1035,10 +1036,10 @@ class Matrix {
         unsortedEigenVectors.transposeInPlace();
 
         std::vector<std::pair<Real, const Real*>> eigenPairs;
-        for (int val = 0; val < nRows_; ++val) eigenPairs.push_back({eigenValues[val][0], unsortedEigenVectors[val]});
+        for (size_t val = 0; val < nRows_; ++val) eigenPairs.push_back({eigenValues[val][0], unsortedEigenVectors[val]});
         std::sort(eigenPairs.begin(), eigenPairs.end());
         if (order == SortOrder::Descending) std::reverse(eigenPairs.begin(), eigenPairs.end());
-        for (int val = 0; val < nRows_; ++val) {
+        for (size_t val = 0; val < nRows_; ++val) {
             const auto& e = eigenPairs[val];
             eigenValues.data_[val] = std::get<0>(e);
             std::copy(std::get<1>(e), std::get<1>(e) + nCols_, sortedEigenVectors[val]);
@@ -2263,7 +2264,10 @@ class BSpline {
         derivativeLevel_ = derivativeLevel;
 
         // The +1 is to account for the fact that we need to store entries up to and including the max.
-        if (splines_.nRows() < derivativeLevel + 1 || splines_.nCols() != order)
+        if (derivativeLevel < 0 || order < 0) {
+          throw std::runtime_error("BSpline::update: derivativeLevel and/or order < 0.");
+        }
+        if (splines_.nRows() < (size_t)derivativeLevel + 1 || splines_.nCols() != (size_t)order)
             splines_ = Matrix<Real>(derivativeLevel + 1, order);
 
         splines_.setZero();
@@ -2378,7 +2382,9 @@ namespace helpme {
 template <typename Real>
 void permuteABCtoCBA(Real const *__restrict__ abcPtr, int const aDimension, int const bDimension, int const cDimension,
                      Real *__restrict__ cbaPtr, size_t nThreads = 1) {
+#ifdef _OPENMP
 #pragma omp parallel for num_threads(nThreads)
+#endif
     for (int C = 0; C <= -1 + cDimension; ++C)
         for (int B = 0; B <= -1 + bDimension; ++B)
             for (int A = 0; A <= -1 + aDimension; ++A)
@@ -2398,7 +2404,9 @@ void permuteABCtoCBA(Real const *__restrict__ abcPtr, int const aDimension, int 
 template <typename Real>
 void permuteABCtoACB(Real const *__restrict__ abcPtr, int const aDimension, int const bDimension, int const cDimension,
                      Real *__restrict__ acbPtr, size_t nThreads = 1) {
+#ifdef _OPENMP
 #pragma omp parallel for num_threads(nThreads)
+#endif
     for (int A = 0; A <= -1 + aDimension; ++A)
         for (int C = 0; C <= -1 + cDimension; ++C)
             for (int B = 0; B <= -1 + bDimension; ++B)
@@ -3233,7 +3241,9 @@ class PMEInstance {
         // Exclude m=0 cell.
         int start = (nodeZero ? 1 : 0);
 // Writing the three nested loops in one allows for better load balancing in parallel.
+#ifdef _OPENMP
 #pragma omp parallel for reduction(+ : energy, Vxx, Vxy, Vyy, Vxz, Vyz, Vzz) num_threads(nThreads)
+#endif
         for (size_t yxz = start; yxz < nyxz; ++yxz) {
             size_t xz = yxz % nxz;
             short ky = yxz / nxz;
@@ -3340,7 +3350,9 @@ class PMEInstance {
         // Exclude m=0 cell.
         int start = (nodeZero ? 1 : 0);
 // Writing the three nested loops in one allows for better load balancing in parallel.
+#ifdef _OPENMP
 #pragma omp parallel for reduction(+ : energy, Vxx, Vxy, Vyy, Vxz, Vyz, Vzz) num_threads(nThreads)
+#endif
         for (size_t yxz = start; yxz < nyxz; ++yxz) {
             size_t xz = yxz % nxz;
             short ky = yxz / nxz;
@@ -3449,7 +3461,9 @@ class PMEInstance {
         if (coordinates.nRows() != parameters.nRows())
             throw std::runtime_error(
                 "Inconsistent number of coordinates and parameters; there should be nAtoms of each.");
-        if (parameters.nCols() != (nCartesian(parameterAngMom) - cartesianOffset))
+        int n_param_cols = nCartesian(parameterAngMom) - cartesianOffset;
+        if (n_param_cols < 0 ||
+            parameters.nCols() != (size_t)n_param_cols)
             throw std::runtime_error(
                 "Mismatch in the number of parameters provided and the parameter angular momentum");
     }
@@ -3499,7 +3513,9 @@ class PMEInstance {
         // Exclude m=0 cell.
         int start = (nodeZero ? 1 : 0);
 // Writing the three nested loops in one allows for better load balancing in parallel.
+#ifdef _OPENMP
 #pragma omp parallel for num_threads(nThreads)
+#endif
         for (size_t yxz = start; yxz < nyxz; ++yxz) {
             size_t xz = yxz % nxz;
             short ky = yxz / nxz;
@@ -3956,14 +3972,15 @@ class PMEInstance {
 
         int nComponents = nCartesian(parameterAngMom);
         size_t numBA = (size_t)myGridDimensionB_ * myGridDimensionA_;
+#ifdef _OPENMP
 #pragma omp parallel num_threads(nThreads_)
         {
-#ifdef _OPENMP
             int threadID = omp_get_thread_num();
 #else
+        {
             int threadID = 0;
 #endif
-            for (size_t row = threadID; row < myGridDimensionC_; row += nThreads_) {
+            for (int row = threadID; row < myGridDimensionC_; row += nThreads_) {
                 std::fill(&realGrid[row * numBA], &realGrid[(row + 1) * numBA], Real(0));
             }
             for (const auto &spline : splinesPerThread_[threadID]) {
@@ -3995,27 +4012,28 @@ class PMEInstance {
         gridAtomList_.resize(gridDimensionC_);
 
 // Classify atoms to their worker threads first, then construct splines for each thread
+#ifdef _OPENMP
 #pragma omp parallel num_threads(nThreads_)
         {
-#ifdef _OPENMP
             int threadID = omp_get_thread_num();
 #else
+        {
             int threadID = 0;
 #endif
-            for (size_t row = threadID; row < gridDimensionC_; row += nThreads_) {
+            for (int row = threadID; row < gridDimensionC_; row += nThreads_) {
                 gridAtomList_[row].clear();
             }
             auto &mySplineList = splinesPerThread_[threadID];
-            const auto &gridIteratorC = threadedGridIteratorC_[threadID];
+            //const auto &gridIteratorC = threadedGridIteratorC_[threadID]; FIXME currently unused
             mySplineList.clear();
             size_t myNumAtoms = 0;
-            for (int atom = 0; atom < nAtoms; ++atom) {
+            for (size_t atom = 0; atom < nAtoms; ++atom) {
                 const Real *atomCoords = coords[atom];
                 Real cCoord = atomCoords[0] * recVecs_(0, 2) + atomCoords[1] * recVecs_(1, 2) +
                               atomCoords[2] * recVecs_(2, 2) - EPS;
                 cCoord -= floor(cCoord);
                 short cStartingGridPoint = gridDimensionC_ * cCoord;
-                size_t thisAtomsThread = cStartingGridPoint % nThreads_;
+                int thisAtomsThread = (int)cStartingGridPoint % nThreads_;
                 const auto &cGridIterator = gridIteratorC_[cStartingGridPoint];
                 if (cGridIterator.size() && thisAtomsThread == threadID) {
                     Real aCoord = atomCoords[0] * recVecs_(0, 0) + atomCoords[1] * recVecs_(1, 0) +
@@ -4039,7 +4057,6 @@ class PMEInstance {
             }
             numAtomsPerThread_[threadID] = myNumAtoms;
         }
-
         // We could intervene here and do some load balancing by inspecting the list.  Currently
         // the lazy approach of just assuming that the atoms are evenly distributed along c is used.
 
@@ -4050,7 +4067,7 @@ class PMEInstance {
         // certain scale factor to try and minimize allocations in a not-too-wasteful manner.
         if (splineCache_.size() < numCacheEntries) {
             size_t newSize = static_cast<size_t>(1.2 * numCacheEntries);
-            for (int atom = splineCache_.size(); atom < newSize; ++atom)
+            for (size_t atom = splineCache_.size(); atom < newSize; ++atom)
                 splineCache_.emplace_back(splineOrder_, splineDerivativeLevel);
         }
         std::vector<size_t> threadOffset(nThreads_, 0);
@@ -4058,15 +4075,16 @@ class PMEInstance {
             threadOffset[thread] = threadOffset[thread - 1] + numAtomsPerThread_[thread - 1];
         }
 
+#ifdef _OPENMP
 #pragma omp parallel num_threads(nThreads_)
         {
-#ifdef _OPENMP
             int threadID = omp_get_thread_num();
 #else
+        {
             int threadID = 0;
 #endif
             size_t entry = threadOffset[threadID];
-            for (size_t cRow = threadID; cRow < gridDimensionC_; cRow += nThreads_) {
+            for (int cRow = threadID; cRow < gridDimensionC_; cRow += nThreads_) {
                 for (const auto &gridPointAndAtom : gridAtomList_[cRow]) {
                     size_t atom = gridPointAndAtom.second;
                     const Real *atomCoords = coords[atom];
@@ -4094,13 +4112,13 @@ class PMEInstance {
                 }
             }
         }
-
 // Finally, find all of the splines that this thread will need to handle
+#ifdef _OPENMP
 #pragma omp parallel num_threads(nThreads_)
         {
-#ifdef _OPENMP
             int threadID = omp_get_thread_num();
 #else
+        {
             int threadID = 0;
 #endif
             auto &mySplineList = splinesPerThread_[threadID];
@@ -4288,14 +4306,20 @@ class PMEInstance {
      * \return Pointer to the transformed grid, which is stored in one of the buffers in BAC order.
      */
     Complex *forwardTransform(Real *realGrid) {
+#if HAVE_MPI == 1
         Real *__restrict__ realCBA;
+#endif
         Complex *__restrict__ buffer1, *__restrict__ buffer2;
         if (realGrid == reinterpret_cast<Real *>(workSpace1_.data())) {
+#if HAVE_MPI == 1
             realCBA = reinterpret_cast<Real *>(workSpace2_.data());
+#endif
             buffer1 = workSpace2_.data();
             buffer2 = workSpace1_.data();
         } else {
+#if HAVE_MPI == 1
             realCBA = reinterpret_cast<Real *>(workSpace1_.data());
+#endif
             buffer1 = workSpace1_.data();
             buffer2 = workSpace2_.data();
         }
@@ -4328,15 +4352,18 @@ class PMEInstance {
         helpme::vector<Complex> buffer(nThreads_ * scratchRowDim);
 
 // A transform, with instant sort to CAB ordering for each local block
+#ifdef _OPENMP
 #pragma omp parallel num_threads(nThreads_)
         {
-#ifdef _OPENMP
             int threadID = omp_get_thread_num();
 #else
+        {
             int threadID = 0;
 #endif
             auto scratch = &buffer[threadID * scratchRowDim];
+#ifdef _OPENMP
 #pragma omp for
+#endif
             for (int c = 0; c < subsetOfCAlongA_; ++c) {
                 for (int b = 0; b < myGridDimensionB_; ++b) {
                     Real *gridPtr = realGrid + c * myGridDimensionB_ * gridDimensionA_ + b * gridDimensionA_;
@@ -4381,7 +4408,9 @@ class PMEInstance {
 
         // B transform
         size_t numCA = (size_t)subsetOfCAlongB_ * myComplexGridDimensionA_;
+#ifdef _OPENMP
 #pragma omp parallel for num_threads(nThreads_)
+#endif
         for (size_t ca = 0; ca < numCA; ++ca) {
             fftHelperB_.transform(buffer1 + ca * gridDimensionB_, FFTW_FORWARD);
         }
@@ -4429,7 +4458,9 @@ class PMEInstance {
 #endif
         // C transform
         size_t numBA = (size_t)subsetOfBAlongC_ * myComplexGridDimensionA_;
+#ifdef _OPENMP
 #pragma omp parallel for num_threads(nThreads_)
+#endif
         for (size_t ba = 0; ba < numBA; ++ba) {
             fftHelperC_.transform(buffer2 + ba * gridDimensionC_, FFTW_FORWARD);
         }
@@ -4456,7 +4487,9 @@ class PMEInstance {
 
         // C transform
         size_t numYX = (size_t)subsetOfBAlongC_ * myComplexGridDimensionA_;
+#ifdef _OPENMP
 #pragma omp parallel for num_threads(nThreads_)
+#endif
         for (size_t yx = 0; yx < numYX; ++yx) {
             fftHelperC_.transform(convolvedGrid + yx * gridDimensionC_, FFTW_BACKWARD);
         }
@@ -4508,11 +4541,15 @@ class PMEInstance {
 
         // B transform with instant sort of local blocks from CAB -> CBA order
         size_t numCA = (size_t)subsetOfCAlongB_ * myComplexGridDimensionA_;
+#ifdef _OPENMP
 #pragma omp parallel for num_threads(nThreads_)
+#endif
         for (size_t ca = 0; ca < numCA; ++ca) {
             fftHelperB_.transform(buffer1 + ca * gridDimensionB_, FFTW_BACKWARD);
         }
+#ifdef _OPENMP
 #pragma omp parallel for num_threads(nThreads_)
+#endif
         for (int c = 0; c < subsetOfCAlongB_; ++c) {
             for (int a = 0; a < myComplexGridDimensionA_; ++a) {
                 int cx = c * myComplexGridDimensionA_ * gridDimensionB_ + a * gridDimensionB_;
@@ -4559,7 +4596,9 @@ class PMEInstance {
 
         // A transform
         Real *realGrid = reinterpret_cast<Real *>(buffer2);
+#ifdef _OPENMP
 #pragma omp parallel for num_threads(nThreads_)
+#endif
         for (int cb = 0; cb < subsetOfCAlongA_ * myGridDimensionB_; ++cb) {
             fftHelperA_.transform(buffer1 + cb * complexGridDimensionA_, realGrid + cb * gridDimensionA_);
         }
@@ -4672,7 +4711,9 @@ class PMEInstance {
         }
         if (iAmNodeZero) transformedGrid[0] = 0;
 // Writing the three nested loops in one allows for better load balancing in parallel.
+#ifdef _OPENMP
 #pragma omp parallel for reduction(+ : energy) num_threads(nThreads_)
+#endif
         for (size_t yxz = 0; yxz < nyxz; ++yxz) {
             energy += transformedGrid[yxz] * transformedGrid[yxz] * influenceFunction[yxz];
             transformedGrid[yxz] *= influenceFunction[yxz];
@@ -4703,7 +4744,9 @@ class PMEInstance {
         }
         if (iAmNodeZero) transformedGrid[0] = Complex(0, 0);
         const size_t numCTerms(myNumKSumTermsC_);
+#ifdef _OPENMP
 #pragma omp parallel for reduction(+ : energy) num_threads(nThreads_)
+#endif
         for (size_t yxz = 0; yxz < nyxz; ++yxz) {
             size_t xz = yxz % nxz;
             int kx = firstKSumTermA_ + xz / numCTerms;
@@ -4801,14 +4844,15 @@ class PMEInstance {
                 }
             }
         }
+#ifdef _OPENMP
 #pragma omp parallel num_threads(nThreads_)
         {
-#ifdef _OPENMP
             int threadID = omp_get_thread_num();
+#pragma omp for
 #else
+        {
             int threadID = 0;
 #endif
-#pragma omp for
             for (size_t atom = 0; atom < nAtoms; ++atom) {
                 const auto &cacheEntry = splineCache_[atom];
                 const auto &absAtom = cacheEntry.absoluteAtomNumber;
@@ -5190,7 +5234,9 @@ class PMEInstance {
         // Direct space, using simple O(N^2) algorithm.  This can be improved using a nonbonded list if needed.
         Real cutoffSquared = sphericalCutoff * sphericalCutoff;
         Real kappaSquared = kappa_ * kappa_;
+#ifdef _OPENMP
 #pragma omp parallel for num_threads(nThreads_)
+#endif
         for (size_t i = 0; i < nAtoms; ++i) {
             const auto &coordsI = coordinates.row(i);
             Real *phiPtr = potential[i];
@@ -5222,7 +5268,9 @@ class PMEInstance {
         } else {
             std::logic_error("Unknown algorithm in helpme::computePAtAtomicSites");
         }
+#ifdef _OPENMP
 #pragma omp parallel for num_threads(nThreads_)
+#endif
         for (size_t atom = 0; atom < nAtoms; ++atom) {
             const auto &cacheEntry = splineCache_[atom];
             const auto &absAtom = cacheEntry.absoluteAtomNumber;
@@ -5342,7 +5390,7 @@ class PMEInstance {
 
         filterAtomsAndBuildSplineCache(parameterAngMom, coordinates);
         auto realGrid = spreadParameters(parameterAngMom, parameters);
-        Real energy;
+        Real energy = 0;
         if (algorithmType_ == AlgorithmType::PME) {
             auto gridAddress = forwardTransform(realGrid);
             energy = convolveE(gridAddress);
