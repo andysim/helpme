@@ -156,13 +156,16 @@ endif()
 # The C++ library is linked explicitly because exception handling on macOS appears to be broken otherwise.
 set(EXTERNAL_LIBRARIES ${BLAS_LIBRARIES} ${FFTW_LIBRARIES} ${cpplib})
 
+option(ENABLE_Python "Enables the building of Python bindings" ON)
+if(ENABLE_Python)
 # Find Python
-set(Python_ADDITIONAL_VERSIONS 3.9 3.8 3.7 3.6)
-find_package(PythonLibsNew 3.6 REQUIRED)
-message(STATUS "${Cyan}Found Python ${PYTHON_VERSION_MAJOR}.${PYTHON_VERSION_MINOR}${ColourReset}: ${PYTHON_EXECUTABLE} (found version ${PYTHON_VERSION_STRING})")
-set(Python_ENABLED ON) # For now, we just always assume this is on
-add_subdirectory(external/pybind11)
-add_subdirectory(python)
+    set(Python_ADDITIONAL_VERSIONS 3.9 3.8 3.7 3.6)
+    find_package(PythonLibsNew 3.6 REQUIRED)
+    message(STATUS "${Cyan}Found Python ${PYTHON_VERSION_MAJOR}.${PYTHON_VERSION_MINOR}${ColourReset}: ${PYTHON_EXECUTABLE} (found version ${PYTHON_VERSION_STRING})")
+    set(Python_ENABLED ON) # For now, we just always assume this is on
+    add_subdirectory(external/pybind11)
+    add_subdirectory(python)
+endif()
 
 # Documentation
 find_package(Doxygen)
@@ -179,6 +182,8 @@ add_subdirectory(src)
 #
 # Testing
 #
-enable_testing ()
-add_subdirectory (test)
+include(CTest)
+if(BUILD_TESTING)
+    add_subdirectory (test)
+endif()
 
