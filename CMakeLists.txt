@@ -155,6 +155,9 @@ endif()
 
 # The C++ library is linked explicitly because exception handling on macOS appears to be broken otherwise.
 set(EXTERNAL_LIBRARIES ${BLAS_LIBRARIES} ${FFTW_LIBRARIES} ${cpplib})
+if(ENABLE_MPI)
+    set(EXTERNAL_LIBRARIES ${EXTERNAL_LIBRARIES} ${MPI_CXX_LIBRARIES})
+endif()
 
 # Find Python
 set(Python_ADDITIONAL_VERSIONS 3.9 3.8 3.7 3.6)

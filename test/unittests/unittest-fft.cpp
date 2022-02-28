@@ -95,7 +95,7 @@ TEST_CASE("test the fftw wrapper class.") {
 
 #if HAVE_FFTWL == 1
     SECTION("long double precision tests") {
-        const long double TOL = 1e-16l;
+        const long double TOL = 5e-16l;
         helpme::vector<long double> input{0.1, 0.3, 0.6, 0.9};
         helpme::vector<long double> refFromComplex{0.4, 1.2, 2.4, 3.6};
         helpme::vector<std::complex<long double>> refComplex1 = {std::complex<long double>(1.9, 0.0),
