@@ -30,6 +30,9 @@ if(HAVE_MPI)
         unittest-coulomb-rec-parallel.cpp
         unittest-dispersion-rec-parallel.cpp
     )
+    if(HAVE_MPI)
+        link_libraries(${MPI_CXX_LIBRARIES})
+    endif()
 endif()
 
 
