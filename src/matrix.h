@@ -185,7 +185,7 @@ class Matrix {
     /*!
      * \brief Matrix Constructs an empty matrix.
      */
-    Matrix() : nRows_(0), nCols_(0) {}
+    Matrix() : nRows_(0), nCols_(0), data_(0) {}
 
     /*!
      * \brief Matrix Constructs a new matrix, allocating memory.
@@ -333,8 +333,8 @@ class Matrix {
      */
     void assertSymmetric(const Real& threshold = 1e-10f) const {
         assertSquare();
-        for (int row = 0; row < nRows_; ++row) {
-            for (int col = 0; col < row; ++col) {
+        for (size_t row = 0; row < nRows_; ++row) {
+            for (size_t col = 0; col < row; ++col) {
                 if (std::abs(data_[row * nCols_ + col] - data_[col * nCols_ + row]) > threshold)
                     throw std::runtime_error("Unexpected non-symmetric matrix found.");
             }
@@ -361,7 +361,7 @@ class Matrix {
         Matrix evecs = std::get<1>(eigenPairs);
         evalsReal.applyOperationToEachElement(function);
         Matrix evecsT = evecs.transpose();
-        for (int row = 0; row < nRows_; ++row) {
+        for (size_t row = 0; row < nRows_; ++row) {
             Real transformedEigenvalue = evalsReal[row][0];
             std::for_each(evecsT.data_ + row * nCols_, evecsT.data_ + (row + 1) * nCols_,
                           [&](Real& val) { val *= transformedEigenvalue; });
@@ -397,10 +397,10 @@ class Matrix {
             throw std::runtime_error("Attempting to multiply matrices with incompatible dimensions.");
         Matrix product(nRows_, other.nCols_);
         Real* output = product.data_;
-        for (int row = 0; row < nRows_; ++row) {
+        for (size_t row = 0; row < nRows_; ++row) {
             const Real* rowPtr = data_ + row * nCols_;
-            for (int col = 0; col < other.nCols_; ++col) {
-                for (int link = 0; link < nCols_; ++link) {
+            for (size_t col = 0; col < other.nCols_; ++col) {
+                for (size_t link = 0; link < nCols_; ++link) {
                     *output += rowPtr[link] * other.data_[link * other.nCols_ + col];
                 }
                 ++output;
@@ -575,10 +575,11 @@ class Matrix {
         unsortedEigenVectors.transposeInPlace();
 
         std::vector<std::pair<Real, const Real*>> eigenPairs;
-        for (int val = 0; val < nRows_; ++val) eigenPairs.push_back({eigenValues[val][0], unsortedEigenVectors[val]});
+        for (size_t val = 0; val < nRows_; ++val)
+            eigenPairs.push_back({eigenValues[val][0], unsortedEigenVectors[val]});
         std::sort(eigenPairs.begin(), eigenPairs.end());
         if (order == SortOrder::Descending) std::reverse(eigenPairs.begin(), eigenPairs.end());
-        for (int val = 0; val < nRows_; ++val) {
+        for (size_t val = 0; val < nRows_; ++val) {
             const auto& e = eigenPairs[val];
             eigenValues.data_[val] = std::get<0>(e);
             std::copy(std::get<1>(e), std::get<1>(e) + nCols_, sortedEigenVectors[val]);

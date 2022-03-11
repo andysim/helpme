@@ -32,7 +32,9 @@ namespace helpme {
 template <typename Real>
 void permuteABCtoCBA(Real const *__restrict__ abcPtr, int const aDimension, int const bDimension, int const cDimension,
                      Real *__restrict__ cbaPtr, size_t nThreads = 1) {
+#ifdef _OPENMP
 #pragma omp parallel for num_threads(nThreads)
+#endif
     for (int C = 0; C <= -1 + cDimension; ++C)
         for (int B = 0; B <= -1 + bDimension; ++B)
             for (int A = 0; A <= -1 + aDimension; ++A)
@@ -52,7 +54,9 @@ void permuteABCtoCBA(Real const *__restrict__ abcPtr, int const aDimension, int 
 template <typename Real>
 void permuteABCtoACB(Real const *__restrict__ abcPtr, int const aDimension, int const bDimension, int const cDimension,
                      Real *__restrict__ acbPtr, size_t nThreads = 1) {
+#ifdef _OPENMP
 #pragma omp parallel for num_threads(nThreads)
+#endif
     for (int A = 0; A <= -1 + aDimension; ++A)
         for (int C = 0; C <= -1 + cDimension; ++C)
             for (int B = 0; B <= -1 + bDimension; ++B)
